@@ -14,7 +14,7 @@
 | 需求测试分析工作台 | `requirement-test-workbench` | 根据 PRD、用户故事或需求变更设计测试 |
 | 正式服验证用例生成 | `production-verification-test` | 线上、生产、上线后验证与安全门禁 |
 | 测试用例质量审计 | `test-case-quality-audit` | 审计已有用例的证据、覆盖和可执行性 |
-| 测试视角需求澄清 | `requirement-clarification-test` | 只澄清需求、判断能否开测，暂不写用例 |
+| 测试视角需求澄清 | `requirement-clarification-test` | 只澄清需求、反向要产品核对歧义点，暂不写用例 |
 
 ## 安装
 
