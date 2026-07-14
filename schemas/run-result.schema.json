@@ -7,11 +7,11 @@
   "required": ["protocol_version", "run_id", "manifest_hash", "run_status", "started_at", "cases"],
   "properties": {
     "protocol_version": { "const": "1.0.0" },
-    "run_id": { "type": "string", "minLength": 1 },
+    "run_id": { "allOf": [{ "$ref": "https://saitamasans.dev/schemas/persisted-value.schema.json#/$defs/persistedString" }, { "type": "string", "minLength": 1 }] },
     "manifest_hash": { "$ref": "#/$defs/sha256" },
     "run_status": { "$ref": "#/$defs/runStatus" },
-    "started_at": { "type": "string", "minLength": 1 },
-    "completed_at": { "type": "string", "minLength": 1 },
+    "started_at": { "allOf": [{ "$ref": "https://saitamasans.dev/schemas/persisted-value.schema.json#/$defs/persistedString" }, { "type": "string", "minLength": 1 }] },
+    "completed_at": { "allOf": [{ "$ref": "https://saitamasans.dev/schemas/persisted-value.schema.json#/$defs/persistedString" }, { "type": "string", "minLength": 1 }] },
     "cases": { "type": "array", "items": { "$ref": "#/$defs/caseResult" } }
   },
   "$defs": {
@@ -23,10 +23,10 @@
       "additionalProperties": false,
       "required": ["assertion_id", "passed"],
       "properties": {
-        "assertion_id": { "type": "string", "minLength": 1 },
+        "assertion_id": { "allOf": [{ "$ref": "https://saitamasans.dev/schemas/persisted-value.schema.json#/$defs/persistedString" }, { "type": "string", "minLength": 1 }] },
         "passed": { "type": "boolean" },
-        "actual": {},
-        "expected": {}
+        "actual": { "$ref": "https://saitamasans.dev/schemas/persisted-value.schema.json#/$defs/persistedJsonValue" },
+        "expected": { "$ref": "https://saitamasans.dev/schemas/persisted-value.schema.json#/$defs/persistedJsonValue" }
       }
     },
     "evidence": {
@@ -34,7 +34,7 @@
       "additionalProperties": false,
       "required": ["path", "sha256"],
       "properties": {
-        "path": { "type": "string", "minLength": 1 },
+        "path": { "allOf": [{ "$ref": "https://saitamasans.dev/schemas/persisted-value.schema.json#/$defs/persistedString" }, { "type": "string", "minLength": 1 }] },
         "sha256": { "$ref": "#/$defs/sha256" }
       }
     },
@@ -43,7 +43,7 @@
       "additionalProperties": false,
       "required": ["case_id", "case_status", "run_status", "assertions", "evidence"],
       "properties": {
-        "case_id": { "type": "string", "minLength": 1 },
+        "case_id": { "allOf": [{ "$ref": "https://saitamasans.dev/schemas/persisted-value.schema.json#/$defs/persistedString" }, { "type": "string", "minLength": 1 }] },
         "case_status": { "$ref": "#/$defs/caseStatus" },
         "run_status": { "$ref": "#/$defs/runStatus" },
         "assertions": { "type": "array", "items": { "$ref": "#/$defs/assertion" } },

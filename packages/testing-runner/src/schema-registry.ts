@@ -63,6 +63,8 @@ function normalizeErrors(errors: ErrorObject[]): string[] {
 const ajv = new Ajv2020({ allErrors: true, strict: true, verbose: true });
 const validators = new Map<SchemaId, ValidateFunction>();
 
+ajv.addSchema(loadSchema("persisted-value.schema.json"));
+
 for (const schemaId of Object.keys(schemaFiles) as SchemaId[]) {
   const schema = loadSchema(schemaFiles[schemaId]);
   validators.set(schemaId, ajv.compile(schema));

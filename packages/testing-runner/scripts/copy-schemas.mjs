@@ -6,6 +6,7 @@ const schemaFiles = [
   "run-manifest.schema.json",
   "approval.schema.json",
   "run-result.schema.json",
+  "persisted-value.schema.json",
 ];
 
 const sourceDirectory = new URL("../../../schemas/", import.meta.url);

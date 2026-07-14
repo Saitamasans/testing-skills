@@ -271,6 +271,162 @@ test("manifest data inputs use structured references instead of literal strings"
   }
 });
 
+test("API and cleanup paths reject credential query parameters", () => {
+  const unsafeActions = [
+    {
+      type: "web.goto",
+      action_id: "API-001-login-page",
+      target_alias: "web",
+      url: "https://app.example.test/login?access_token=literal-token",
+      risk: "R0",
+    },
+    {
+      type: "api.request",
+      action_id: "API-001-login",
+      target_alias: "api",
+      method: "GET",
+      path: "/login?access_token=literal-token",
+      risk: "R0",
+    },
+    {
+      type: "cleanup.api",
+      action_id: "API-001-logout",
+      target_alias: "api",
+      method: "DELETE",
+      path: "/session?refresh_token=literal-token",
+      risk: "R1",
+    },
+  ];
+
+  for (const action of unsafeActions) {
+    const value = structuredClone(validManifest);
+    value.cases[0].steps[0] = action as never;
+    assert.throws(() => validateDocument("run-manifest", value), /token|path|url/);
+  }
+});
+
+test("persisted assertions and SQL reject credential literals", () => {
+  const unsafeActions = [
+    {
+      type: "api.assert",
+      action_id: "API-001-auth",
+      target_alias: "api",
+      assertion: "Authorization: Bearer literal-token",
+      risk: "R0",
+    },
+    {
+      type: "web.assert",
+      action_id: "API-001-cookie",
+      target_alias: "web",
+      assertion: "Cookie: session=literal-cookie",
+      risk: "R0",
+    },
+    {
+      type: "db.select",
+      action_id: "API-001-password",
+      target_alias: "database",
+      query: "SELECT id FROM users WHERE password = 'literal-secret'",
+      risk: "R0",
+    },
+  ];
+
+  for (const action of unsafeActions) {
+    const value = structuredClone(validManifest);
+    value.cases[0].steps[0] = action as never;
+    assert.throws(() => validateDocument("run-manifest", value), /assertion|query|Bearer|Cookie|password/);
+  }
+});
+
+test("run results recursively reject common secret keys", () => {
+  const secretKeys = [
+    "access_token",
+    "refresh_token",
+    "id_token",
+    "client_secret",
+    "authorization",
+    "proxy-authorization",
+    "cookie",
+    "set-cookie",
+    "api_key",
+    "connection_string",
+  ];
+
+  for (const secretKey of secretKeys) {
+    const value = structuredClone(validRunResult);
+    value.cases[0].assertions = [
+      {
+        assertion_id: "assertion-1",
+        passed: false,
+        actual: { response: [{ metadata: { [secretKey]: "literal-secret" } }] },
+      },
+    ] as never;
+    assert.throws(() => validateDocument("run-result", value), new RegExp(secretKey.replace("-", "\\-"), "i"));
+  }
+});
+
+test("run-result strings reject auth schemes, connection URIs, and URL userinfo", () => {
+  const unsafeValues = [
+    "Bearer literal-token",
+    "Basic dXNlcjpwYXNzd29yZA==",
+    "postgresql://admin:password@db.example.test/orders",
+    "https://admin:password@api.example.test/result",
+  ];
+
+  for (const unsafeValue of unsafeValues) {
+    const value = structuredClone(validRunResult);
+    value.cases[0].assertions = [
+      {
+        assertion_id: "assertion-1",
+        passed: false,
+        actual: { messages: [unsafeValue] },
+        expected: "safe",
+      },
+    ] as never;
+    assert.throws(() => validateDocument("run-result", value), /actual|Bearer|Basic|postgresql|password/);
+  }
+
+  const evidenceValue = structuredClone(validRunResult);
+  evidenceValue.cases[0].evidence = [
+    { path: "https://admin:password@files.example.test/evidence.json", sha256: "c".repeat(64) },
+  ];
+  assert.throws(() => validateDocument("run-result", evidenceValue), /path|password/);
+});
+
+test("safe business text, nested data, paths, and parameterized SQL remain valid", () => {
+  const manifest = structuredClone(validManifest);
+  manifest.cases[0].original["前置条件"] = "Password field is required; tokenization remains enabled";
+  manifest.cases[0].steps[0] = {
+    type: "db.select",
+    action_id: "API-001-query",
+    target_alias: "database",
+    query: "SELECT id FROM users WHERE password = $1 AND access_token = :accessToken AND client_secret = ? AND token = @token",
+    params_ref: { source: "fixture", name: "user_query_params" },
+    risk: "R0",
+  } as never;
+  assert.equal(validateDocument("run-manifest", manifest), manifest);
+
+  const result = structuredClone(validRunResult);
+  result.cases[0].assertions = [
+    {
+      assertion_id: "assertion-1",
+      passed: true,
+      actual: {
+        order: {
+          status: "paid",
+          tokenization: "completed",
+          messages: ["Password field is required", "business token expired"],
+        },
+      },
+      expected: [{ status: "paid", retry_count: 0 }],
+    },
+  ] as never;
+  assert.equal(validateDocument("run-result", result), result);
+
+  const request = structuredClone(validManifest);
+  request.cases[0].steps[0].path = "/search?mode=tokenization&status=active";
+  assert.equal(validateDocument("run-manifest", request), request);
+});
+
 test("manifest requires its protocol version", () => {
   const value = structuredClone(validManifest) as Partial<typeof validManifest>;
   delete value.protocol_version;
