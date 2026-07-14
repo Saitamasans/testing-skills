@@ -1,0 +1,77 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://saitamasans.dev/schemas/execution-profile.schema.json",
+  "title": "Execution profile protocol 1.0",
+  "type": "object",
+  "additionalProperties": false,
+  "propertyNames": { "not": { "$ref": "#/$defs/sensitiveKey" } },
+  "required": ["protocol_version", "profile_id", "targets", "credentials"],
+  "properties": {
+    "protocol_version": { "const": "1.0" },
+    "profile_id": { "type": "string", "minLength": 1 },
+    "targets": {
+      "type": "object",
+      "propertyNames": { "pattern": "^[A-Za-z][A-Za-z0-9_-]*$" },
+      "additionalProperties": { "$ref": "#/$defs/target" }
+    },
+    "credentials": {
+      "type": "object",
+      "propertyNames": {
+        "allOf": [
+          { "pattern": "^[A-Za-z][A-Za-z0-9_-]*$" },
+          { "not": { "$ref": "#/$defs/sensitiveKey" } }
+        ]
+      },
+      "additionalProperties": { "$ref": "#/$defs/credentialReference" }
+    }
+  },
+  "$defs": {
+    "sensitiveKey": {
+      "type": "string",
+      "pattern": "[Pp][Aa][Ss][Ss][Ww][Oo][Rr][Dd]|[Ss][Ee][Cc][Rr][Ee][Tt]|[Tt][Oo][Kk][Ee][Nn][_-]?[Vv][Aa][Ll][Uu][Ee]|[Cc][Oo][Oo][Kk][Ii][Ee][_-]?[Vv][Aa][Ll][Uu][Ee]|[Cc][Oo][Nn][Nn][Ee][Cc][Tt][Ii][Oo][Nn][_-]?[Ss][Tt][Rr][Ii][Nn][Gg](?:[_-]?[Vv][Aa][Ll][Uu][Ee])?"
+    },
+    "credentialReference": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source", "name"],
+      "properties": {
+        "source": { "const": "env" },
+        "name": { "type": "string", "pattern": "^[A-Z][A-Z0-9_]*$" }
+      }
+    },
+    "target": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "origin"],
+          "properties": {
+            "kind": { "const": "web" },
+            "origin": { "type": "string", "pattern": "^https?://" }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "origin"],
+          "properties": {
+            "kind": { "const": "api" },
+            "origin": { "type": "string", "pattern": "^https?://" }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "dialect", "host", "database"],
+          "properties": {
+            "kind": { "const": "database" },
+            "dialect": { "enum": ["mysql", "postgresql"] },
+            "host": { "type": "string", "minLength": 1 },
+            "port": { "type": "integer", "minimum": 1, "maximum": 65535 },
+            "database": { "type": "string", "minLength": 1 }
+          }
+        }
+      ]
+    }
+  }
+}

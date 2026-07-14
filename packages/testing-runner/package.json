@@ -1,0 +1,31 @@
+{
+  "name": "@saitamasans/testing-runner",
+  "version": "1.0.0",
+  "type": "module",
+  "bin": {
+    "testing-runner": "dist/cli.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "tsx --test tests/*.test.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "prepack": "npm run build"
+  },
+  "dependencies": {
+    "ajv": "^8.17.1",
+    "commander": "^14.0.0",
+    "exceljs": "^4.4.0",
+    "playwright": "^1.52.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.3",
+    "tsx": "^4.19.4",
+    "typescript": "^5.8.3"
+  },
+  "files": [
+    "dist"
+  ]
+}

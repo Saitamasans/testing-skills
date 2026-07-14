@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://saitamasans.dev/schemas/approval.schema.json",
+  "title": "Execution approval protocol 1.0",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["protocol_version", "approval_id", "manifest_hash", "source_hash", "targets", "approved_risks", "approved_r3_action_ids", "issued_by", "issued_at", "expires_at"],
+  "properties": {
+    "protocol_version": { "const": "1.0" },
+    "approval_id": { "type": "string", "minLength": 1 },
+    "manifest_hash": { "$ref": "#/$defs/sha256" },
+    "source_hash": { "$ref": "#/$defs/sha256" },
+    "targets": { "type": "array", "uniqueItems": true, "items": { "type": "string", "minLength": 1 } },
+    "approved_risks": { "type": "array", "uniqueItems": true, "items": { "enum": ["R0", "R1", "R2", "R3"] } },
+    "approved_r3_action_ids": { "type": "array", "uniqueItems": true, "items": { "type": "string", "minLength": 1 } },
+    "issued_by": { "type": "string", "minLength": 1 },
+    "issued_at": { "type": "string", "minLength": 1 },
+    "expires_at": { "type": "string", "minLength": 1 }
+  },
+  "$defs": {
+    "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
+  }
+}
