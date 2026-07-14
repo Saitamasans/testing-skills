@@ -5,7 +5,7 @@ export type SchemaId =
   | "approval"
   | "run-result";
 
-export type ProtocolVersion = "1.0";
+export type ProtocolVersion = "1.0.0";
 
 export type ActionType =
   | "web.goto"
@@ -41,14 +41,21 @@ export interface CredentialReference {
   name: string;
 }
 
+export interface DataReference {
+  source: "env" | "fixture" | "output";
+  name: string;
+}
+
+export type HttpUrl = `http://${string}` | `https://${string}`;
+
 export interface WebTarget {
   kind: "web";
-  origin: string;
+  origin: HttpUrl;
 }
 
 export interface ApiTarget {
   kind: "api";
-  origin: string;
+  origin: HttpUrl;
 }
 
 export interface DatabaseTarget {
@@ -79,13 +86,13 @@ interface BaseAction {
 
 export interface WebGotoAction extends BaseAction {
   type: "web.goto";
-  url: string;
+  url: HttpUrl;
 }
 
 export interface WebFillAction extends BaseAction {
   type: "web.fill";
   locator: string;
-  value_ref: string;
+  value_ref: DataReference;
 }
 
 export interface WebClickAction extends BaseAction {
@@ -113,7 +120,7 @@ export interface ApiRequestAction extends BaseAction {
   type: "api.request";
   method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
   path: string;
-  input_ref?: string;
+  input_ref?: DataReference;
 }
 
 export interface ApiExtractAction extends BaseAction {
@@ -130,7 +137,7 @@ export interface ApiAssertAction extends BaseAction {
 export interface DatabaseSelectAction extends BaseAction {
   type: "db.select";
   query: string;
-  params_ref?: string;
+  params_ref?: DataReference;
   limit?: number;
 }
 
@@ -138,7 +145,7 @@ export interface CleanupApiAction extends BaseAction {
   type: "cleanup.api";
   method: "POST" | "PUT" | "PATCH" | "DELETE";
   path: string;
-  input_ref?: string;
+  input_ref?: DataReference;
 }
 
 export interface CleanupWebAction extends BaseAction {
@@ -162,14 +169,25 @@ export type ManifestAction =
 
 export interface RunManifestCase {
   case_id: string;
-  original: Record<string, string>;
+  original: {
+    "用例 ID": string;
+    "所属模块": string;
+    "用例标题": string;
+    "验证功能点": string;
+    "前置条件": string;
+    "测试步骤": string;
+    "预期结果": string;
+    "优先级": string;
+    "执行结果": "" | CaseStatus;
+    "备注": string;
+  };
   steps: ManifestAction[];
 }
 
 export interface RunManifest {
   protocol_version: ProtocolVersion;
   manifest_id: string;
-  runner: { version: string };
+  runner: { version: ProtocolVersion };
   source: { path: string; sha256: string };
   cases: RunManifestCase[];
 }
@@ -179,7 +197,7 @@ export interface Approval {
   approval_id: string;
   manifest_hash: string;
   source_hash: string;
-  targets: string[];
+  targets: HttpUrl[];
   approved_risks: RiskLevel[];
   approved_r3_action_ids: string[];
   issued_by: string;

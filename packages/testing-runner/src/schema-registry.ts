@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 
 import type { ErrorObject, ValidateFunction } from "ajv";
 import { Ajv2020 } from "ajv/dist/2020.js";
@@ -19,7 +19,9 @@ const schemaFiles: Record<SchemaId, string> = {
 };
 
 function loadSchema(fileName: string): JsonSchema {
-  const url = new URL(`../../../schemas/${fileName}`, import.meta.url);
+  const bundledUrl = new URL(`./schemas/${fileName}`, import.meta.url);
+  const workspaceUrl = new URL(`../../../schemas/${fileName}`, import.meta.url);
+  const url = existsSync(bundledUrl) ? bundledUrl : workspaceUrl;
   return JSON.parse(readFileSync(url, "utf8")) as JsonSchema;
 }
 

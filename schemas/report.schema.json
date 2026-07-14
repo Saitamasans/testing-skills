@@ -66,6 +66,37 @@
       ],
       "items": false
     },
+    "dividerValues": {
+      "type": "array",
+      "minItems": 10,
+      "maxItems": 10,
+      "prefixItems": [
+        {}, {}, {}, {}, {}, {}, {}, {}, { "const": "-" }, {}
+      ],
+      "items": false
+    },
+    "testCaseRow": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["values"],
+          "properties": {
+            "divider": { "const": false },
+            "values": { "$ref": "#/$defs/testCaseValues" }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["divider", "values"],
+          "properties": {
+            "divider": { "const": true },
+            "values": { "$ref": "#/$defs/dividerValues" }
+          }
+        }
+      ]
+    },
     "testCaseSheet": {
       "type": "object",
       "additionalProperties": false,
@@ -76,15 +107,7 @@
         "columns": { "$ref": "#/$defs/tenColumns" },
         "rows": {
           "type": "array",
-          "items": {
-            "type": "object",
-            "additionalProperties": false,
-            "required": ["values"],
-            "properties": {
-              "divider": { "type": "boolean" },
-              "values": { "$ref": "#/$defs/testCaseValues" }
-            }
-          }
+          "items": { "$ref": "#/$defs/testCaseRow" }
         }
       }
     },

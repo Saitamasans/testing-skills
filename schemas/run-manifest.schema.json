@@ -1,25 +1,25 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://saitamasans.dev/schemas/run-manifest.schema.json",
-  "title": "Run manifest protocol 1.0",
+  "title": "Run manifest protocol 1.0.0",
   "type": "object",
   "additionalProperties": false,
   "required": ["protocol_version", "manifest_id", "runner", "source", "cases"],
   "properties": {
-    "protocol_version": { "const": "1.0" },
+    "protocol_version": { "const": "1.0.0" },
     "manifest_id": { "type": "string", "minLength": 1 },
     "runner": {
       "type": "object",
       "additionalProperties": false,
       "required": ["version"],
-      "properties": { "version": { "type": "string", "minLength": 1 } }
+      "properties": { "version": { "const": "1.0.0" } }
     },
     "source": {
       "type": "object",
       "additionalProperties": false,
       "required": ["path", "sha256"],
       "properties": {
-        "path": { "type": "string", "minLength": 1 },
+        "path": { "$ref": "#/$defs/nonSecretText" },
         "sha256": { "$ref": "#/$defs/sha256" }
       }
     },
@@ -32,21 +32,51 @@
   "$defs": {
     "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
     "risk": { "enum": ["R0", "R1", "R2", "R3"] },
+    "safeHttpUrl": {
+      "type": "string",
+      "allOf": [
+        { "pattern": "^https?://(?![^/?#]*@)[^\\s]+$" },
+        { "not": { "pattern": "[?&](?:[Pp][Aa][Ss][Ss][Ww][Oo][Rr][Dd]|[Ss][Ee][Cc][Rr][Ee][Tt]|[Tt][Oo][Kk][Ee][Nn]|[Cc][Oo][Oo][Kk][Ii][Ee]|[Aa][Pp][Ii][_-]?[Kk][Ee][Yy])=" } }
+      ]
+    },
+    "relativePath": { "type": "string", "pattern": "^/(?!/)[^\\s]*$" },
+    "dataReference": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source", "name"],
+      "properties": {
+        "source": { "enum": ["env", "fixture", "output"] },
+        "name": { "type": "string", "pattern": "^[A-Za-z][A-Za-z0-9_.-]*$" }
+      }
+    },
+    "nonSecretText": {
+      "type": "string",
+      "allOf": [
+        { "not": { "pattern": "https?://[^\\s/?#]+:[^\\s@/?#]+@" } },
+        { "not": { "pattern": "(?:postgres(?:ql)?|mysql|mongodb(?:\\+srv)?):\\/\\/" } },
+        { "not": { "pattern": "[Pp][Aa][Ss][Ss][Ww][Oo][Rr][Dd]\\s*[:=]\\s*\\S+" } },
+        { "not": { "pattern": "[Ss][Ee][Cc][Rr][Ee][Tt]\\s*[:=]\\s*\\S+" } },
+        { "not": { "pattern": "[Tt][Oo][Kk][Ee][Nn]\\s*[:=]\\s*\\S+" } },
+        { "not": { "pattern": "[Cc][Oo][Oo][Kk][Ii][Ee]\\s*[:=]\\s*\\S+" } },
+        { "not": { "pattern": "[Cc][Oo][Nn][Nn][Ee][Cc][Tt][Ii][Oo][Nn][_-]?[Ss][Tt][Rr][Ii][Nn][Gg]\\s*[:=]\\s*\\S+" } },
+        { "not": { "pattern": "[Bb][Ee][Aa][Rr][Ee][Rr]\\s+\\S+" } }
+      ]
+    },
     "original": {
       "type": "object",
       "additionalProperties": false,
       "required": ["用例 ID", "所属模块", "用例标题", "验证功能点", "前置条件", "测试步骤", "预期结果", "优先级", "执行结果", "备注"],
       "properties": {
-        "用例 ID": { "type": "string" },
-        "所属模块": { "type": "string" },
-        "用例标题": { "type": "string" },
-        "验证功能点": { "type": "string" },
-        "前置条件": { "type": "string" },
-        "测试步骤": { "type": "string" },
-        "预期结果": { "type": "string" },
-        "优先级": { "type": "string" },
-        "执行结果": { "enum": ["", "未执行", "通过", "不通过", "待定"] },
-        "备注": { "type": "string" }
+        "用例 ID": { "$ref": "#/$defs/nonSecretText" },
+        "所属模块": { "$ref": "#/$defs/nonSecretText" },
+        "用例标题": { "$ref": "#/$defs/nonSecretText" },
+        "验证功能点": { "$ref": "#/$defs/nonSecretText" },
+        "前置条件": { "$ref": "#/$defs/nonSecretText" },
+        "测试步骤": { "$ref": "#/$defs/nonSecretText" },
+        "预期结果": { "$ref": "#/$defs/nonSecretText" },
+        "优先级": { "$ref": "#/$defs/nonSecretText" },
+        "执行结果": { "allOf": [{ "$ref": "#/$defs/nonSecretText" }, { "enum": ["", "未执行", "通过", "不通过", "待定"] }] },
+        "备注": { "$ref": "#/$defs/nonSecretText" }
       }
     },
     "actionBase": {
@@ -82,13 +112,13 @@
       "allOf": [{ "$ref": "#/$defs/actionBase" }],
       "type": "object", "unevaluatedProperties": false,
       "required": ["url"],
-      "properties": { "type": { "const": "web.goto" }, "url": { "type": "string" } }
+      "properties": { "type": { "const": "web.goto" }, "url": { "$ref": "#/$defs/safeHttpUrl" } }
     },
     "webFill": {
       "allOf": [{ "$ref": "#/$defs/actionBase" }],
       "type": "object", "unevaluatedProperties": false,
       "required": ["locator", "value_ref"],
-      "properties": { "type": { "const": "web.fill" }, "locator": { "type": "string" }, "value_ref": { "type": "string" } }
+      "properties": { "type": { "const": "web.fill" }, "locator": { "type": "string" }, "value_ref": { "$ref": "#/$defs/dataReference" } }
     },
     "webClick": {
       "allOf": [{ "$ref": "#/$defs/actionBase" }],
@@ -121,8 +151,8 @@
       "properties": {
         "type": { "const": "api.request" },
         "method": { "enum": ["GET", "POST", "PUT", "PATCH", "DELETE"] },
-        "path": { "type": "string" },
-        "input_ref": { "type": "string" }
+        "path": { "$ref": "#/$defs/relativePath" },
+        "input_ref": { "$ref": "#/$defs/dataReference" }
       }
     },
     "apiExtract": {
@@ -144,7 +174,7 @@
       "properties": {
         "type": { "const": "db.select" },
         "query": { "type": "string" },
-        "params_ref": { "type": "string" },
+        "params_ref": { "$ref": "#/$defs/dataReference" },
         "limit": { "type": "integer", "minimum": 1 }
       }
     },
@@ -155,8 +185,8 @@
       "properties": {
         "type": { "const": "cleanup.api" },
         "method": { "enum": ["POST", "PUT", "PATCH", "DELETE"] },
-        "path": { "type": "string" },
-        "input_ref": { "type": "string" }
+        "path": { "$ref": "#/$defs/relativePath" },
+        "input_ref": { "$ref": "#/$defs/dataReference" }
       }
     },
     "cleanupWeb": {
