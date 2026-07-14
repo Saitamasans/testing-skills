@@ -3,6 +3,7 @@ name: production-verification-test
 description: "Use when 用户要求正式服验证、线上验证、生产环境冒烟、上线后验证、灰度验证、线上回归，或强调正式服不能大量造数和执行破坏性测试。"
 ---
 
+<!-- 此文件由根目录中文源文件自动生成，请勿直接编辑。 -->
 # 增量 Skill：正式服验证用例生成 Skill
 
 ## 最高优先级铁律

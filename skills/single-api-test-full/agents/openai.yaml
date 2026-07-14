@@ -1,0 +1,4 @@
+interface:
+  display_name: "单接口测试用例生成（完整版）"
+  short_description: "单接口契约审查、风险分析与完整测试用例设计"
+  default_prompt: "请使用完整版分析这个单接口并生成测试用例。"

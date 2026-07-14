@@ -1,0 +1,4 @@
+interface:
+  display_name: "单接口测试用例生成（精炼版）"
+  short_description: "低上下文场景下快速完成单接口测试设计"
+  default_prompt: "请使用精炼版快速分析这个单接口。"

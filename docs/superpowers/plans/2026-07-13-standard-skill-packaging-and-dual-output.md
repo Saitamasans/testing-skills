@@ -4,9 +4,9 @@
 
 **Goal:** Convert the seven Chinese source documents into seven self-contained installable Codex/Claude Skill packages, add deterministic Excel/HTML test-case output to five packages, validate routing and CC Switch discovery, and prepare the existing GitHub repository for a public MIT release.
 
-**Architecture:** The seven root Markdown files remain the only manually edited Skill content. A standard-library Python builder reads a manifest, validates each source, and generates committed `skills/<slug>/SKILL.md` packages plus metadata and package-local renderer assets. One generic report schema feeds both the openpyxl Excel renderer and a self-contained HTML renderer.
+**Architecture:** The seven root Markdown files remain the only manually edited Skill content. A standard-library Python builder reads a manifest, validates each source, and generates committed `skills/<slug>/SKILL.md` packages plus metadata and package-local renderer assets. One generic report schema feeds both the `@oai/artifact-tool` Excel renderer and a self-contained HTML renderer; when artifact-tool is unavailable, the package uses its dependency-free OOXML fallback.
 
-**Tech Stack:** Markdown, JSON, Python 3 standard library, openpyxl, `unittest`, JavaScript, Playwright, GitHub Actions, `npx skills`.
+**Tech Stack:** Markdown, JSON, Python 3 standard library, JavaScript, `@oai/artifact-tool`, Node test runner, Playwright, GitHub Actions, `npx skills`.
 
 ## Global Constraints
 
@@ -26,7 +26,7 @@
 - README content is Chinese-first with concise English names and descriptions.
 - License is MIT.
 - Do not push GitHub or create a Release until the user separately confirms the verified local result.
-- Time control: one batch implementation pass, one unified regression pass, one final review. Target execution window is 90–120 minutes; report scope blockers instead of starting repeated review loops.
+- Time control: one batch implementation pass, one unified regression pass, one final review. Target execution window is 45–60 minutes; report scope blockers instead of starting repeated review loops.
 
 ---
 
@@ -222,15 +222,15 @@ git commit -m "refactor: clarify routes and compress seven skills"
 
 **Files:**
 - Create: `tooling/report-schema.json`
-- Create: `tooling/test_case_renderer.py`
+- Create: `tooling/test-case-renderer.mjs`
 - Create: `tooling/templates/test-case-report.html`
 - Create: `tests/fixtures/sample-report.json`
-- Create: `tests/test_case_renderer.py`
-- Create: `requirements.txt`
+- Create: `tests/test-case-renderer.test.mjs`
+- Create: `package.json`
 
 **Interfaces:**
 - Consumes: one UTF-8 JSON report containing `title`, `report_id`, `skill_invocation`, and ordered `sheets`.
-- Produces: `validate_report(data: dict) -> None`, `build_report_id(data: dict) -> str`, `render_xlsx(data: dict, path: Path) -> Path`, `render_html(data: dict, path: Path) -> Path`, and CLI `python scripts/render_test_assets.py --input REPORT.json --output-dir DIR --basename NAME`.
+- Produces: `validateReport(data)`, `buildReportId(data)`, `renderXlsx(data, path)`, `renderHtml(data, path)`, and CLI `node scripts/render-test-assets.mjs --input REPORT.json --output-dir DIR --basename NAME`.
 - A sheet has `name`, `kind`, `columns`, and `rows`; only `kind: test_cases` receives execution controls.
 
 - [ ] **Step 1: Write the report fixture and failing renderer tests**
@@ -263,7 +263,7 @@ Require the exact test-case columns, exact status values, unique case IDs, valid
 
 - [ ] **Step 4: Implement Excel rendering**
 
-Use openpyxl. Create the overview and all declared sheets, apply the shared professional theme, freeze headers, add filters, wrap text, and add data validation to non-divider test rows in the execution-result column.
+Use `@oai/artifact-tool`. Create the overview and all declared sheets, apply the shared professional theme, freeze headers, add filters, wrap text, and add data validation to non-divider test rows in the execution-result column. Inspect the exported workbook and render every sheet to PNG for visual verification.
 
 Conditional formatting order over the full test row:
 
@@ -286,15 +286,15 @@ Feature-detect localStorage. When unavailable, display `浏览器未允许本地
 
 ```powershell
 python -m unittest tests.test_case_renderer -v
-python tooling/test_case_renderer.py --input tests/fixtures/sample-report.json --output-dir build/test-output --basename sample
+node tooling/test-case-renderer.mjs --input tests/fixtures/sample-report.json --output-dir build/test-output --basename sample
 ```
 
-Expected: `sample.xlsx` and `sample.html` exist; openpyxl reloads the workbook; validation and conditional-formatting collections are non-empty.
+Expected: `sample.xlsx` and `sample.html` exist; artifact-tool inspection confirms workbook structure; validation and conditional-formatting collections are non-empty; every sheet has a rendered PNG preview.
 
 - [ ] **Step 7: Commit Task 3**
 
 ```powershell
-git add tooling tests/fixtures tests/test_case_renderer.py requirements.txt
+git add tooling tests/fixtures tests/test-case-renderer.test.mjs package.json
 git commit -m "feat: generate interactive Excel and HTML test reports"
 ```
 
@@ -311,7 +311,7 @@ git commit -m "feat: generate interactive Excel and HTML test reports"
 
 **Interfaces:**
 - Consumes: Task 3 renderer and the manifest `case_output` flag.
-- Produces: package-local `scripts/render_test_assets.py`, HTML template assets if the renderer does not embed them, and verified Skill instructions for creating one JSON report and both files.
+- Produces: package-local `scripts/render-test-assets.mjs`, HTML template assets if the renderer does not embed them, and verified Skill instructions for creating one JSON report and both files.
 
 - [ ] **Step 1: Write failing package integration tests**
 
@@ -395,7 +395,7 @@ Install the seven packages into the local Codex and Claude Skill locations, open
 
 - [ ] **Step 6: Add GitHub Actions**
 
-The workflow must set up Python and Node, install `requirements.txt`, install Playwright Chromium, run builder check, all unittests, browser tests, README/path tests, placeholder scan, `git diff --check`, and fail when generated content differs.
+The workflow must set up Python and Node, install Node dependencies, install Playwright Chromium, run builder check, all Python and Node tests, browser tests, README/path tests, placeholder scan, `git diff --check`, and fail when generated content differs.
 
 - [ ] **Step 7: Run Task 5 verification**
 

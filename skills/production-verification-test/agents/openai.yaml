@@ -1,0 +1,4 @@
+interface:
+  display_name: "正式服验证用例生成"
+  short_description: "受安全门禁约束的生产环境验证设计"
+  default_prompt: "请为这次上线设计正式服验证用例。"

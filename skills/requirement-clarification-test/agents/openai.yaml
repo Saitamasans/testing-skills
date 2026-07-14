@@ -1,0 +1,4 @@
+interface:
+  display_name: "测试视角需求澄清"
+  short_description: "开测前识别需求歧义、缺失规则与待确认事项"
+  default_prompt: "请从测试视角澄清这份需求，暂时不要生成用例。"

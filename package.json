@@ -1,0 +1,13 @@
+{
+  "name": "testing-skills",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test tests/*.test.mjs",
+    "render:sample": "node tooling/test-case-renderer.mjs --input tests/fixtures/sample-report.json --output-dir build/test-output --basename sample"
+  },
+  "devDependencies": {
+    "playwright": "^1.52.0"
+  }
+}

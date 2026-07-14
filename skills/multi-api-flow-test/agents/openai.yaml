@@ -1,0 +1,4 @@
+interface:
+  display_name: "多接口链路测试用例生成"
+  short_description: "多接口依赖、业务链路与回归范围测试设计"
+  default_prompt: "请分析这些接口的调用链路并生成测试用例。"

@@ -1,0 +1,4 @@
+interface:
+  display_name: "测试用例质量审计"
+  short_description: "评审已有测试用例的可执行性、覆盖与证据质量"
+  default_prompt: "请审计这批已有测试用例。"

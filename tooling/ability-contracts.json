@@ -1,0 +1,9 @@
+{
+  "single-api-test-full": ["TP-NNN", "TC-NNN", "资料等级", "接口契约", "幂等", "并发", "最终自检"],
+  "single-api-test-concise": ["TP-NNN", "TC-NNN", "资料等级", "置信度", "最终自检"],
+  "multi-api-flow-test": ["权威准入", "降级", "生产安全门禁", "链路", "最终自检"],
+  "requirement-test-workbench": ["按六个 Skill 跑一遍", "L0", "P0", "合理假设", "最终自检"],
+  "production-verification-test": ["明确授权", "指定内部账号", "指定时间窗", "风险联系人", "L0", "最终自检"],
+  "test-case-quality-audit": ["证据", "降级审计", "审计级别", "最终自检"],
+  "requirement-clarification-test": ["P0", "P1", "P2", "开测", "最终自检"]
+}
