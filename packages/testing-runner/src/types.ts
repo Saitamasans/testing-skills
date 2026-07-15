@@ -22,6 +22,56 @@ export type ActionType =
   | "cleanup.web";
 
 export type CaseStatus = "未执行" | "通过" | "不通过" | "待定";
+export type InputKind = "native-report" | "standard-excel" | "nonstandard-excel";
+export type TenColumnName =
+  | "用例 ID"
+  | "所属模块"
+  | "用例标题"
+  | "验证功能点"
+  | "前置条件"
+  | "测试步骤"
+  | "预期结果"
+  | "优先级"
+  | "执行结果"
+  | "备注";
+
+export type SkillInvocation =
+  | string
+  | {
+      primary: string;
+      secondary?: string;
+      roles?: string;
+      confirmation?: string;
+    };
+
+export interface SourceSnapshot {
+  absolute_path: string;
+  sha256: string;
+  size: number;
+  modified_at: string;
+  input_kind: InputKind;
+  sheet_names: string[];
+}
+
+export interface NormalizedCase {
+  id: string;
+  values: Record<TenColumnName, string>;
+  raw_values: unknown[];
+  source: string;
+  source_sheet: string;
+  source_row: number;
+  divider: boolean;
+  extensions: Record<string, string>;
+  original_status: string;
+  status: CaseStatus | "-";
+}
+
+export interface NormalizedCaseSet {
+  columns: TenColumnName[];
+  cases: NormalizedCase[];
+  source_snapshot: SourceSnapshot;
+  skill_invocation?: SkillInvocation;
+}
 export type RunStatus =
   | "planned"
   | "running"
