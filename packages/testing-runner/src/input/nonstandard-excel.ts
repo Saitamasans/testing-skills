@@ -3,13 +3,19 @@ import { readFile } from "node:fs/promises";
 
 import type { NormalizedCaseSet, OriginalSourceRow, TenColumnName } from "../types.js";
 import { TEN_COLUMNS } from "./detect-input.js";
-import type { MappingApproval, MappingColumnRule, SplitColumnRule } from "./mapping-approval.js";
+import type { MappingApproval, MappingColumnRule } from "./mapping-approval.js";
 import {
+  MAX_SPLIT_INPUT_LENGTH,
+  MAX_SPLIT_SEPARATOR_LENGTH,
   calculateProposalSha256,
   canonicalize,
+  extensionColumnKey,
+  splitValue,
   type MappingProposal,
 } from "./mapping-proposal.js";
 import { normalizeSourceRows, type SourceRow } from "./report-reader.js";
+
+export { MAX_SPLIT_INPUT_LENGTH, MAX_SPLIT_SEPARATOR_LENGTH } from "./mapping-proposal.js";
 
 function text(value: unknown): string {
   if (value === undefined || value === null) return "";
@@ -44,10 +50,18 @@ function validateColumnRules(proposal: MappingProposal, approval: MappingApprova
   );
   const rulesBySource = new Map<string, MappingColumnRule[]>();
   const sourcesBySheetTarget = new Map<string, string[]>();
+  const unpreviewedDirectRules: MappingColumnRule[] = [];
+  const unpreviewedSplitRules: MappingColumnRule[] = [];
   for (const rule of approval.column_rules) {
     const proposedColumn = proposalColumns.get(sourceKey(rule));
     if (!proposedColumn || proposedColumn.source_column !== rule.source_column) {
       throw new Error(`审批引用了提案中不存在的源列：${rule.source_sheet}.${rule.source_column}`);
+    }
+    if (rule.kind === "direct" && (
+      proposedColumn.suggested_rule?.kind !== "direct" ||
+      canonicalize(proposedColumn.suggested_rule) !== canonicalize(rule)
+    )) {
+      unpreviewedDirectRules.push(rule);
     }
     const rules = rulesBySource.get(sourceKey(rule)) ?? [];
     rules.push(rule);
@@ -59,13 +73,17 @@ function validateColumnRules(proposal: MappingProposal, approval: MappingApprova
       sourcesBySheetTarget.set(targetKey, sources);
     }
     if (rule.kind === "split") {
+      if (proposedColumn.suggested_rule?.kind !== "split" ||
+          canonicalize(proposedColumn.suggested_rule) !== canonicalize(rule)) {
+        unpreviewedSplitRules.push(rule);
+      }
       const wasPreviewed = proposal.split_previews.some((preview) =>
         preview.source_sheet === rule.source_sheet &&
         preview.source_column === rule.source_column &&
         preview.source_column_index === rule.source_column_index &&
         canonicalize(preview.split_rule) === canonicalize(rule.split_rule),
       );
-      if (!wasPreviewed) throw new Error(`拆分规则未在提案中预览：${rule.source_sheet}.${rule.source_column}`);
+      if (!wasPreviewed) unpreviewedSplitRules.push(rule);
     }
   }
   for (const rules of rulesBySource.values()) {
@@ -80,6 +98,14 @@ function validateColumnRules(proposal: MappingProposal, approval: MappingApprova
       throw new Error(`多个源列重复映射到 ${sheet}.${target}`);
     }
   }
+  if (unpreviewedDirectRules.length > 0) {
+    const rule = unpreviewedDirectRules[0]!;
+    throw new Error(`直接映射规则未在提案中预览：${rule.source_sheet}.${rule.source_column}`);
+  }
+  if (unpreviewedSplitRules.length > 0) {
+    const rule = unpreviewedSplitRules[0]!;
+    throw new Error(`拆分规则未在提案中预览：${rule.source_sheet}.${rule.source_column}`);
+  }
 
   const sheets = new Set(approval.column_rules.map(({ source_sheet }) => source_sheet));
   if (sheets.size === 0) throw new Error("测试步骤和预期结果字段缺失：没有确认任何映射");
@@ -92,6 +118,12 @@ function validateColumnRules(proposal: MappingProposal, approval: MappingApprova
     if (!covered.has("测试步骤") || !covered.has("预期结果")) {
       throw new Error(`测试步骤和预期结果字段缺失：${sheet}`);
     }
+  }
+  const proposalRules = proposal.columns.flatMap(({ suggested_rule }) =>
+    suggested_rule === null ? [] : [suggested_rule],
+  );
+  if (canonicalize(approval.column_rules) !== canonicalize(proposalRules)) {
+    throw new Error("审批字段规则与提案不完全一致，必须重新生成预览和提案哈希");
   }
 }
 
@@ -111,16 +143,6 @@ function validateApproval(proposal: MappingProposal, approval?: MappingApproval)
   }
   validateColumnRules(proposal, approval);
   return approval;
-}
-
-function splitValue(value: string, rule: SplitColumnRule["split_rule"]): [string, string] {
-  if (rule.strategy === "delimiter") {
-    const index = value.indexOf(rule.separator);
-    if (index < 0) return [value.trim(), ""];
-    return [value.slice(0, index).trim(), value.slice(index + rule.separator.length).trim()];
-  }
-  const match = new RegExp(rule.separator, "s").exec(value);
-  return [match?.[1]?.trim() ?? "", match?.[2]?.trim() ?? ""];
 }
 
 interface PreparedRow {
@@ -149,7 +171,12 @@ function prepareRows(proposal: MappingProposal, approval: MappingApproval): Prep
       if (rule.kind === "direct") {
         values[TEN_COLUMNS.indexOf(rule.target_field)] = value;
       } else {
-        const [steps, expected] = splitValue(value, rule.split_rule);
+        const [steps, expected] = splitValue(
+          value,
+          rule.split_rule.strategy,
+          rule.split_rule.separator,
+          original.source,
+        );
         if (steps === "" || expected === "") {
           throw new Error(`测试步骤或预期结果为空，阻止执行：${original.source}`);
         }
@@ -166,7 +193,9 @@ function prepareRows(proposal: MappingProposal, approval: MappingApproval): Prep
     }
     const extensions: Record<string, string> = {};
     original.columns.forEach((column, index) => {
-      if (!mappedIndexes.has(index)) extensions[column] = text(original.raw_values[index]);
+      if (!mappedIndexes.has(index)) {
+        extensions[extensionColumnKey(original.columns, index)] = text(original.raw_values[index]);
+      }
     });
     prepared.push({
       original,

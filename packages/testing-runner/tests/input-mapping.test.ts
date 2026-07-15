@@ -9,11 +9,16 @@ import ExcelJS from "exceljs";
 
 import type { MappingApproval } from "../src/input/mapping-approval.js";
 import {
+  calculateProposalSha256,
+  canonicalize,
   inspectNonstandardWorkbook,
   proposeMapping,
   type MappingProposal,
 } from "../src/input/mapping-proposal.js";
 import { applyConfirmedMapping } from "../src/input/nonstandard-excel.js";
+
+const MAX_SPLIT_SEPARATOR_LENGTH = 256;
+const MAX_SPLIT_INPUT_LENGTH = 100_000;
 
 const tempDirectories: string[] = [];
 
@@ -64,6 +69,35 @@ async function newSeparateColumnsFixture(expected: string): Promise<string> {
   return file;
 }
 
+async function newDuplicateExtensionsFixture(): Promise<string> {
+  const directory = await mkdtemp(path.join(os.tmpdir(), "runner-mapping-duplicates-"));
+  tempDirectories.push(directory);
+  const file = path.join(directory, "duplicate-extensions.xlsx");
+  const workbook = new ExcelJS.Workbook();
+  const sheet = workbook.addWorksheet("接口用例");
+  sheet.addRow(["编号", "步骤", "预期", "负责人", "负责人"]);
+  sheet.addRow(["API-001", "发送 GET 请求", "返回 200", "Alice", "Bob"]);
+  await workbook.xlsx.writeFile(file);
+  return file;
+}
+
+function setLabeledSectionRule(proposal: MappingProposal, separator: string): void {
+  const firstSplitSheet = proposal.columns.find(({ suggested_rule }) => suggested_rule?.kind === "split")?.source_sheet;
+  const splitColumns = proposal.columns.filter(({ source_sheet, suggested_rule }) =>
+    source_sheet === firstSplitSheet && suggested_rule?.kind === "split",
+  );
+  for (const column of splitColumns) {
+    assert.ok(column.suggested_rule?.kind === "split");
+    column.suggested_rule.split_rule.strategy = "labeled-sections";
+    column.suggested_rule.split_rule.separator = separator;
+  }
+  for (const preview of proposal.split_previews.filter(({ source_sheet }) => source_sheet === firstSplitSheet)) {
+    preview.split_rule.strategy = "labeled-sections";
+    preview.split_rule.separator = separator;
+  }
+  proposal.proposal_sha256 = calculateProposalSha256(proposal);
+}
+
 function approvalFor(proposal: MappingProposal): MappingApproval {
   return {
     source_sha256: proposal.source_snapshot.sha256,
@@ -109,6 +143,17 @@ test("produces a complete deterministic mapping preview for renamed columns and 
   assert.match(proposal.human_preview, /重复映射: 无/);
   assert.match(proposal.human_preview, /冲突映射: 无/);
   assert.match(proposal.human_preview, /标准化样例:/);
+  const normalizedPreviewLines = proposal.human_preview
+    .split("\n")
+    .filter((line) => line.startsWith("标准化样例:"));
+  assert.equal(normalizedPreviewLines.length, 3);
+  for (const line of normalizedPreviewLines) {
+    for (const column of [
+      "用例 ID", "所属模块", "用例标题", "验证功能点", "前置条件",
+      "测试步骤", "预期结果", "优先级", "执行结果", "备注",
+    ]) assert.match(line, new RegExp(`${column}=`));
+    assert.match(line, /扩展字段=.*负责人/);
+  }
   assert.equal(proposal.proposal_sha256.length, 64);
   assert.deepEqual(proposal.source_snapshot.rows?.map(({ source }) => source), [
     "登录用例!2", "登录用例!3", "登录用例!4", "登录用例!5", "退款用例!2", "说明!2",
@@ -198,6 +243,34 @@ test("rejects conflicting rules, absent required fields and unpreviewed split ch
   await assert.rejects(() => applyConfirmedMapping(proposal, changedSplit), /拆分规则未在提案中预览/);
 });
 
+test("rejects a direct approval rule that is not exactly represented in the hashed proposal", async () => {
+  const proposal = proposeMapping(await inspectNonstandardWorkbook(await newFixture()));
+  const remapped = approvalFor(proposal);
+  const idRule = remapped.column_rules.find((rule) =>
+    rule.kind === "direct" && rule.target_field === "用例 ID",
+  );
+  assert.ok(idRule?.kind === "direct");
+  idRule.target_field = "备注";
+
+  await assert.rejects(
+    () => applyConfirmedMapping(proposal, remapped),
+    /直接映射规则未在提案中预览/,
+  );
+});
+
+test("rejects an approval that omits a direct rule represented in the hashed proposal", async () => {
+  const proposal = proposeMapping(await inspectNonstandardWorkbook(await newFixture()));
+  const incomplete = approvalFor(proposal);
+  incomplete.column_rules = incomplete.column_rules.filter((rule) =>
+    !(rule.kind === "direct" && rule.target_field === "用例 ID"),
+  );
+
+  await assert.rejects(
+    () => applyConfirmedMapping(proposal, incomplete),
+    /审批字段规则与提案不完全一致/,
+  );
+});
+
 test("blocks execution when a confirmed split yields a missing step or expected result", async () => {
   const proposal = proposeMapping(await inspectNonstandardWorkbook(await newFixture([
     ["LOGIN-001", "认证", "坏数据", "只有步骤没有分隔符", "P0", "未执行", "Alice", "测试"],
@@ -216,4 +289,63 @@ test("blocks execution when a directly mapped step or expected result is blank",
     () => applyConfirmedMapping(proposal, approvalFor(proposal)),
     /测试步骤或预期结果为空/,
   );
+});
+
+test("preserves duplicate extension headers with deterministic source-column keys", async () => {
+  const proposal = proposeMapping(
+    await inspectNonstandardWorkbook(await newDuplicateExtensionsFixture()),
+  );
+  const result = await applyConfirmedMapping(proposal, approvalFor(proposal));
+
+  assert.deepEqual(result.cases[0]?.extensions, {
+    "负责人 [列4]": "Alice",
+    "负责人 [列5]": "Bob",
+  });
+  assert.deepEqual(proposal.normalized_sample_rows[0]?.extensions, {
+    "负责人 [列4]": "Alice",
+    "负责人 [列5]": "Bob",
+  });
+});
+
+test("parses catastrophic-looking labeled content literally beyond the three-row preview", async () => {
+  const marker = "(a+)+$".repeat(1_000);
+  const proposal = proposeMapping(await inspectNonstandardWorkbook(await newFixture([
+    ["LOGIN-001", "认证", "一", "步骤：(a+)+$一预期：一", "P0", "未执行", "A", "测试"],
+    ["LOGIN-002", "认证", "二", "步骤：(a+)+$二预期：二", "P0", "未执行", "B", "测试"],
+    ["LOGIN-003", "认证", "三", "步骤：(a+)+$三预期：三", "P0", "未执行", "C", "测试"],
+    ["LOGIN-004", "认证", "四", `步骤：(a+)+$${marker}预期：完成`, "P0", "未执行", "D", "测试"],
+  ])));
+  setLabeledSectionRule(proposal, "步骤：(a+)+$||预期：");
+
+  const result = await applyConfirmedMapping(proposal, approvalFor(proposal));
+  assert.equal(result.cases[3]?.values["测试步骤"], marker);
+  assert.equal(result.cases[3]?.values["预期结果"], "完成");
+});
+
+test("rejects labeled-section rules and row inputs beyond explicit linear-parser ceilings", async () => {
+  assert.equal(MAX_SPLIT_SEPARATOR_LENGTH, 256);
+  assert.equal(MAX_SPLIT_INPUT_LENGTH, 100_000);
+
+  const longRuleProposal = proposeMapping(await inspectNonstandardWorkbook(await newFixture()));
+  setLabeledSectionRule(longRuleProposal, `${"a".repeat(MAX_SPLIT_SEPARATOR_LENGTH)}||预期：`);
+  await assert.rejects(
+    () => applyConfirmedMapping(longRuleProposal, approvalFor(longRuleProposal)),
+    /拆分规则长度超过上限/,
+  );
+
+  const longInputProposal = proposeMapping(await inspectNonstandardWorkbook(await newFixture([
+    ["LOGIN-001", "认证", "一", "步骤：一预期：一", "P0", "未执行", "A", "测试"],
+    ["LOGIN-002", "认证", "二", "步骤：二预期：二", "P0", "未执行", "B", "测试"],
+    ["LOGIN-003", "认证", "三", "步骤：三预期：三", "P0", "未执行", "C", "测试"],
+    ["LOGIN-004", "认证", "四", `步骤：${"a".repeat(MAX_SPLIT_INPUT_LENGTH)}预期：完成`, "P0", "未执行", "D", "测试"],
+  ])));
+  setLabeledSectionRule(longInputProposal, "步骤：||预期：");
+  await assert.rejects(
+    () => applyConfirmedMapping(longInputProposal, approvalFor(longInputProposal)),
+    /拆分输入长度超过上限.*登录用例!5/,
+  );
+});
+
+test("canonical proposal keys use locale-independent Unicode code-point ordering", () => {
+  assert.equal(canonicalize({ "ä": 1, z: 2 }), '{"z":2,"ä":1}');
 });

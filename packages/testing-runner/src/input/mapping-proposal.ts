@@ -51,7 +51,7 @@ export interface MappingProposal {
   normalized_sample_rows: Array<{
     id: string;
     source: string;
-    values: Partial<Record<TenColumnName, string>>;
+    values: Record<TenColumnName, string>;
     extensions: Record<string, string>;
   }>;
   confidence: number;
@@ -84,6 +84,9 @@ const DIRECT_ALIASES = new Map<string, TenColumnName>([
 ]);
 
 const MERGED_ALIASES = new Set(["步骤与预期", "步骤及预期", "操作与预期"]);
+
+export const MAX_SPLIT_SEPARATOR_LENGTH = 256;
+export const MAX_SPLIT_INPUT_LENGTH = 100_000;
 
 function text(value: unknown): string {
   if (value === undefined || value === null) return "";
@@ -146,14 +149,46 @@ export async function inspectNonstandardWorkbook(file: string): Promise<Workbook
   };
 }
 
-function splitValue(value: string, strategy: "delimiter" | "labeled-sections", separator: string): [string, string] {
+export function splitValue(
+  value: string,
+  strategy: "delimiter" | "labeled-sections",
+  separator: string,
+  source?: string,
+): [string, string] {
+  if (separator.length > MAX_SPLIT_SEPARATOR_LENGTH) {
+    throw new Error(`拆分规则长度超过上限（${MAX_SPLIT_SEPARATOR_LENGTH}）`);
+  }
+  if (value.length > MAX_SPLIT_INPUT_LENGTH) {
+    throw new Error(`拆分输入长度超过上限（${MAX_SPLIT_INPUT_LENGTH}）：${source ?? "预览行"}`);
+  }
   if (strategy === "delimiter") {
+    if (separator === "") throw new Error("分隔符拆分规则不能为空");
     const index = value.indexOf(separator);
     if (index < 0) return [value.trim(), ""];
     return [value.slice(0, index).trim(), value.slice(index + separator.length).trim()];
   }
-  const match = new RegExp(separator, "s").exec(value);
-  return [match?.[1]?.trim() ?? "", match?.[2]?.trim() ?? ""];
+  const boundary = separator.indexOf("||");
+  if (boundary <= 0 || boundary !== separator.lastIndexOf("||") || boundary === separator.length - 2) {
+    throw new Error("标签段拆分规则必须是“步骤标签||预期标签”两个非空字面量");
+  }
+  const stepsLabel = separator.slice(0, boundary);
+  const expectedLabel = separator.slice(boundary + 2);
+  const stepsLabelIndex = value.indexOf(stepsLabel);
+  if (stepsLabelIndex < 0) return ["", ""];
+  const stepsStart = stepsLabelIndex + stepsLabel.length;
+  const expectedLabelIndex = value.indexOf(expectedLabel, stepsStart);
+  if (expectedLabelIndex < 0) return [value.slice(stepsStart).trim(), ""];
+  return [
+    value.slice(stepsStart, expectedLabelIndex).trim(),
+    value.slice(expectedLabelIndex + expectedLabel.length).trim(),
+  ];
+}
+
+export function extensionColumnKey(columns: readonly string[], index: number): string {
+  const header = columns[index]!;
+  return columns.filter((column) => column === header).length > 1
+    ? `${header} [列${index + 1}]`
+    : header;
 }
 
 function proposalForColumn(sheet: InspectedSheet, sourceColumn: string, index: number): MappingColumnProposal {
@@ -217,7 +252,11 @@ function buildSplitPreviews(columns: readonly MappingColumnProposal[], inspectio
       split_rule: splitRule,
       rows: sheet.rows.slice(0, 3).map((row) => {
         const input = text(row.raw_values[column.source_column_index - 1]);
-        return { source: row.source, input, outputs: splitValue(input, splitRule.strategy, splitRule.separator) };
+        return {
+          source: row.source,
+          input,
+          outputs: splitValue(input, splitRule.strategy, splitRule.separator, row.source),
+        };
       }),
     }];
   });
@@ -259,7 +298,10 @@ function buildHumanPreview(proposal: Omit<MappingProposal, "proposal_sha256" | "
     lines.push(`拆分预览: ${preview.source_sheet}.${preview.source_column} / ${preview.split_rule.version} / ${preview.split_rule.strategy} / ${JSON.stringify(preview.split_rule.separator)}`);
     for (const row of preview.rows) lines.push(`${row.source}: ${row.outputs[0]} => ${row.outputs[1]}`);
   }
-  for (const row of proposal.normalized_sample_rows) lines.push(`标准化样例: ${row.source} / ${row.id}`);
+  for (const row of proposal.normalized_sample_rows) {
+    const fields = TEN_COLUMNS.map((column) => `${column}=${JSON.stringify(row.values[column])}`).join("; ");
+    lines.push(`标准化样例: ${row.source}; ${fields}; 扩展字段=${JSON.stringify(row.extensions)}`);
+  }
   return lines.join("\n");
 }
 
@@ -274,7 +316,7 @@ function normalizeForPreview(
     const fields = coveredFields(sheetColumns);
     if (!fields.includes("测试步骤") || !fields.includes("预期结果")) continue;
     for (const row of sheet.rows) {
-      const values: Partial<Record<TenColumnName, string>> = {};
+      const values = Object.fromEntries(TEN_COLUMNS.map((column) => [column, ""])) as Record<TenColumnName, string>;
       const extensions: Record<string, string> = {};
       for (const column of sheetColumns) {
         const value = text(row.raw_values[column.source_column_index - 1]);
@@ -285,15 +327,16 @@ function normalizeForPreview(
             candidate.source_sheet === column.source_sheet &&
             candidate.source_column_index === column.source_column_index,
           )!;
-          const outputs = splitValue(value, preview.split_rule.strategy, preview.split_rule.separator);
+          const outputs = splitValue(value, preview.split_rule.strategy, preview.split_rule.separator, row.source);
           values["测试步骤"] = outputs[0];
           values["预期结果"] = outputs[1];
         } else {
-          extensions[column.source_column] = value;
+          extensions[extensionColumnKey(row.columns, column.source_column_index - 1)] = value;
         }
       }
       const id = values["用例 ID"]?.trim() ||
         `EXT-${inspection.source_snapshot.sha256.slice(0, 8)}-${String(row.source_row).padStart(6, "0")}`;
+      values["用例 ID"] = id;
       rows.push({ id, source: row.source, values, extensions });
       if (rows.length === 3) return rows;
     }
@@ -306,12 +349,20 @@ function jsonCompatible(value: unknown): unknown {
 }
 
 export function canonicalize(value: unknown): string {
+  const compareCodePoints = (left: string, right: string): number => {
+    const leftPoints = Array.from(left, (character) => character.codePointAt(0)!);
+    const rightPoints = Array.from(right, (character) => character.codePointAt(0)!);
+    for (let index = 0; index < Math.min(leftPoints.length, rightPoints.length); index += 1) {
+      if (leftPoints[index] !== rightPoints[index]) return leftPoints[index]! - rightPoints[index]!;
+    }
+    return leftPoints.length - rightPoints.length;
+  };
   const sort = (item: unknown): unknown => {
     if (Array.isArray(item)) return item.map(sort);
     if (item !== null && typeof item === "object") {
       return Object.fromEntries(
         Object.entries(item as Record<string, unknown>)
-          .sort(([left], [right]) => left.localeCompare(right))
+          .sort(([left], [right]) => compareCodePoints(left, right))
           .map(([key, child]) => [key, sort(child)]),
       );
     }
