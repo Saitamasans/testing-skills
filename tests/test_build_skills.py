@@ -72,6 +72,20 @@ class BuildSkillsTest(unittest.TestCase):
         build_all(ROOT)
         build_all(ROOT, check=True)
 
+    def test_execution_skill_bundles_launcher_resources(self):
+        build_all(ROOT)
+        source_root = ROOT / "skill-sources/web-api-test-execution-evidence"
+        package_root = ROOT / "skills/web-api-test-execution-evidence"
+        for relative in [
+            "scripts/testing-runner.mjs",
+            "scripts/runner-bootstrap-lib.mjs",
+        ]:
+            self.assertEqual(
+                (source_root / relative).read_bytes(),
+                (package_root / relative).read_bytes(),
+                relative,
+            )
+
 
 if __name__ == "__main__":
     unittest.main()

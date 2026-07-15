@@ -93,6 +93,18 @@ def _openai_yaml(item: dict) -> str:
     )
 
 
+def _copy_resource_tree(source_root: Path, package: Path, desired: dict[Path, str | bytes]) -> None:
+    for directory in ("scripts", "assets"):
+        resource_root = source_root / directory
+        if not resource_root.exists():
+            continue
+        for resource in sorted(resource_root.rglob("*")):
+            if resource.is_symlink():
+                raise ValueError(f"执行 Skill 资源不允许符号链接: {resource}")
+            if resource.is_file():
+                desired[package / resource.relative_to(source_root)] = resource.read_bytes()
+
+
 def build_all(root: Path = ROOT, check: bool = False) -> list[Path]:
     manifest = load_manifest(root)
     entries = manifest.get("skills", [])
@@ -116,6 +128,7 @@ def build_all(root: Path = ROOT, check: bool = False) -> list[Path]:
             desired[package / "SKILL.md"] = _render_skill(compact, EXECUTION_BANNER)
             for relative, reference in references.items():
                 desired[package / relative] = reference
+            _copy_resource_tree(source.parent, package, desired)
         else:
             desired[package / "SKILL.md"] = _render_skill(text)
         desired[package / "agents/openai.yaml"] = _openai_yaml(item)
