@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
+import { mkdtemp, readFile, writeFile } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
 import test from "node:test";
 
+import { runApproveCommand } from "../src/commands/approve.js";
+import { runPlanCommand } from "../src/commands/plan.js";
 import { TEN_COLUMNS } from "../src/input/detect-input.js";
 import { createApproval, verifyApproval } from "../src/security/approval.js";
 import { normalizeTargetOrigins } from "../src/security/target-scope.js";
@@ -45,6 +50,68 @@ type CompiledManifest = RunManifest & {
   targets: string[];
   rule_versions: string[];
 };
+
+async function writeNativeReportFixture(directory: string): Promise<string> {
+  const file = path.join(directory, "report.json");
+  const rowValues = TEN_COLUMNS.map((column) => values("API-001")[column]);
+  rowValues[8] = "未执行";
+  await writeFile(file, JSON.stringify({
+    title: "runner plan",
+    generated_at: "2026-07-15T00:00:00.000Z",
+    skill_invocation: "single-api-test-full",
+    sheets: [
+      {
+        name: "Cases",
+        kind: "test_cases",
+        columns: TEN_COLUMNS,
+        rows: [
+          { values: rowValues },
+        ],
+      },
+    ],
+  }, null, 2), "utf8");
+  return file;
+}
+
+async function writeProfileFixture(directory: string, actionRisk: "R1" | "R3" = "R1"): Promise<string> {
+  const file = path.join(directory, "profile.json");
+  await writeFile(file, JSON.stringify({
+    protocol_version: "1.0.0",
+    profile_id: "local",
+    targets: {
+      api: { kind: "api", origin: "https://api.example.test/" },
+    },
+    credentials: {
+      api_admin: { source: "env", name: "TESTING_API_ADMIN_TOKEN" },
+    },
+    rule_versions: ["1.0.0"],
+    case_plans: {
+      "API-001": [
+        {
+          type: "api.request",
+          action_id: actionRisk === "R3" ? "API-001-award" : "API-001-request",
+          target_alias: "api",
+          method: "POST",
+          path: actionRisk === "R3" ? "/award-points" : "/orders",
+          input_ref: { source: "fixture", name: "order_payload" },
+          risk: actionRisk,
+        },
+        {
+          type: "api.assert",
+          action_id: "API-001-assert",
+          target_alias: "api",
+          assertion: "status is 201",
+          risk: "R0",
+        },
+      ],
+    },
+  }, null, 2), "utf8");
+  return file;
+}
+
+async function readJson(file: string): Promise<unknown> {
+  return JSON.parse(await readFile(file, "utf8")) as unknown;
+}
 
 function values(id: string): Record<TenColumnName, string> {
   return {
@@ -328,3 +395,61 @@ test("manifest compiler passes actual-effect risk context into classification", 
 test("target origin normalization is deterministic and excludes database hosts from URL approval scope", () => {
   assert.deepEqual(normalizeTargetOrigins(profile().targets), ["https://api.example.test"]);
 });
+
+test("plan command writes inspection, readiness, normalized profile, manifest and preview", async () => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), "runner-plan-"));
+  const input = await writeNativeReportFixture(directory);
+  const profileFile = await writeProfileFixture(directory);
+  const outputDir = path.join(directory, "out");
+
+  const result = await runPlanCommand({ input, profile: profileFile, outputDir });
+
+  assert.equal(result.manifest.cases[0]?.case_id, "API-001");
+  for (const fileName of [
+    "input-inspection.json",
+    "readiness.json",
+    "execution-profile.normalized.json",
+    "run-manifest.json",
+    "execution-preview.md",
+  ]) {
+    assert.ok(await readJsonOrText(path.join(outputDir, fileName)), fileName);
+  }
+  const manifestJson = await readJson(path.join(outputDir, "run-manifest.json"));
+  assert.equal(validateDocument("run-manifest", manifestJson), manifestJson);
+});
+
+test("approve command writes scoped approval and requires explicit R3 action ids", async () => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), "runner-approve-"));
+  const input = await writeNativeReportFixture(directory);
+  const r3Profile = await writeProfileFixture(directory, "R3");
+  const outputDir = path.join(directory, "out");
+  await runPlanCommand({ input, profile: r3Profile, outputDir });
+  const manifestFile = path.join(outputDir, "run-manifest.json");
+  const approvalFile = path.join(directory, "approval.json");
+
+  await assert.rejects(
+    () => runApproveCommand({
+      manifest: manifestFile,
+      out: approvalFile,
+      expiresAt: "2999-07-15T01:00:00.000Z",
+      confirmedBy: "trusted-wrapper",
+    }),
+    /R3 action/,
+  );
+
+  const approval = await runApproveCommand({
+    manifest: manifestFile,
+    out: approvalFile,
+    expiresAt: "2999-07-15T01:00:00.000Z",
+    approveR3: ["API-001-award"],
+    confirmedBy: "trusted-wrapper",
+  });
+  const approvalJson = await readJson(approvalFile);
+  assert.equal(validateDocument("approval", approvalJson), approvalJson);
+  assert.deepEqual(approval.approved_r3_action_ids, ["API-001-award"]);
+});
+
+async function readJsonOrText(file: string): Promise<unknown> {
+  if (file.endsWith(".json")) return readJson(file);
+  return readFile(file, "utf8");
+}
