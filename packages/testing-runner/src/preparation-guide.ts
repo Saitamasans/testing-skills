@@ -1,0 +1,47 @@
+import type { CopyableExamples, ReadinessAssessment } from "./readiness.js";
+
+function fencedJson(value: unknown): string {
+  return ["```json", JSON.stringify(value, null, 2), "```"].join("\n");
+}
+
+function appendExample(lines: string[], label: keyof CopyableExamples, value: unknown): void {
+  if (value === undefined) return;
+  lines.push(`\n## ${label}`);
+  lines.push(fencedJson(value));
+}
+
+export function renderPreparationGuide(assessment: ReadinessAssessment): string {
+  const lines: string[] = [
+    `# Preparation readiness: ${assessment.level}`,
+    `Runner allowed: ${assessment.runner_allowed ? "yes" : "no"}`,
+  ];
+
+  if (assessment.blocking.length > 0) {
+    lines.push("\n## Blocking preparation");
+    for (const item of assessment.blocking) lines.push(`- ${item}`);
+  }
+
+  if (assessment.optional.length > 0) {
+    lines.push("\n## Optional preparation");
+    for (const item of assessment.optional) lines.push(`- ${item}`);
+  }
+
+  lines.push("\n## Available");
+  for (const item of assessment.available) lines.push(`- ${item}`);
+
+  lines.push("\n## Copyable JSON examples");
+  appendExample(lines, "targets", assessment.copyable_examples.targets);
+  appendExample(lines, "credentials", assessment.copyable_examples.credentials);
+  appendExample(lines, "data", assessment.copyable_examples.data);
+  appendExample(lines, "cleanup", assessment.copyable_examples.cleanup);
+  appendExample(lines, "runtime", assessment.copyable_examples.runtime);
+
+  if (assessment.runtime_probe.missing_software.length > 0) {
+    lines.push("\n## Runtime probe missing software");
+    for (const item of assessment.runtime_probe.missing_software) {
+      lines.push(`- ${item.package} (${item.source}, ${item.version}): ${item.impact}`);
+    }
+  }
+
+  return `${lines.join("\n")}\n`;
+}
