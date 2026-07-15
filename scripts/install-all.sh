@@ -10,5 +10,5 @@ for skill in \
   requirement-clarification-test \
   web-api-test-execution-evidence
 do
-  npx skills add Saitamasans/testing-skills --path "skills/$skill"
+  npx skills add "Saitamasans/testing-skills@$skill" -g -y
 done

@@ -10,6 +10,6 @@ $skills = @(
   "web-api-test-execution-evidence"
 )
 foreach ($skill in $skills) {
-  & npx skills add Saitamasans/testing-skills --path "skills/$skill"
+  & npx skills add "Saitamasans/testing-skills@$skill" -g -y
   if ($LASTEXITCODE -ne 0) { throw "安装失败：$skill" }
 }

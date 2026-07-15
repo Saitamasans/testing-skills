@@ -19,13 +19,26 @@ class ReadmeAndPackagesTest(unittest.TestCase):
             package = ROOT / "skills" / item["slug"]
             self.assertTrue((package / "SKILL.md").exists())
             self.assertTrue((package / "agents/openai.yaml").exists())
-            command = f"--path skills/{item['slug']}"
+            command = f"npx skills add Saitamasans/testing-skills@{item['slug']} -g -y"
             self.assertEqual(1, readme.count(command), command)
             for installer in installers:
                 self.assertIn(item["slug"], installer)
         self.assertIn("npx skills add Saitamasans/testing-skills", readme)
         self.assertIn("CC Switch", readme)
         self.assertTrue((ROOT / "LICENSE").read_text(encoding="utf-8").startswith("MIT License"))
+
+    def test_single_skill_commands_use_supported_selector(self):
+        readme = (ROOT / "README.md").read_text(encoding="utf-8")
+        scripts = "\n".join([
+            (ROOT / "scripts/install-all.ps1").read_text(encoding="utf-8"),
+            (ROOT / "scripts/install-all.sh").read_text(encoding="utf-8"),
+        ])
+        self.assertNotIn("--path", readme + scripts)
+        self.assertIn(
+            "npx skills add Saitamasans/testing-skills@web-api-test-execution-evidence -g -y",
+            readme,
+        )
+        self.assertIn("Saitamasans/testing-skills@$skill", scripts)
 
     def test_only_five_packages_contain_renderer(self):
         manifest = load_manifest(ROOT)["skills"]

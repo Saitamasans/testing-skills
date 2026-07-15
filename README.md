@@ -28,14 +28,14 @@ npx skills add Saitamasans/testing-skills
 单独安装某一个 Skill：
 
 ```bash
-npx skills add Saitamasans/testing-skills --path skills/single-api-test-full
-npx skills add Saitamasans/testing-skills --path skills/single-api-test-concise
-npx skills add Saitamasans/testing-skills --path skills/multi-api-flow-test
-npx skills add Saitamasans/testing-skills --path skills/requirement-test-workbench
-npx skills add Saitamasans/testing-skills --path skills/production-verification-test
-npx skills add Saitamasans/testing-skills --path skills/test-case-quality-audit
-npx skills add Saitamasans/testing-skills --path skills/requirement-clarification-test
-npx skills add Saitamasans/testing-skills --path skills/web-api-test-execution-evidence
+npx skills add Saitamasans/testing-skills@single-api-test-full -g -y
+npx skills add Saitamasans/testing-skills@single-api-test-concise -g -y
+npx skills add Saitamasans/testing-skills@multi-api-flow-test -g -y
+npx skills add Saitamasans/testing-skills@requirement-test-workbench -g -y
+npx skills add Saitamasans/testing-skills@production-verification-test -g -y
+npx skills add Saitamasans/testing-skills@test-case-quality-audit -g -y
+npx skills add Saitamasans/testing-skills@requirement-clarification-test -g -y
+npx skills add Saitamasans/testing-skills@web-api-test-execution-evidence -g -y
 ```
 
 也可以使用 `scripts/install-all.ps1` 或 `scripts/install-all.sh` 顺序安装全部 Skill。
