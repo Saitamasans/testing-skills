@@ -9,6 +9,7 @@ import ExcelJS from "exceljs";
 
 import type { MappingApproval } from "../src/input/mapping-approval.js";
 import {
+  buildMappingProposal,
   calculateProposalSha256,
   canonicalize,
   inspectNonstandardWorkbook,
@@ -75,8 +76,8 @@ async function newDuplicateExtensionsFixture(): Promise<string> {
   const file = path.join(directory, "duplicate-extensions.xlsx");
   const workbook = new ExcelJS.Workbook();
   const sheet = workbook.addWorksheet("接口用例");
-  sheet.addRow(["编号", "步骤", "预期", "负责人", "负责人"]);
-  sheet.addRow(["API-001", "发送 GET 请求", "返回 200", "Alice", "Bob"]);
+  sheet.addRow(["编号", "步骤", "预期", "负责人", "负责人", "负责人 [列4]"]);
+  sheet.addRow(["API-001", "发送 GET 请求", "返回 200", "Alice", "Bob", "Carol"]);
   await workbook.xlsx.writeFile(file);
   return file;
 }
@@ -96,6 +97,22 @@ function setLabeledSectionRule(proposal: MappingProposal, separator: string): vo
     preview.split_rule.separator = separator;
   }
   proposal.proposal_sha256 = calculateProposalSha256(proposal);
+}
+
+function rebuildWithLabeledSectionRule(
+  inspection: Awaited<ReturnType<typeof inspectNonstandardWorkbook>>,
+  separator: string,
+): MappingProposal {
+  const automatic = proposeMapping(inspection);
+  const rules = automatic.columns.flatMap(({ suggested_rule }) =>
+    suggested_rule === null ? [] : [structuredClone(suggested_rule)],
+  );
+  const firstSplitSheet = rules.find((rule) => rule.kind === "split")?.source_sheet;
+  const split = rules.find((rule) => rule.kind === "split" && rule.source_sheet === firstSplitSheet);
+  assert.ok(split?.kind === "split");
+  split.split_rule.strategy = "labeled-sections";
+  split.split_rule.separator = separator;
+  return buildMappingProposal(inspection, rules);
 }
 
 function approvalFor(proposal: MappingProposal): MappingApproval {
@@ -176,8 +193,8 @@ test("applies only the exact confirmed rules, splits merged fields and preserves
   assert.equal(result.cases.length, 5);
   assert.equal(result.cases[0]?.values["测试步骤"], "输入正确账号密码");
   assert.equal(result.cases[0]?.values["预期结果"], "进入首页");
-  assert.equal(result.cases[0]?.extensions["负责人"], "Alice");
-  assert.equal(result.cases[0]?.extensions["环境"], "测试");
+  assert.equal(result.cases[0]?.extensions["负责人 [列7]"], "Alice");
+  assert.equal(result.cases[0]?.extensions["环境 [列8]"], "测试");
   assert.equal(result.cases[0]?.raw_values[3], "输入正确账号密码\n预期：进入首页");
   assert.equal(result.cases[0]?.source, "登录用例!2");
   assert.equal(result.cases[1]?.id, `EXT-${originalHash.slice(0, 8)}-000003`);
@@ -271,6 +288,44 @@ test("rejects an approval that omits a direct rule represented in the hashed pro
   );
 });
 
+test("rejects a rehashed proposal whose previews were not rederived from its revised rules", async () => {
+  const proposal = proposeMapping(await inspectNonstandardWorkbook(await newFixture([
+    ["LOGIN-001", "认证", "一", "步骤：一预期：一", "P0", "未执行", "A", "测试"],
+    ["LOGIN-002", "认证", "二", "步骤：二预期：二", "P0", "未执行", "B", "测试"],
+    ["LOGIN-003", "认证", "三", "步骤：三预期：三", "P0", "未执行", "C", "测试"],
+  ])));
+  setLabeledSectionRule(proposal, "步骤：||预期：");
+
+  await assert.rejects(
+    () => applyConfirmedMapping(proposal, approvalFor(proposal)),
+    /映射提案派生内容与规则不一致/,
+  );
+});
+
+test("legitimately rebuilds every preview artifact from a manually revised exact rule set", async () => {
+  const inspection = await inspectNonstandardWorkbook(await newFixture([
+    ["LOGIN-001", "认证", "一", "步骤：一预期：一", "P0", "未执行", "A", "测试"],
+    ["LOGIN-002", "认证", "二", "步骤：二预期：二", "P0", "未执行", "B", "测试"],
+    ["LOGIN-003", "认证", "三", "步骤：三预期：三", "P0", "未执行", "C", "测试"],
+  ]));
+  const automatic = proposeMapping(inspection);
+  const rules = automatic.columns.flatMap(({ suggested_rule }) =>
+    suggested_rule === null ? [] : [structuredClone(suggested_rule)],
+  );
+  const loginSplit = rules.find((rule) => rule.kind === "split" && rule.source_sheet === "登录用例");
+  assert.ok(loginSplit?.kind === "split");
+  loginSplit.split_rule.strategy = "labeled-sections";
+  loginSplit.split_rule.separator = "步骤：||预期：";
+
+  const revised = buildMappingProposal(inspection, rules);
+  const result = await applyConfirmedMapping(revised, approvalFor(revised));
+
+  assert.equal(revised.split_previews[0]?.rows[0]?.outputs[0], "一");
+  assert.equal(revised.normalized_sample_rows[0]?.values["测试步骤"], "一");
+  assert.match(revised.human_preview, /测试步骤="一"/);
+  assert.equal(result.cases[0]?.values["测试步骤"], "一");
+});
+
 test("blocks execution when a confirmed split yields a missing step or expected result", async () => {
   const proposal = proposeMapping(await inspectNonstandardWorkbook(await newFixture([
     ["LOGIN-001", "认证", "坏数据", "只有步骤没有分隔符", "P0", "未执行", "Alice", "测试"],
@@ -291,7 +346,7 @@ test("blocks execution when a directly mapped step or expected result is blank",
   );
 });
 
-test("preserves duplicate extension headers with deterministic source-column keys", async () => {
+test("preserves arbitrary extension headers with injective source-column keys", async () => {
   const proposal = proposeMapping(
     await inspectNonstandardWorkbook(await newDuplicateExtensionsFixture()),
   );
@@ -300,22 +355,37 @@ test("preserves duplicate extension headers with deterministic source-column key
   assert.deepEqual(result.cases[0]?.extensions, {
     "负责人 [列4]": "Alice",
     "负责人 [列5]": "Bob",
+    "负责人 [列4] [列6]": "Carol",
   });
   assert.deepEqual(proposal.normalized_sample_rows[0]?.extensions, {
     "负责人 [列4]": "Alice",
     "负责人 [列5]": "Bob",
+    "负责人 [列4] [列6]": "Carol",
   });
+  assert.deepEqual(
+    proposal.extension_columns.map(({ source_column, source_column_index, extension_key }) => ({
+      source_column,
+      source_column_index,
+      extension_key,
+    })),
+    [
+      { source_column: "负责人", source_column_index: 4, extension_key: "负责人 [列4]" },
+      { source_column: "负责人", source_column_index: 5, extension_key: "负责人 [列5]" },
+      { source_column: "负责人 [列4]", source_column_index: 6, extension_key: "负责人 [列4] [列6]" },
+    ],
+  );
+  assert.match(proposal.human_preview, /负责人 \[列4\] \[列6\].*Carol/);
 });
 
 test("parses catastrophic-looking labeled content literally beyond the three-row preview", async () => {
   const marker = "(a+)+$".repeat(1_000);
-  const proposal = proposeMapping(await inspectNonstandardWorkbook(await newFixture([
+  const inspection = await inspectNonstandardWorkbook(await newFixture([
     ["LOGIN-001", "认证", "一", "步骤：(a+)+$一预期：一", "P0", "未执行", "A", "测试"],
     ["LOGIN-002", "认证", "二", "步骤：(a+)+$二预期：二", "P0", "未执行", "B", "测试"],
     ["LOGIN-003", "认证", "三", "步骤：(a+)+$三预期：三", "P0", "未执行", "C", "测试"],
     ["LOGIN-004", "认证", "四", `步骤：(a+)+$${marker}预期：完成`, "P0", "未执行", "D", "测试"],
-  ])));
-  setLabeledSectionRule(proposal, "步骤：(a+)+$||预期：");
+  ]));
+  const proposal = rebuildWithLabeledSectionRule(inspection, "步骤：(a+)+$||预期：");
 
   const result = await applyConfirmedMapping(proposal, approvalFor(proposal));
   assert.equal(result.cases[3]?.values["测试步骤"], marker);
@@ -326,20 +396,22 @@ test("rejects labeled-section rules and row inputs beyond explicit linear-parser
   assert.equal(MAX_SPLIT_SEPARATOR_LENGTH, 256);
   assert.equal(MAX_SPLIT_INPUT_LENGTH, 100_000);
 
-  const longRuleProposal = proposeMapping(await inspectNonstandardWorkbook(await newFixture()));
-  setLabeledSectionRule(longRuleProposal, `${"a".repeat(MAX_SPLIT_SEPARATOR_LENGTH)}||预期：`);
-  await assert.rejects(
-    () => applyConfirmedMapping(longRuleProposal, approvalFor(longRuleProposal)),
+  const longRuleInspection = await inspectNonstandardWorkbook(await newFixture());
+  assert.throws(
+    () => rebuildWithLabeledSectionRule(
+      longRuleInspection,
+      `${"a".repeat(MAX_SPLIT_SEPARATOR_LENGTH)}||预期：`,
+    ),
     /拆分规则长度超过上限/,
   );
 
-  const longInputProposal = proposeMapping(await inspectNonstandardWorkbook(await newFixture([
+  const longInputInspection = await inspectNonstandardWorkbook(await newFixture([
     ["LOGIN-001", "认证", "一", "步骤：一预期：一", "P0", "未执行", "A", "测试"],
     ["LOGIN-002", "认证", "二", "步骤：二预期：二", "P0", "未执行", "B", "测试"],
     ["LOGIN-003", "认证", "三", "步骤：三预期：三", "P0", "未执行", "C", "测试"],
     ["LOGIN-004", "认证", "四", `步骤：${"a".repeat(MAX_SPLIT_INPUT_LENGTH)}预期：完成`, "P0", "未执行", "D", "测试"],
-  ])));
-  setLabeledSectionRule(longInputProposal, "步骤：||预期：");
+  ]));
+  const longInputProposal = rebuildWithLabeledSectionRule(longInputInspection, "步骤：||预期：");
   await assert.rejects(
     () => applyConfirmedMapping(longInputProposal, approvalFor(longInputProposal)),
     /拆分输入长度超过上限.*登录用例!5/,

@@ -1,15 +1,13 @@
-import { createHash } from "node:crypto";
-import { readFile } from "node:fs/promises";
-
 import type { NormalizedCaseSet, OriginalSourceRow, TenColumnName } from "../types.js";
 import { TEN_COLUMNS } from "./detect-input.js";
 import type { MappingApproval, MappingColumnRule } from "./mapping-approval.js";
 import {
   MAX_SPLIT_INPUT_LENGTH,
   MAX_SPLIT_SEPARATOR_LENGTH,
+  buildMappingProposal,
   calculateProposalSha256,
   canonicalize,
-  extensionColumnKey,
+  inspectNonstandardWorkbook,
   splitValue,
   type MappingProposal,
 } from "./mapping-proposal.js";
@@ -158,16 +156,20 @@ function prepareRows(proposal: MappingProposal, approval: MappingApproval): Prep
     rules.push(rule);
     rulesBySheet.set(rule.source_sheet, rules);
   }
+  const extensionsBySheet = new Map<string, MappingProposal["extension_columns"]>();
+  for (const descriptor of proposal.extension_columns) {
+    const descriptors = extensionsBySheet.get(descriptor.source_sheet) ?? [];
+    descriptors.push(descriptor);
+    extensionsBySheet.set(descriptor.source_sheet, descriptors);
+  }
   const prepared: PreparedRow[] = [];
   for (const original of proposal.source_snapshot.rows) {
     const rules = rulesBySheet.get(original.source_sheet);
     if (!rules) continue;
     const values = TEN_COLUMNS.map(() => "");
-    const mappedIndexes = new Set<number>();
     for (const rule of rules) {
       const sourceIndex = rule.source_column_index - 1;
       const value = text(original.raw_values[sourceIndex]);
-      mappedIndexes.add(sourceIndex);
       if (rule.kind === "direct") {
         values[TEN_COLUMNS.indexOf(rule.target_field)] = value;
       } else {
@@ -192,11 +194,11 @@ function prepareRows(proposal: MappingProposal, approval: MappingApproval): Prep
       values[0] = `EXT-${proposal.source_snapshot.sha256.slice(0, 8)}-${String(original.source_row).padStart(6, "0")}`;
     }
     const extensions: Record<string, string> = {};
-    original.columns.forEach((column, index) => {
-      if (!mappedIndexes.has(index)) {
-        extensions[extensionColumnKey(original.columns, index)] = text(original.raw_values[index]);
-      }
-    });
+    for (const descriptor of extensionsBySheet.get(original.source_sheet) ?? []) {
+      extensions[descriptor.extension_key] = text(
+        original.raw_values[descriptor.source_column_index - 1],
+      );
+    }
     prepared.push({
       original,
       normalized: {
@@ -214,12 +216,22 @@ export async function applyConfirmedMapping(
   proposal: MappingProposal,
   unvalidatedApproval?: MappingApproval,
 ): Promise<NormalizedCaseSet> {
-  const approval = validateApproval(proposal, unvalidatedApproval);
-  const currentBytes = await readFile(proposal.source_snapshot.absolute_path);
-  const currentHash = createHash("sha256").update(currentBytes).digest("hex");
-  if (currentHash !== proposal.source_snapshot.sha256) {
+  if (!unvalidatedApproval) throw new Error("非标准 Excel 必须确认字段映射后才能标准化");
+  if (calculateProposalSha256(proposal) !== proposal.proposal_sha256) {
+    throw new Error("映射提案已变更，原审批失效");
+  }
+  const currentInspection = await inspectNonstandardWorkbook(proposal.source_snapshot.absolute_path);
+  if (currentInspection.source_snapshot.sha256 !== proposal.source_snapshot.sha256) {
     throw new Error("源文件已变更，原审批失效");
   }
+  const proposalRules = proposal.columns.flatMap(({ suggested_rule }) =>
+    suggested_rule === null ? [] : [structuredClone(suggested_rule)],
+  );
+  const rebuiltProposal = buildMappingProposal(currentInspection, proposalRules);
+  if (canonicalize(rebuiltProposal) !== canonicalize(proposal)) {
+    throw new Error("映射提案派生内容与规则不一致，必须重新生成预览和提案哈希");
+  }
+  const approval = validateApproval(proposal, unvalidatedApproval);
   const prepared = prepareRows(proposal, approval);
   const cases = normalizeSourceRows(prepared.map(({ normalized }) => normalized));
   cases.forEach((item, index) => {

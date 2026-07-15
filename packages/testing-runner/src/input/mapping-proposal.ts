@@ -39,6 +39,13 @@ export interface SplitPreview {
   rows: Array<{ source: string; input: string; outputs: [string, string] }>;
 }
 
+export interface ExtensionColumnDescriptor {
+  source_sheet: string;
+  source_column: string;
+  source_column_index: number;
+  extension_key: string;
+}
+
 export interface MappingProposal {
   source_snapshot: SourceSnapshot & { rows: OriginalSourceRow[] };
   sheets: Array<{ source_sheet: string; columns: string[]; row_count: number }>;
@@ -46,7 +53,7 @@ export interface MappingProposal {
   missing_fields: Array<{ source_sheet: string; fields: TenColumnName[] }>;
   duplicate_mappings: Array<{ source_sheet: string; target_field: TenColumnName; source_columns: string[] }>;
   conflicting_mappings: Array<{ source_sheet: string; source_column: string; targets: TenColumnName[] }>;
-  extension_columns: Array<{ source_sheet: string; source_column: string; source_column_index: number }>;
+  extension_columns: ExtensionColumnDescriptor[];
   split_previews: SplitPreview[];
   normalized_sample_rows: Array<{
     id: string;
@@ -184,14 +191,16 @@ export function splitValue(
   ];
 }
 
-export function extensionColumnKey(columns: readonly string[], index: number): string {
-  const header = columns[index]!;
-  return columns.filter((column) => column === header).length > 1
-    ? `${header} [列${index + 1}]`
-    : header;
+export function extensionColumnKey(header: string, index: number): string {
+  return `${header} [列${index + 1}]`;
 }
 
-function proposalForColumn(sheet: InspectedSheet, sourceColumn: string, index: number): MappingColumnProposal {
+function proposalForColumn(
+  sheet: InspectedSheet,
+  sourceColumn: string,
+  index: number,
+  exactRule?: MappingColumnRule | null,
+): MappingColumnProposal {
   const key = sourceColumn.replace(/\s+/g, "").toLowerCase();
   const sampleValues = sheet.rows.slice(0, 3).map((row) => text(row.raw_values[index]));
   const source = {
@@ -199,6 +208,35 @@ function proposalForColumn(sheet: InspectedSheet, sourceColumn: string, index: n
     source_column: sourceColumn,
     source_column_index: index + 1,
   };
+  if (exactRule !== undefined) {
+    if (exactRule === null) {
+      return {
+        ...source,
+        sample_values: sampleValues,
+        suggested_standard_field: null,
+        suggested_rule: null,
+        matching_rationale: `规则集未映射列“${sourceColumn}”，作为扩展列保留`,
+        confidence: 1,
+      };
+    }
+    if (exactRule.source_sheet !== source.source_sheet ||
+        exactRule.source_column !== source.source_column ||
+        exactRule.source_column_index !== source.source_column_index) {
+      throw new Error(`显式映射规则源列不匹配：${source.source_sheet}.${source.source_column}`);
+    }
+    return {
+      ...source,
+      sample_values: sampleValues,
+      suggested_standard_field: exactRule.kind === "direct"
+        ? exactRule.target_field
+        : ["测试步骤", "预期结果"],
+      suggested_rule: structuredClone(exactRule),
+      matching_rationale: exactRule.kind === "direct"
+        ? `规则将列“${sourceColumn}”映射到“${exactRule.target_field}”`
+        : `规则按 ${exactRule.split_rule.strategy} 拆分列“${sourceColumn}”`,
+      confidence: 1,
+    };
+  }
   const direct = DIRECT_ALIASES.get(key);
   if (direct) {
     return {
@@ -293,7 +331,13 @@ function buildHumanPreview(proposal: Omit<MappingProposal, "proposal_sha256" | "
   lines.push(proposal.conflicting_mappings.length === 0
     ? "冲突映射: 无"
     : `冲突映射: ${proposal.conflicting_mappings.map((item) => `${item.source_sheet}.${item.source_column} -> ${item.targets.join("、")}`).join("; ")}`);
-  for (const extension of proposal.extension_columns) lines.push(`未识别扩展列: ${extension.source_sheet}.${extension.source_column}`);
+  for (const extension of proposal.extension_columns) {
+    const samples = proposal.columns.find((column) =>
+      column.source_sheet === extension.source_sheet &&
+      column.source_column_index === extension.source_column_index,
+    )?.sample_values ?? [];
+    lines.push(`未识别扩展列: ${extension.source_sheet}.${extension.source_column}; 源列=${extension.source_column_index}; 键=${extension.extension_key}; 样例=${samples.join(" | ")}`);
+  }
   for (const preview of proposal.split_previews) {
     lines.push(`拆分预览: ${preview.source_sheet}.${preview.source_column} / ${preview.split_rule.version} / ${preview.split_rule.strategy} / ${JSON.stringify(preview.split_rule.separator)}`);
     for (const row of preview.rows) lines.push(`${row.source}: ${row.outputs[0]} => ${row.outputs[1]}`);
@@ -309,8 +353,13 @@ function normalizeForPreview(
   inspection: WorkbookInspection,
   columns: readonly MappingColumnProposal[],
   splitPreviews: readonly SplitPreview[],
+  extensionColumns: readonly ExtensionColumnDescriptor[],
 ): MappingProposal["normalized_sample_rows"] {
   const rows: MappingProposal["normalized_sample_rows"] = [];
+  const extensionBySource = new Map(extensionColumns.map((descriptor) => [
+    `${descriptor.source_sheet}\u0000${descriptor.source_column_index}`,
+    descriptor,
+  ]));
   for (const sheet of inspection.sheets) {
     const sheetColumns = columns.filter(({ source_sheet }) => source_sheet === sheet.source_sheet);
     const fields = coveredFields(sheetColumns);
@@ -331,7 +380,10 @@ function normalizeForPreview(
           values["测试步骤"] = outputs[0];
           values["预期结果"] = outputs[1];
         } else {
-          extensions[extensionColumnKey(row.columns, column.source_column_index - 1)] = value;
+          const descriptor = extensionBySource.get(
+            `${column.source_sheet}\u0000${column.source_column_index}`,
+          )!;
+          extensions[descriptor.extension_key] = value;
         }
       }
       const id = values["用例 ID"]?.trim() ||
@@ -376,9 +428,41 @@ export function calculateProposalSha256(proposal: MappingProposal | Omit<Mapping
   return createHash("sha256").update(canonicalize(hashable)).digest("hex");
 }
 
-export function proposeMapping(inspection: WorkbookInspection): MappingProposal {
+export function buildMappingProposal(
+  inspection: WorkbookInspection,
+  exactRules?: readonly MappingColumnRule[],
+): MappingProposal {
+  if (exactRules === undefined) {
+    const automaticRules = inspection.sheets.flatMap((sheet) =>
+      sheet.columns.flatMap((column, index) => {
+        const rule = proposalForColumn(sheet, column, index).suggested_rule;
+        return rule === null ? [] : [rule];
+      }),
+    );
+    return buildMappingProposal(inspection, automaticRules);
+  }
+  const sourceColumns = new Set(inspection.sheets.flatMap((sheet) =>
+    sheet.columns.map((sourceColumn, index) => `${sheet.source_sheet}\u0000${index + 1}\u0000${sourceColumn}`),
+  ));
+  const exactRulesBySource = new Map<string, MappingColumnRule>();
+  for (const rule of exactRules) {
+    const identity = `${rule.source_sheet}\u0000${rule.source_column_index}\u0000${rule.source_column}`;
+    if (!sourceColumns.has(identity)) {
+      throw new Error(`显式映射规则引用了不存在的源列：${rule.source_sheet}.${rule.source_column}`);
+    }
+    const sourceKey = `${rule.source_sheet}\u0000${rule.source_column_index}`;
+    if (exactRulesBySource.has(sourceKey)) {
+      throw new Error(`显式映射规则重复引用源列：${rule.source_sheet}.${rule.source_column}`);
+    }
+    exactRulesBySource.set(sourceKey, rule);
+  }
   const columns = inspection.sheets.flatMap((sheet) =>
-    sheet.columns.map((column, index) => proposalForColumn(sheet, column, index)),
+    sheet.columns.map((column, index) => proposalForColumn(
+      sheet,
+      column,
+      index,
+      exactRulesBySource.get(`${sheet.source_sheet}\u0000${index + 1}`) ?? null,
+    )),
   );
   const splitPreviews = buildSplitPreviews(columns, inspection);
   const missingFields = inspection.sheets.map((sheet) => {
@@ -404,6 +488,14 @@ export function proposeMapping(inspection: WorkbookInspection): MappingProposal 
   const confidence = confidenceColumns.length === 0
     ? 0
     : confidenceColumns.reduce((sum, column) => sum + column.confidence, 0) / confidenceColumns.length;
+  const extensionColumns: ExtensionColumnDescriptor[] = columns
+    .filter(({ suggested_rule }) => suggested_rule === null)
+    .map((column) => ({
+      source_sheet: column.source_sheet,
+      source_column: column.source_column,
+      source_column_index: column.source_column_index,
+      extension_key: extensionColumnKey(column.source_column, column.source_column_index - 1),
+    }));
   const withoutTextAndHash: Omit<MappingProposal, "proposal_sha256" | "human_preview"> = {
     source_snapshot: inspection.source_snapshot,
     sheets: inspection.sheets.map((sheet) => ({
@@ -415,16 +507,21 @@ export function proposeMapping(inspection: WorkbookInspection): MappingProposal 
     missing_fields: missingFields,
     duplicate_mappings: duplicateMappings,
     conflicting_mappings: [],
-    extension_columns: columns.filter(({ suggested_rule }) => suggested_rule === null).map((column) => ({
-      source_sheet: column.source_sheet,
-      source_column: column.source_column,
-      source_column_index: column.source_column_index,
-    })),
+    extension_columns: extensionColumns,
     split_previews: splitPreviews,
-    normalized_sample_rows: normalizeForPreview(inspection, columns, splitPreviews),
+    normalized_sample_rows: normalizeForPreview(
+      inspection,
+      columns,
+      splitPreviews,
+      extensionColumns,
+    ),
     confidence,
   };
   const human_preview = buildHumanPreview(withoutTextAndHash);
   const proposalWithoutHash = { ...withoutTextAndHash, human_preview };
   return { ...proposalWithoutHash, proposal_sha256: calculateProposalSha256(proposalWithoutHash) };
+}
+
+export function proposeMapping(inspection: WorkbookInspection): MappingProposal {
+  return buildMappingProposal(inspection);
 }
