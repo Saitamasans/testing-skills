@@ -17,6 +17,13 @@ import { gunzipSync } from "node:zlib";
 const PACKAGE_NAME = "@saitamasans/testing-runner";
 const VERSION = "1.0.0";
 const FILE_NAME = "saitamasans-testing-runner-1.0.0.tgz";
+const BUNDLED_DEPENDENCIES = [
+  "ajv",
+  "commander",
+  "exceljs",
+  "node-sql-parser",
+  "playwright",
+];
 const REPO_ROOT = fileURLToPath(new URL("../../..", import.meta.url));
 const PACKAGE_ROOT = fileURLToPath(new URL("..", import.meta.url));
 
@@ -115,6 +122,7 @@ export async function buildReleaseTarball(outputDir = path.join(REPO_ROOT, "buil
     }
     const packageJson = JSON.parse(await readFile(path.join(PACKAGE_ROOT, "package.json"), "utf8"));
     packageJson.scripts = {};
+    packageJson.bundledDependencies = BUNDLED_DEPENDENCIES;
     delete packageJson.devDependencies;
     await writeFile(
       path.join(stageDir, "package.json"),

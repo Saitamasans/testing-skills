@@ -21,13 +21,6 @@
     "node-sql-parser": "^5.4.0",
     "playwright": "^1.52.0"
   },
-  "bundledDependencies": [
-    "ajv",
-    "commander",
-    "exceljs",
-    "node-sql-parser",
-    "playwright"
-  ],
   "devDependencies": {
     "@types/node": "^22.15.3",
     "tsx": "^4.19.4",
