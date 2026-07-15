@@ -10,6 +10,7 @@
     "test": "node --test tests/*.test.mjs",
     "test:runner": "npm test --workspace @saitamasans/testing-runner",
     "build:runner": "npm run build --workspace @saitamasans/testing-runner",
+    "pack:runner-release": "node packages/testing-runner/scripts/package-release.mjs",
     "render:sample": "node tooling/test-case-renderer.mjs --input tests/fixtures/sample-report.json --output-dir build/test-output --basename sample"
   },
   "devDependencies": {
