@@ -1,0 +1,78 @@
+name: Validate testing skills and runner
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install Node dependencies
+        run: npm ci
+
+      - name: Install Chromium
+        run: npx playwright install chromium
+
+      - name: Build generated Skill packages
+        run: |
+          python tooling/build_skills.py
+          python tooling/build_skills.py --check
+          python tooling/validate_skills.py
+
+      - name: Run Python tests
+        run: python -m unittest discover -s tests -v
+
+      - name: Build and test Runner
+        run: |
+          npm run build --workspace @saitamasans/testing-runner
+          npm test --workspace @saitamasans/testing-runner
+
+      - name: Test report renderer
+        run: node --test tests/test-case-renderer.test.mjs tests/html_behavior.test.mjs
+
+      - name: Package dry run
+        run: npm pack --workspace @saitamasans/testing-runner --dry-run
+
+      - name: Placeholder scan
+        shell: pwsh
+        run: |
+          $patterns = @(("TO" + "DO"), ("T" + "BD"), ("FIX" + "ME"), ("implement " + "later"), ("fill in " + "details"))
+          $roots = @(
+            "README.md",
+            "docs/release",
+            "skills",
+            "tooling",
+            "scripts",
+            "packages/testing-runner/src",
+            "packages/testing-runner/scripts",
+            "packages/testing-runner/tests",
+            "packages/testing-runner/examples",
+            "packages/testing-runner/package.json",
+            "schemas",
+            "knowledge"
+          )
+          $files = foreach ($root in $roots) {
+            if (Test-Path -LiteralPath $root -PathType Leaf) {
+              Get-Item -LiteralPath $root
+            } elseif (Test-Path -LiteralPath $root -PathType Container) {
+              Get-ChildItem -LiteralPath $root -Recurse -File
+            }
+          }
+          $files += Get-ChildItem -LiteralPath . -Filter "*_Skill.md" -File
+          $hits = $files | Select-String -SimpleMatch -Pattern $patterns
+          if ($hits) { $hits; exit 1 }
+
+      - name: Diff check
+        run: git diff --check

@@ -7,6 +7,16 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tooling"))
 from build_skills import load_manifest, parse_frontmatter
 
+ORIGINAL_SEVEN = {
+    "single-api-test-full",
+    "single-api-test-concise",
+    "multi-api-flow-test",
+    "requirement-test-workbench",
+    "production-verification-test",
+    "test-case-quality-audit",
+    "requirement-clarification-test",
+}
+
 
 class SourceContractsTest(unittest.TestCase):
     @classmethod
@@ -15,11 +25,12 @@ class SourceContractsTest(unittest.TestCase):
         cls.texts = {item["slug"]: (ROOT / item["source"]).read_text(encoding="utf-8") for item in cls.manifest}
 
     def test_exact_filenames_and_frontmatter(self):
-        self.assertEqual(7, len(self.manifest))
+        self.assertEqual(8, len(self.manifest))
         for item in self.manifest:
             meta, _ = parse_frontmatter(self.texts[item["slug"]])
             self.assertEqual({"name", "description"}, set(meta))
             self.assertEqual(item["slug"], meta["name"])
+        self.assertEqual(ORIGINAL_SEVEN, {item["slug"] for item in self.manifest if not item.get("execution_skill") and item["slug"] != "web-api-test-execution-evidence"})
 
     def test_mutually_exclusive_route_and_confirmation_language(self):
         for slug, text in self.texts.items():

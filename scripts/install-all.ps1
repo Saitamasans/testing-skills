@@ -6,7 +6,8 @@ $skills = @(
   "requirement-test-workbench",
   "production-verification-test",
   "test-case-quality-audit",
-  "requirement-clarification-test"
+  "requirement-clarification-test",
+  "web-api-test-execution-evidence"
 )
 foreach ($skill in $skills) {
   & npx skills add Saitamasans/testing-skills --path "skills/$skill"

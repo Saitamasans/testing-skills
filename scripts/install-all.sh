@@ -7,7 +7,8 @@ for skill in \
   requirement-test-workbench \
   production-verification-test \
   test-case-quality-audit \
-  requirement-clarification-test
+  requirement-clarification-test \
+  web-api-test-execution-evidence
 do
   npx skills add Saitamasans/testing-skills --path "skills/$skill"
 done

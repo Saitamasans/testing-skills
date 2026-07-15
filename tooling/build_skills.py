@@ -64,6 +64,25 @@ def _split_full_skill(source_text: str) -> tuple[str, dict[str, str]]:
     }
 
 
+def _split_execution_skill(source_text: str) -> tuple[str, dict[str, str]]:
+    references: dict[str, str] = {}
+    open_marker = "<!-- reference:"
+    close_marker = "<!-- /reference -->"
+    while open_marker in source_text:
+        start = source_text.index(open_marker)
+        marker_end = source_text.index("-->", start) + len("-->")
+        relative = source_text[start + len(open_marker): marker_end - len("-->")].strip()
+        end = source_text.index(close_marker, marker_end)
+        reference = source_text[marker_end:end].strip() + "\n"
+        references[relative] = reference
+        replacement = "\n"
+        source_text = source_text[:start] + replacement + source_text[end + len(close_marker):]
+    for relative in references:
+        if relative not in source_text:
+            raise ValueError(f"执行 Skill 正文缺少引用读取条件: {relative}")
+    return source_text.strip() + "\n", references
+
+
 def _openai_yaml(item: dict) -> str:
     return (
         "interface:\n"
@@ -76,8 +95,8 @@ def _openai_yaml(item: dict) -> str:
 def build_all(root: Path = ROOT, check: bool = False) -> list[Path]:
     manifest = load_manifest(root)
     entries = manifest.get("skills", [])
-    if len(entries) != 7 or len({i["slug"] for i in entries}) != 7:
-        raise ValueError("manifest 必须包含七个唯一 Skill")
+    if len(entries) != 8 or len({i["slug"] for i in entries}) != 8:
+        raise ValueError("manifest 必须包含八个唯一 Skill")
     desired: dict[Path, str | bytes] = {}
     for item in entries:
         source = root / item["source"]
@@ -88,6 +107,11 @@ def build_all(root: Path = ROOT, check: bool = False) -> list[Path]:
         package = root / "skills" / item["slug"]
         if item["slug"] == "single-api-test-full":
             compact, references = _split_full_skill(text)
+            desired[package / "SKILL.md"] = _render_skill(compact)
+            for relative, reference in references.items():
+                desired[package / relative] = reference
+        elif item["slug"] == "web-api-test-execution-evidence":
+            compact, references = _split_execution_skill(text)
             desired[package / "SKILL.md"] = _render_skill(compact)
             for relative, reference in references.items():
                 desired[package / relative] = reference
@@ -131,7 +155,7 @@ def build_all(root: Path = ROOT, check: bool = False) -> list[Path]:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="生成七个标准 Skill 安装包")
+    parser = argparse.ArgumentParser(description="生成八个标准 Skill 安装包")
     parser.add_argument("--check", action="store_true", help="只检查生成内容是否漂移")
     args = parser.parse_args()
     try:
