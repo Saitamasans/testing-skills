@@ -36,18 +36,24 @@ function manifest(overrides = {}) {
 
 async function fixture(overrides = {}) {
   const home = await mkdtemp(path.join(os.tmpdir(), "runner-bootstrap-"));
+  const npmCli = path.join(home, "npm-cli.js");
+  await writeFile(npmCli, "", "utf8");
   const logs = [];
   let downloads = 0;
   let installs = 0;
   let installEnv = {};
+  let installCommand;
+  let installArgs = [];
   let fetchSignal;
   const fetchImpl = async (_url, init) => {
     downloads += 1;
     fetchSignal = init?.signal;
     return new Response(ASSET, { status: 200 });
   };
-  const runProcess = async (_command, args, options) => {
+  const runProcess = async (command, args, options) => {
     installs += 1;
+    installCommand = command;
+    installArgs = args;
     installEnv = options.env;
     const prefix = args[args.indexOf("--prefix") + 1];
     const cli = path.join(
@@ -67,6 +73,7 @@ async function fixture(overrides = {}) {
       manifest: manifest(),
       env: {
         TESTING_SKILLS_HOME: home,
+        TESTING_SKILLS_NPM_CLI: npmCli,
         NPM_TOKEN: "must-not-propagate",
         NODE_AUTH_TOKEN: "must-not-propagate",
       },
@@ -83,6 +90,9 @@ async function fixture(overrides = {}) {
       installs: () => installs,
       installEnv: () => installEnv,
       fetchSignal: () => fetchSignal,
+      installCommand: () => installCommand,
+      installArgs: () => installArgs,
+      npmCli: () => npmCli,
     },
   };
 }
@@ -125,6 +135,8 @@ test("first bootstrap announces, downloads, verifies, and installs once", async 
   assert.match(state.logs.join("\n"), /Runner 下载进度：0%/);
   assert.match(state.logs.join("\n"), /Runner 下载进度：100%/);
   assert.ok(state.counters.fetchSignal());
+  assert.equal(state.counters.installCommand(), process.execPath);
+  assert.equal(state.counters.installArgs()[0], state.counters.npmCli());
   assert.ok(await readFile(result.cliPath));
   assert.equal(state.counters.installEnv().NPM_TOKEN, undefined);
   assert.equal(state.counters.installEnv().NODE_AUTH_TOKEN, undefined);

@@ -233,7 +233,6 @@ export async function defaultRunProcess(command, args, options = {}) {
       cwd: options.cwd,
       env: options.env,
       stdio: options.stdio ?? "inherit",
-      shell: process.platform === "win32" && command.toLowerCase().endsWith(".cmd"),
     });
     child.once("error", reject);
     child.once("exit", (code, signal) => {
@@ -318,9 +317,29 @@ async function acquireRuntimeLock(paths, isReady, retryMs) {
   }
 }
 
-function npmCommand(env) {
-  if (env.TESTING_SKILLS_NPM_COMMAND) return env.TESTING_SKILLS_NPM_COMMAND;
-  return process.platform === "win32" ? "npm.cmd" : "npm";
+async function resolveNpmInvocation(env) {
+  const explicit = env.TESTING_SKILLS_NPM_CLI;
+  const npmExecPath = env.npm_execpath || env.NPM_EXECPATH;
+  const candidates = [
+    explicit,
+    typeof npmExecPath === "string" && npmExecPath.endsWith(".js") ? npmExecPath : undefined,
+    path.join(path.dirname(process.execPath), "node_modules", "npm", "bin", "npm-cli.js"),
+    path.resolve(path.dirname(process.execPath), "..", "lib", "node_modules", "npm", "bin", "npm-cli.js"),
+    path.resolve(path.dirname(process.execPath), "..", "node_modules", "npm", "bin", "npm-cli.js"),
+  ].filter(Boolean);
+  for (const candidate of candidates) {
+    const npmCli = path.resolve(candidate);
+    if (await fileExists(npmCli)) {
+      return { command: process.execPath, argsPrefix: [npmCli] };
+    }
+  }
+  if (process.platform !== "win32") {
+    return { command: "npm", argsPrefix: [] };
+  }
+  fail(
+    "bootstrap_runtime_missing",
+    "npm CLI was not found beside Node.js; reinstall Node.js with npm included",
+  );
 }
 
 export async function ensureRunnerRuntime(options) {
@@ -399,9 +418,11 @@ export async function ensureRunnerRuntime(options) {
     await mkdir(installDir, { recursive: true });
     const npmrcPath = path.join(installDir, ".npmrc");
     await writeFile(npmrcPath, "", "utf8");
+    const npm = await resolveNpmInvocation(env);
     const code = await runProcess(
-      npmCommand(env),
+      npm.command,
       [
+        ...npm.argsPrefix,
         "install",
         "--prefix",
         installDir,
