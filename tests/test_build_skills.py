@@ -4,7 +4,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tooling"))
-from build_skills import BANNER, build_all, load_manifest, parse_frontmatter
+from build_skills import BANNER, EXECUTION_BANNER, build_all, load_manifest, parse_frontmatter
 
 ORIGINAL_SEVEN = {
     "single-api-test-full": "\u5355\u63a5\u53e3\u7528\u4f8b\u751f\u6210\u4e0e\u5bf9\u9f50_\u5b8c\u6574\u7248Skill_v0.3.md",
@@ -39,7 +39,8 @@ class BuildSkillsTest(unittest.TestCase):
             source_meta, source_body = parse_frontmatter((ROOT / item["source"]).read_text(encoding="utf-8"))
             generated_meta, generated_body = parse_frontmatter(generated.read_text(encoding="utf-8"))
             self.assertEqual(source_meta, generated_meta)
-            self.assertIn(BANNER, generated_body)
+            expected_banner = EXECUTION_BANNER if item["slug"] == "web-api-test-execution-evidence" else BANNER
+            self.assertIn(expected_banner, generated_body)
             if item["slug"] == "single-api-test-full":
                 references = [
                     generated.parent / "references/file-output-and-case-writing.md",

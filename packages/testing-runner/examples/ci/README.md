@@ -6,8 +6,9 @@ This example shows the intended CI shape without real domains or credentials.
 
    ```powershell
    npx @saitamasans/testing-runner@1.0.0 plan --input report.json --profile execution-profile.json --output-dir .testing-run
-   npx @saitamasans/testing-runner@1.0.0 approve --manifest .testing-run/run-manifest.json --out .testing-run/approval.json --expires-at 2999-01-01T00:00:00.000Z --confirmed-by reviewer-name
+   npx @saitamasans/testing-runner@1.0.0 approve --manifest .testing-run/run-manifest.json --out .testing-run/approval.json --expires-at <ISO_EXPIRES_AT> --confirmed-by reviewer-name
    ```
+   Use a short-lived `<ISO_EXPIRES_AT>` inside the current execution window; do not create long-lived approvals.
 
 2. Commit or upload the reviewed `run-manifest.json` and `approval.json` through your normal protected workflow.
 

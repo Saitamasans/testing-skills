@@ -1,6 +1,6 @@
 # testing-skills
 
-面向测试工程师的 8 个标准 Agent Skill：5 个用于生成正式测试用例，2 个用于需求澄清和用例质量审计，1 个用于自动执行已有 Web/API 用例并回填证据报告。根目录中文源文件是唯一正文真源，`skills/` 是自动生成的 Codex / Claude Code 标准安装包。
+面向测试工程师的 8 个标准 Agent Skill：5 个用于生成正式测试用例，2 个用于需求澄清和用例质量审计，1 个用于自动执行已有 Web/API 用例并回填证据报告。原 7 个中文源文件保留在根目录，第 8 个执行类 Skill 的源文件独立放在 `skill-sources/web-api-test-execution-evidence/`，`skills/` 是自动生成的 Codex / Claude Code 标准安装包。
 
 > Production-ready testing skills for Codex and Claude Code, with deterministic Excel, offline HTML, and Web/API execution evidence support.
 
@@ -114,7 +114,7 @@ npm test --workspace @saitamasans/testing-runner
 node --test tests/test-case-renderer.test.mjs tests/html_behavior.test.mjs
 ```
 
-请不要直接编辑自动生成的 `skills/*/SKILL.md`；应修改根目录中文源文件后运行 builder。
+请不要直接编辑自动生成的 `skills/*/SKILL.md`；应修改对应源文件后运行 builder。原 7 个源文件在根目录，第 8 个源文件在 `skill-sources/web-api-test-execution-evidence/`。
 
 ## License
 

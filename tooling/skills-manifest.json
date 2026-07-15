@@ -57,7 +57,7 @@
       "case_output": false
     },
     {
-      "source": "Web-API测试用例自动执行与证据回填_Skill.md",
+      "source": "skill-sources/web-api-test-execution-evidence/Web-API测试用例自动执行与证据回填_Skill.md",
       "slug": "web-api-test-execution-evidence",
       "display_name": "Web/API 测试用例自动执行与证据回填",
       "short_description": "安全执行 Web/API 用例并回填证据与双格式报告",

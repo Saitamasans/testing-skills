@@ -33,6 +33,12 @@ class ExecutionSkillContractsTest(unittest.TestCase):
         self.assertIn("独立第 8 个 Skill", self.body)
         self.assertIn("不生成测试用例", self.body)
 
+    def test_execution_source_is_isolated_under_skill_sources(self):
+        expected = Path("skill-sources/web-api-test-execution-evidence/Web-API测试用例自动执行与证据回填_Skill.md")
+        self.assertEqual(expected.as_posix(), self.item["source"])
+        self.assertTrue((ROOT / expected).exists())
+        self.assertFalse((ROOT / "Web-API测试用例自动执行与证据回填_Skill.md").exists())
+
     def test_preparation_safety_and_optional_seven_skill_recommendation(self):
         for phrase in [
             "准备材料清点",
@@ -77,6 +83,18 @@ class ExecutionSkillContractsTest(unittest.TestCase):
 
     def test_generated_skill_does_not_append_generic_reference_footer(self):
         self.assertNotIn("\n按需读取 `references/", self.generated_text)
+
+    def test_approval_examples_use_short_lived_placeholder(self):
+        docs = [
+            self.text,
+            self.generated_text,
+            (ROOT / "skills" / self.item["slug"] / "references/runner-commands.md").read_text(encoding="utf-8"),
+            (ROOT / "packages/testing-runner/examples/ci/README.md").read_text(encoding="utf-8"),
+        ]
+        combined = "\n".join(docs)
+        self.assertIn("--expires-at <ISO_EXPIRES_AT>", combined)
+        self.assertIn("短期", combined)
+        self.assertNotIn("2999-01-01T00:00:00.000Z", combined)
 
 
 if __name__ == "__main__":

@@ -5,9 +5,11 @@
 ```bash
 npm install --save-dev @saitamasans/testing-runner@1.0.0
 npx @saitamasans/testing-runner@1.0.0 plan --input report.json --profile execution-profile.json --output-dir .testing-run
-npx @saitamasans/testing-runner@1.0.0 approve --manifest .testing-run/run-manifest.json --out .testing-run/approval.json --expires-at 2999-01-01T00:00:00.000Z --confirmed-by reviewer-name
+npx @saitamasans/testing-runner@1.0.0 approve --manifest .testing-run/run-manifest.json --out .testing-run/approval.json --expires-at <ISO_EXPIRES_AT> --confirmed-by reviewer-name
 npx @saitamasans/testing-runner@1.0.0 run --manifest .testing-run/run-manifest.json --approval .testing-run/approval.json --output-dir .testing-run/result --mode interactive
 ```
+
+`<ISO_EXPIRES_AT>` 使用本次执行窗口内的短期过期时间，不使用长期或永久审批。
 
 ## CI
 

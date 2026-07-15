@@ -52,6 +52,7 @@ jobs:
           $roots = @(
             "README.md",
             "docs/release",
+            "skill-sources",
             "skills",
             "tooling",
             "scripts",

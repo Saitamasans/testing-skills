@@ -9,6 +9,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 BANNER = "<!-- 此文件由根目录中文源文件自动生成，请勿直接编辑。 -->"
+EXECUTION_BANNER = "<!-- 此文件由源文件自动生成，请勿直接编辑。 -->"
 
 
 def load_manifest(root: Path = ROOT) -> dict:
@@ -26,10 +27,10 @@ def parse_frontmatter(text: str) -> tuple[dict[str, str], str]:
     return meta, body
 
 
-def _render_skill(source_text: str) -> str:
+def _render_skill(source_text: str, banner: str = BANNER) -> str:
     marker = "\n---\n"
     split_at = source_text.index(marker, 4) + len(marker)
-    return source_text[:split_at] + "\n" + BANNER + "\n" + source_text[split_at:].lstrip("\n")
+    return source_text[:split_at] + "\n" + banner + "\n" + source_text[split_at:].lstrip("\n")
 
 
 def _split_block(source_text: str, start_marker: str, end_marker: str, replacement: str) -> tuple[str, str]:
@@ -112,7 +113,7 @@ def build_all(root: Path = ROOT, check: bool = False) -> list[Path]:
                 desired[package / relative] = reference
         elif item["slug"] == "web-api-test-execution-evidence":
             compact, references = _split_execution_skill(text)
-            desired[package / "SKILL.md"] = _render_skill(compact)
+            desired[package / "SKILL.md"] = _render_skill(compact, EXECUTION_BANNER)
             for relative, reference in references.items():
                 desired[package / relative] = reference
         else:

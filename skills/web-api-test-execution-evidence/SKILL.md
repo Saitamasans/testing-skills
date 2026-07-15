@@ -3,7 +3,7 @@ name: web-api-test-execution-evidence
 description: Use when users want to automatically execute existing Web/API test cases, run locked local or CI test manifests, generate execution evidence, backfill results into Excel/HTML reports, or verify Web/API execution artifacts; do not use merely to generate test cases, clarify requirements, or audit case quality.
 ---
 
-<!-- 此文件由根目录中文源文件自动生成，请勿直接编辑。 -->
+<!-- 此文件由源文件自动生成，请勿直接编辑。 -->
 # Web/API 测试用例自动执行与证据回填
 
 硬规则：本 Skill 只执行和回填已有 Web/API 测试用例，不生成测试用例，不替用户猜测环境，不静默转换非标准输入，不把密钥写入任何产物。
@@ -75,11 +75,11 @@ Do not trigger this Skill merely to generate test cases, clarify requirements, o
 
 ```bash
 npx @saitamasans/testing-runner@1.0.0 plan --input report.json --profile execution-profile.json --output-dir .testing-run
-npx @saitamasans/testing-runner@1.0.0 approve --manifest .testing-run/run-manifest.json --out .testing-run/approval.json --expires-at 2999-01-01T00:00:00.000Z --confirmed-by reviewer-name
+npx @saitamasans/testing-runner@1.0.0 approve --manifest .testing-run/run-manifest.json --out .testing-run/approval.json --expires-at <ISO_EXPIRES_AT> --confirmed-by reviewer-name
 npx @saitamasans/testing-runner@1.0.0 run --manifest .testing-run/run-manifest.json --approval .testing-run/approval.json --output-dir .testing-run/result --mode interactive
 ```
 
-CI、退出码和完整参数读取 `references/runner-commands.md`。
+`<ISO_EXPIRES_AT>` 使用本次执行窗口内的短期过期时间，不使用长期或永久审批。CI、退出码和完整参数读取 `references/runner-commands.md`。
 
 ## 九、状态和报告门禁
 
