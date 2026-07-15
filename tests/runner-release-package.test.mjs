@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, readFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -7,8 +7,24 @@ import test from "node:test";
 import {
   buildReleaseTarball,
   listTarEntries,
+  normalizeReleaseTextTree,
   sha256File,
 } from "../packages/testing-runner/scripts/package-release.mjs";
+
+test("release staging normalizes owned text resources to LF", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "runner-release-text-"));
+  const nested = path.join(root, "dist", "schemas");
+  await mkdir(nested, { recursive: true });
+  const textFile = path.join(nested, "fixture.json");
+  const binaryFile = path.join(nested, "fixture.bin");
+  await writeFile(textFile, "{\r\n  \"ok\": true\r\n}\r\n", "utf8");
+  await writeFile(binaryFile, Buffer.from([0, 13, 10, 255]));
+
+  await normalizeReleaseTextTree(root);
+
+  assert.equal(await readFile(textFile, "utf8"), "{\n  \"ok\": true\n}\n");
+  assert.deepEqual(await readFile(binaryFile), Buffer.from([0, 13, 10, 255]));
+});
 
 test("release tarball contains runner and bundled production dependencies", async () => {
   const outputDir = await mkdtemp(path.join(os.tmpdir(), "runner-release-"));

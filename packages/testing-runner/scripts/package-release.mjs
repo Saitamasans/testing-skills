@@ -5,6 +5,7 @@ import {
   cp,
   mkdir,
   readFile,
+  readdir,
   rename,
   rm,
   stat,
@@ -28,6 +29,17 @@ const BUNDLED_DEPENDENCIES = [
   "node-sql-parser",
   "playwright",
 ];
+const OWNED_TEXT_EXTENSIONS = new Set([
+  ".css",
+  ".html",
+  ".js",
+  ".json",
+  ".md",
+  ".mjs",
+  ".txt",
+  ".yaml",
+  ".yml",
+]);
 const REPO_ROOT = fileURLToPath(new URL("../../..", import.meta.url));
 const PACKAGE_ROOT = fileURLToPath(new URL("..", import.meta.url));
 const DEFAULT_MANIFEST_PATH = path.join(
@@ -86,6 +98,21 @@ export async function sha256File(file) {
   return createHash("sha256").update(bytes).digest("hex");
 }
 
+export async function normalizeReleaseTextTree(root) {
+  for (const entry of await readdir(root, { withFileTypes: true })) {
+    const absolute = path.join(root, entry.name);
+    if (entry.isDirectory()) {
+      await normalizeReleaseTextTree(absolute);
+    } else if (entry.isFile() && OWNED_TEXT_EXTENSIONS.has(path.extname(entry.name))) {
+      const text = await readFile(absolute, "utf8");
+      const normalized = text.replace(/\r\n?/g, "\n");
+      if (normalized !== text) {
+        await writeFile(absolute, normalized, "utf8");
+      }
+    }
+  }
+}
+
 function readTarString(buffer, start, length) {
   return buffer
     .subarray(start, start + length)
@@ -134,6 +161,7 @@ export async function buildReleaseTarball(
         recursive: true,
       });
     }
+    await normalizeReleaseTextTree(stageDir);
     const packageJson = JSON.parse(await readFile(path.join(PACKAGE_ROOT, "package.json"), "utf8"));
     packageJson.scripts = {};
     packageJson.bundledDependencies = BUNDLED_DEPENDENCIES;
