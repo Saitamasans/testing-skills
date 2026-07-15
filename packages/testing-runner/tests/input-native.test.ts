@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { mkdtemp, readFile, stat, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import test, { before } from "node:test";
+import test, { after, before } from "node:test";
 
 import ExcelJS from "exceljs";
 
@@ -30,7 +30,10 @@ const TEN_COLUMNS = [
 
 const FIXTURES = path.resolve(import.meta.dirname, "fixtures");
 const REPORT_FIXTURE = path.join(FIXTURES, "standard-report.json");
-const EXCEL_FIXTURE = path.join(FIXTURES, "standard-ten-column.xlsx");
+const TRACKED_EXCEL_FIXTURE = path.join(FIXTURES, "standard-ten-column.xlsx");
+let excelFixture = "";
+let generatedFixtureDir = "";
+let trackedExcelHashBeforeSetup = "";
 
 const CASE_ROWS = [
   ["【模块分割行】", "第 1 模块：支付", "支付主流程", "-", "-", "-", "-", "-", "-", "模块起始分割"],
@@ -54,16 +57,35 @@ async function writeWorkbook(
 }
 
 before(async () => {
-  await writeWorkbook(EXCEL_FIXTURE, [
+  trackedExcelHashBeforeSetup = createHash("sha256")
+    .update(await readFile(TRACKED_EXCEL_FIXTURE))
+    .digest("hex");
+  generatedFixtureDir = await mkdtemp(path.join(os.tmpdir(), "runner-native-suite-"));
+  excelFixture = path.join(generatedFixtureDir, "standard-ten-column.xlsx");
+  await writeWorkbook(excelFixture, [
     ` \t\uFEFF${TEN_COLUMNS[0]} `,
     ` ${TEN_COLUMNS[1]}\t`,
     ...TEN_COLUMNS.slice(2),
   ]);
 });
 
+after(async () => {
+  if (generatedFixtureDir !== "") {
+    await rm(generatedFixtureDir, { recursive: true, force: true });
+  }
+});
+
+test("reads the tracked standard Excel fixture without mutating it", async () => {
+  assert.equal(await detectInputKind(TRACKED_EXCEL_FIXTURE), "standard-excel");
+  const currentHash = createHash("sha256")
+    .update(await readFile(TRACKED_EXCEL_FIXTURE))
+    .digest("hex");
+  assert.equal(currentHash, trackedExcelHashBeforeSetup);
+});
+
 test("detects native report JSON and standard Excel by validated content", async () => {
   assert.equal(await detectInputKind(REPORT_FIXTURE), "native-report");
-  assert.equal(await detectInputKind(EXCEL_FIXTURE), "standard-excel");
+  assert.equal(await detectInputKind(excelFixture), "standard-excel");
 });
 
 test("normalizes native report with exact columns, invocation and row provenance", async () => {
@@ -87,7 +109,7 @@ test("normalizes native report with exact columns, invocation and row provenance
 
 test("standard Excel normalizes to the same ordered cases and defaults missing remarks", async () => {
   const native = await readNativeReport(REPORT_FIXTURE);
-  const excel = await readStandardExcel(EXCEL_FIXTURE);
+  const excel = await readStandardExcel(excelFixture);
 
   assert.deepEqual(excel.columns, TEN_COLUMNS);
   assert.deepEqual(excel.cases, native.cases);
@@ -196,20 +218,20 @@ test("rejects invalid, unsupported, encrypted and macro-enabled content explicit
   await assert.rejects(() => detectInputKind(encrypted), /加密.*不支持/);
 
   const macroExtension = path.join(dir, "macro.xlsm");
-  await writeFile(macroExtension, await readFile(EXCEL_FIXTURE));
+  await writeFile(macroExtension, await readFile(excelFixture));
   await assert.rejects(() => detectInputKind(macroExtension), /宏.*不支持/);
 
   const macroContent = path.join(dir, "macro.xlsx");
-  await writeFile(macroContent, Buffer.concat([await readFile(EXCEL_FIXTURE), Buffer.from("xl/vbaProject.bin")]));
+  await writeFile(macroContent, Buffer.concat([await readFile(excelFixture), Buffer.from("xl/vbaProject.bin")]));
   await assert.rejects(() => detectInputKind(macroContent), /宏.*不支持/);
 });
 
 test("snapshots original bytes deterministically without source content", async () => {
-  const bytes = await readFile(EXCEL_FIXTURE);
-  const fileStat = await stat(EXCEL_FIXTURE);
-  const snapshot = await snapshotSource(EXCEL_FIXTURE);
+  const bytes = await readFile(excelFixture);
+  const fileStat = await stat(excelFixture);
+  const snapshot = await snapshotSource(excelFixture);
 
-  assert.equal(snapshot.absolute_path, path.resolve(EXCEL_FIXTURE));
+  assert.equal(snapshot.absolute_path, path.resolve(excelFixture));
   assert.equal(snapshot.sha256, createHash("sha256").update(bytes).digest("hex"));
   assert.equal(snapshot.size, bytes.byteLength);
   assert.equal(snapshot.modified_at, fileStat.mtime.toISOString());
