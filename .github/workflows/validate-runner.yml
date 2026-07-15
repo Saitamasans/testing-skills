@@ -39,11 +39,8 @@ jobs:
           npm run build --workspace @saitamasans/testing-runner
           npm test --workspace @saitamasans/testing-runner
 
-      - name: Test report renderer
-        run: node --test tests/test-case-renderer.test.mjs tests/html_behavior.test.mjs
-
-      - name: Package dry run
-        run: npm pack --workspace @saitamasans/testing-runner --dry-run
+      - name: Test bootstrap, reports, and release package
+        run: npm test
 
       - name: Placeholder scan
         shell: pwsh

@@ -42,13 +42,7 @@ npx skills add Saitamasans/testing-skills@web-api-test-execution-evidence -g -y
 
 ## 自动执行 Runner
 
-第 8 个 Skill 依赖固定版本 Runner，不使用 latest：
-
-```bash
-npm install --save-dev @saitamasans/testing-runner@1.0.0
-npx @saitamasans/testing-runner@1.0.0 plan --input report.json --profile execution-profile.json --output-dir .testing-run
-npx @saitamasans/testing-runner@1.0.0 run --manifest .testing-run/run-manifest.json --approval .testing-run/approval.json --output-dir .testing-run/result
-```
+第 8 个 Skill 已内置一键启动器。用户只需要安装 Skill；首次执行时会先显示来源、固定版本、体积和缓存位置，再从项目 GitHub Release 自动下载并校验 Runner。无需 npm 账号，也无需手工输入 Runner 安装命令。包含 Web 动作时才按需自动准备 Playwright Chromium，API-only 不下载浏览器；交互执行默认打开可见浏览器，CI 固定无界面。
 
 Runner 产物包括 `run-result.json`、`.xlsx`、`.html`、证据目录和事件日志。`run-result.json` 是唯一判定来源，Excel/HTML 只从同一份结果投影生成。
 

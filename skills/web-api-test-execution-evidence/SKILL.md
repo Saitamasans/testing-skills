@@ -69,17 +69,19 @@ Do not trigger this Skill merely to generate test cases, clarify requirements, o
 
 用户确认前不执行 Web/API/数据库动作。
 
-## 八、Runner 固定命令
+## 八、Runner 固定入口
 
-使用固定版本命令，不使用 latest：
+只使用本 Skill 安装目录内的 `scripts/testing-runner.mjs`，先解析 Skill 根目录的绝对路径，再调用启动器；不使用 latest，也不调用本地仓库中的 Runner。
+
+首次运行时，启动器先告知 Runner 来源、固定版本、下载体积和缓存位置，再从项目 GitHub Release 自动下载并校验 SHA-256。无需 npm 账号，无需用户手工输入 npm 或 Runner 安装命令。只有执行清单包含 Web 动作时才自动下载 Playwright Chromium；API-only 不下载浏览器。交互模式默认打开可见浏览器并使用 200ms 操作间隔，CI 模式固定无界面。
 
 ```bash
-npx @saitamasans/testing-runner@1.0.0 plan --input report.json --profile execution-profile.json --output-dir .testing-run
-npx @saitamasans/testing-runner@1.0.0 approve --manifest .testing-run/run-manifest.json --out .testing-run/approval.json --expires-at <ISO_EXPIRES_AT> --confirmed-by reviewer-name
-npx @saitamasans/testing-runner@1.0.0 run --manifest .testing-run/run-manifest.json --approval .testing-run/approval.json --output-dir .testing-run/result --mode interactive
+node <ABSOLUTE_SKILL_ROOT>/scripts/testing-runner.mjs plan --input report.json --profile execution-profile.json --output-dir .testing-run
+node <ABSOLUTE_SKILL_ROOT>/scripts/testing-runner.mjs approve --manifest .testing-run/run-manifest.json --out .testing-run/approval.json --expires-at <ISO_EXPIRES_AT> --confirmed-by reviewer-name
+node <ABSOLUTE_SKILL_ROOT>/scripts/testing-runner.mjs run --manifest .testing-run/run-manifest.json --approval .testing-run/approval.json --output-dir .testing-run/result --mode interactive --browser auto --slow-mo 200
 ```
 
-`<ISO_EXPIRES_AT>` 使用本次执行窗口内的短期过期时间，不使用长期或永久审批。CI、退出码和完整参数读取 `references/runner-commands.md`。
+`<ABSOLUTE_SKILL_ROOT>` 必须替换为当前已安装 Skill 的绝对目录，路径含空格时正确加引号。`<ISO_EXPIRES_AT>` 使用本次执行窗口内的短期过期时间，不使用长期或永久审批。CI、退出码和完整参数读取 `references/runner-commands.md`。
 
 ## 九、状态和报告门禁
 
@@ -97,7 +99,7 @@ CI 证据、报告一致性、上传产物和失败退出码读取 `references/c
 - [ ] 是否完成准备材料清点，且没有猜测正式服或测试服？
 - [ ] 是否对非标准 Excel 做了字段映射确认？
 - [ ] 是否保护密钥，没有把账号密码、token、连接串写入产物？
-- [ ] 是否使用固定 Runner 版本和审批文件？
+- [ ] 是否使用本 Skill 内置启动器、固定 Runner 版本和审批文件？
 - [ ] 是否保留未执行、通过、不通过、待定四状态和七个运行状态的区别？
 - [ ] 是否通过 Excel/HTML/JSON 一致性门禁后再交付？
 

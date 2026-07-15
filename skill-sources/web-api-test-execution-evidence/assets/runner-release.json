@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "runner": {
+    "name": "@saitamasans/testing-runner",
+    "version": "1.0.0",
+    "download_url": "https://github.com/Saitamasans/testing-skills/releases/download/testing-runner-v1.0.0/saitamasans-testing-runner-1.0.0.tgz",
+    "sha256": "dcd17bbcff2dfca94b7a8b3555ed84b84f0f6e4b0b5826d29f67b0a37d537d90",
+    "size_bytes": 22006621,
+    "minimum_node": 20
+  },
+  "browser": {
+    "provider": "playwright",
+    "name": "chromium",
+    "estimated_size_bytes": 180000000
+  }
+}

@@ -46,6 +46,15 @@ class ReadmeAndPackagesTest(unittest.TestCase):
             renderer = ROOT / "skills" / item["slug"] / "scripts/render-test-assets.mjs"
             self.assertEqual(bool(item["case_output"]), renderer.exists(), item["slug"])
 
+    def test_public_execution_instructions_require_no_manual_runner_install(self):
+        readme = (ROOT / "README.md").read_text(encoding="utf-8")
+        source = (ROOT / "skill-sources/web-api-test-execution-evidence/Web-API测试用例自动执行与证据回填_Skill.md").read_text(encoding="utf-8")
+        combined = readme + source
+        self.assertIn("自动下载", combined)
+        self.assertIn("无需 npm 账号", combined)
+        self.assertNotIn("npm install --save-dev @saitamasans/testing-runner", combined)
+        self.assertNotIn("npx @saitamasans/testing-runner", combined)
+
 
 if __name__ == "__main__":
     unittest.main()

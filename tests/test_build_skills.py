@@ -61,7 +61,7 @@ class BuildSkillsTest(unittest.TestCase):
                 ]
                 self.assertTrue(all(reference.exists() for reference in references))
                 combined = generated_body + "".join(reference.read_text(encoding="utf-8") for reference in references)
-                for phrase in ["run-result.json 是唯一判定来源", "非标准 Excel 必须确认字段映射", "npx @saitamasans/testing-runner@1.0.0 run"]:
+                for phrase in ["run-result.json 是唯一判定来源", "非标准 Excel 必须确认字段映射", "scripts/testing-runner.mjs run"]:
                     self.assertIn(phrase, combined)
                 self.assertLessEqual(len(generated.read_text(encoding="utf-8").splitlines()), 500)
             else:
@@ -79,6 +79,7 @@ class BuildSkillsTest(unittest.TestCase):
         for relative in [
             "scripts/testing-runner.mjs",
             "scripts/runner-bootstrap-lib.mjs",
+            "assets/runner-release.json",
         ]:
             self.assertEqual(
                 (source_root / relative).read_bytes(),

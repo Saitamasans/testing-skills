@@ -17,6 +17,10 @@ import { gunzipSync } from "node:zlib";
 const PACKAGE_NAME = "@saitamasans/testing-runner";
 const VERSION = "1.0.0";
 const FILE_NAME = "saitamasans-testing-runner-1.0.0.tgz";
+const RELEASE_TAG = "testing-runner-v1.0.0";
+const RELEASE_URL = "https://github.com/Saitamasans/testing-skills/releases/download/"
+  + RELEASE_TAG + "/" + FILE_NAME;
+const CHROMIUM_ESTIMATED_SIZE_BYTES = 180_000_000;
 const BUNDLED_DEPENDENCIES = [
   "ajv",
   "commander",
@@ -26,6 +30,13 @@ const BUNDLED_DEPENDENCIES = [
 ];
 const REPO_ROOT = fileURLToPath(new URL("../../..", import.meta.url));
 const PACKAGE_ROOT = fileURLToPath(new URL("..", import.meta.url));
+const DEFAULT_MANIFEST_PATH = path.join(
+  REPO_ROOT,
+  "skill-sources",
+  "web-api-test-execution-evidence",
+  "assets",
+  "runner-release.json",
+);
 
 async function npmCliPath() {
   if (process.env.npm_execpath) return process.env.npm_execpath;
@@ -104,7 +115,10 @@ export async function listTarEntries(archivePath) {
   return entries;
 }
 
-export async function buildReleaseTarball(outputDir = path.join(REPO_ROOT, "build", "releases")) {
+export async function buildReleaseTarball(
+  outputDir = path.join(REPO_ROOT, "build", "releases"),
+  manifestPath = DEFAULT_MANIFEST_PATH,
+) {
   await mkdir(outputDir, { recursive: true });
   const archivePath = path.join(outputDir, FILE_NAME);
   const checksumPath = archivePath + ".sha256";
@@ -164,6 +178,24 @@ export async function buildReleaseTarball(outputDir = path.join(REPO_ROOT, "buil
   const sha256 = await sha256File(archivePath);
   const sizeBytes = (await stat(archivePath)).size;
   await writeFile(checksumPath, sha256 + "  " + FILE_NAME + "\n", "utf8");
+  const manifest = {
+    schema_version: 1,
+    runner: {
+      name: PACKAGE_NAME,
+      version: VERSION,
+      download_url: RELEASE_URL,
+      sha256,
+      size_bytes: sizeBytes,
+      minimum_node: 20,
+    },
+    browser: {
+      provider: "playwright",
+      name: "chromium",
+      estimated_size_bytes: CHROMIUM_ESTIMATED_SIZE_BYTES,
+    },
+  };
+  await mkdir(path.dirname(manifestPath), { recursive: true });
+  await writeFile(manifestPath, JSON.stringify(manifest, null, 2) + "\n", "utf8");
   return {
     packageName: PACKAGE_NAME,
     version: VERSION,
@@ -172,6 +204,7 @@ export async function buildReleaseTarball(outputDir = path.join(REPO_ROOT, "buil
     checksumPath,
     sha256,
     sizeBytes,
+    manifestPath,
   };
 }
 

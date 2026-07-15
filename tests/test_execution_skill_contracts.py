@@ -53,8 +53,8 @@ class ExecutionSkillContractsTest(unittest.TestCase):
 
     def test_runner_commands_statuses_and_report_gate(self):
         for phrase in [
-            "npx @saitamasans/testing-runner@1.0.0 plan",
-            "npx @saitamasans/testing-runner@1.0.0 run",
+            "scripts/testing-runner.mjs plan",
+            "scripts/testing-runner.mjs run",
             "run-result.json 是唯一判定来源",
             "Excel/HTML/JSON 一致性",
             "未执行",
@@ -70,6 +70,21 @@ class ExecutionSkillContractsTest(unittest.TestCase):
             "manual_required",
         ]:
             self.assertIn(phrase, self.body)
+
+    def test_execution_skill_uses_automatic_bootstrap_only(self):
+        combined = self.text + self.generated_text + (ROOT / "README.md").read_text(encoding="utf-8")
+        for phrase in [
+            "scripts/testing-runner.mjs",
+            "首次运行",
+            "自动下载",
+            "无需 npm 账号",
+        ]:
+            self.assertIn(phrase, combined)
+        self.assertNotIn("npm install --save-dev @saitamasans/testing-runner", combined)
+        self.assertNotIn("npx @saitamasans/testing-runner", combined)
+
+        launcher = (ROOT / "skill-sources/web-api-test-execution-evidence/scripts/testing-runner.mjs").read_text(encoding="utf-8")
+        self.assertIn("prepareBrowserForCommand", launcher)
 
     def test_progressive_references_are_declared(self):
         for reference in [

@@ -6,6 +6,7 @@ import test from "node:test";
 
 import {
   ensureRunnerRuntime,
+  prepareBrowserForCommand,
   renderBootstrapNotice,
   resolveRuntimePaths,
   validateReleaseManifest,
@@ -153,4 +154,74 @@ test("concurrent bootstrap performs one download and one install", async () => {
   assert.equal(state.counters.installs(), 1);
   assert.equal(first.runtimeDir, second.runtimeDir);
   assert.equal([first.cacheHit, second.cacheHit].filter(Boolean).length, 1);
+});
+
+async function browserFixture(actionType) {
+  const directory = await mkdtemp(path.join(os.tmpdir(), "runner-browser-bootstrap-"));
+  const manifestPath = path.join(directory, "run-manifest.json");
+  await writeFile(manifestPath, JSON.stringify({
+    cases: [{ steps: [{ type: actionType }] }],
+  }), "utf8");
+
+  const packageRoot = path.join(
+    directory,
+    "runtime",
+    "node_modules",
+    "@saitamasans",
+    "testing-runner",
+  );
+  const cliPath = path.join(packageRoot, "dist", "cli.js");
+  const playwrightCli = path.join(packageRoot, "node_modules", "playwright", "cli.js");
+  const executablePath = path.join(directory, "browsers", "chromium", "chrome.exe");
+  await mkdir(path.dirname(cliPath), { recursive: true });
+  await mkdir(path.dirname(playwrightCli), { recursive: true });
+  await writeFile(cliPath, "", "utf8");
+  await writeFile(playwrightCli, "", "utf8");
+
+  let installs = 0;
+  const logs = [];
+  const options = {
+    cliPath,
+    args: ["run", "--manifest", manifestPath],
+    env: {
+      TEST_API_TOKEN: "must-not-propagate",
+      TEST_API_KEY: "must-not-propagate",
+      TEST_DATABASE_URL: "must-not-propagate",
+      NODE_AUTH_TOKEN: "must-not-propagate",
+    },
+    browserExecutablePath: async () => executablePath,
+    runProcess: async (command, args, processOptions) => {
+      installs += 1;
+      assert.equal(command, process.execPath);
+      assert.deepEqual(args, [playwrightCli, "install", "chromium"]);
+      assert.equal(processOptions.env.TEST_API_TOKEN, undefined);
+      assert.equal(processOptions.env.TEST_API_KEY, undefined);
+      assert.equal(processOptions.env.TEST_DATABASE_URL, undefined);
+      assert.equal(processOptions.env.NODE_AUTH_TOKEN, undefined);
+      await mkdir(path.dirname(executablePath), { recursive: true });
+      await writeFile(executablePath, "browser", "utf8");
+      return 0;
+    },
+    log: (line) => logs.push(String(line)),
+  };
+  return { options, logs, installs: () => installs };
+}
+
+test("API-only run does not prepare Chromium", async () => {
+  const state = await browserFixture("api.request");
+  const result = await prepareBrowserForCommand(state.options);
+  assert.deepEqual(result, { required: false, cacheHit: true });
+  assert.equal(state.installs(), 0);
+});
+
+test("Web run installs Chromium once and reuses the verified executable", async () => {
+  const state = await browserFixture("web.goto");
+  const first = await prepareBrowserForCommand(state.options);
+  const second = await prepareBrowserForCommand(state.options);
+  assert.equal(first.required, true);
+  assert.equal(first.cacheHit, false);
+  assert.equal(second.cacheHit, true);
+  assert.equal(state.installs(), 1);
+  assert.match(state.logs.join("\n"), /Chromium/);
+  assert.match(state.logs.join("\n"), /自动下载/);
 });

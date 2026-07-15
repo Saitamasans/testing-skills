@@ -7,6 +7,7 @@ import {
   BootstrapError,
   ensureRunnerRuntime,
   forwardRunnerCommand,
+  prepareBrowserForCommand,
 } from "./runner-bootstrap-lib.mjs";
 
 async function main() {
@@ -16,6 +17,12 @@ async function main() {
   const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
   const runtime = await ensureRunnerRuntime({
     manifest,
+    env: process.env,
+    log: (line) => console.error(line),
+  });
+  await prepareBrowserForCommand({
+    cliPath: runtime.cliPath,
+    args: process.argv.slice(2),
     env: process.env,
     log: (line) => console.error(line),
   });
@@ -35,4 +42,3 @@ main().catch((error) => {
   console.error(error instanceof Error ? error.message : String(error));
   process.exitCode = 30;
 });
-

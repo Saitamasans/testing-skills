@@ -12,6 +12,7 @@ import {
 } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 
 const PACKAGE_NAME = "@saitamasans/testing-runner";
 const RELEASE_HOST = "github.com";
@@ -183,6 +184,48 @@ function sanitizedInstallEnv(env, npmrcPath) {
   return output;
 }
 
+function sanitizedBrowserInstallEnv(env) {
+  const allowed = new Set([
+    "ALL_PROXY",
+    "APPDATA",
+    "CI",
+    "COMSPEC",
+    "HOME",
+    "HTTPS_PROXY",
+    "HTTP_PROXY",
+    "LANG",
+    "LOCALAPPDATA",
+    "NODE_EXTRA_CA_CERTS",
+    "NO_PROXY",
+    "OS",
+    "PATH",
+    "PATHEXT",
+    "PLAYWRIGHT_BROWSERS_PATH",
+    "PLAYWRIGHT_DOWNLOAD_CONNECTION_TIMEOUT",
+    "PROCESSOR_ARCHITECTURE",
+    "PROGRAMDATA",
+    "PROGRAMFILES",
+    "PROGRAMFILES(X86)",
+    "SSL_CERT_DIR",
+    "SSL_CERT_FILE",
+    "SYSTEMROOT",
+    "TEMP",
+    "TMP",
+    "TMPDIR",
+    "USERPROFILE",
+    "WINDIR",
+    "XDG_CACHE_HOME",
+  ]);
+  const output = {};
+  for (const [key, value] of Object.entries(env)) {
+    const normalized = key.toUpperCase();
+    if (allowed.has(normalized) || normalized.startsWith("LC_")) {
+      output[key] = value;
+    }
+  }
+  return output;
+}
+
 export async function defaultRunProcess(command, args, options = {}) {
   return await new Promise((resolve, reject) => {
     const child = spawn(command, args, {
@@ -350,6 +393,103 @@ export async function ensureRunnerRuntime(options) {
     await rm(installDir, { recursive: true, force: true });
     await releaseLock();
   }
+}
+
+function commandOption(args, name) {
+  const index = args.indexOf(name);
+  if (index < 0 || !args[index + 1]) {
+    fail("bootstrap_browser_manifest_missing", name + " is required for browser preparation");
+  }
+  return args[index + 1];
+}
+
+function manifestHasWebActions(value) {
+  if (!value || !Array.isArray(value.cases)) {
+    fail("bootstrap_browser_manifest_invalid", "run manifest must contain cases");
+  }
+  return value.cases.some((item) =>
+    Array.isArray(item?.steps)
+    && item.steps.some((action) =>
+      typeof action?.type === "string"
+      && (action.type.startsWith("web.") || action.type === "cleanup.web")
+    )
+  );
+}
+
+async function defaultBrowserExecutablePath(packageRoot) {
+  const playwrightModulePath = path.join(
+    packageRoot,
+    "node_modules",
+    "playwright",
+    "index.mjs",
+  );
+  try {
+    const playwright = await import(pathToFileURL(playwrightModulePath).href);
+    const executablePath = playwright.chromium?.executablePath?.();
+    if (!executablePath) {
+      fail("bootstrap_browser_install_failed", "Playwright did not provide a Chromium executable path");
+    }
+    return executablePath;
+  } catch (error) {
+    if (error instanceof BootstrapError) throw error;
+    fail(
+      "bootstrap_browser_install_failed",
+      "cannot resolve bundled Playwright: " + (error instanceof Error ? error.message : String(error)),
+    );
+  }
+}
+
+export async function prepareBrowserForCommand(options) {
+  const args = options.args ?? [];
+  if (args[0] !== "run") {
+    return { required: false, cacheHit: true };
+  }
+
+  const manifestPath = path.resolve(commandOption(args, "--manifest"));
+  let runManifest;
+  try {
+    runManifest = JSON.parse(await readFile(manifestPath, "utf8"));
+  } catch (error) {
+    fail(
+      "bootstrap_browser_manifest_invalid",
+      error instanceof Error ? error.message : String(error),
+    );
+  }
+  if (!manifestHasWebActions(runManifest)) {
+    return { required: false, cacheHit: true };
+  }
+
+  const packageRoot = path.dirname(path.dirname(path.resolve(options.cliPath)));
+  const playwrightCli = path.join(packageRoot, "node_modules", "playwright", "cli.js");
+  if (!await fileExists(playwrightCli)) {
+    fail("bootstrap_browser_install_failed", "bundled Playwright CLI is missing");
+  }
+
+  const resolveExecutable = options.browserExecutablePath ?? defaultBrowserExecutablePath;
+  const executablePath = await resolveExecutable(packageRoot);
+  const log = options.log ?? ((line) => console.error(line));
+  if (await fileExists(executablePath)) {
+    log("Playwright Chromium 已就绪，复用本机浏览器缓存：" + executablePath);
+    return { required: true, cacheHit: true, executablePath };
+  }
+
+  log("检测到 Web 用例：首次运行将由 Playwright 自动下载 Chromium；后续运行复用浏览器缓存。");
+  const runProcess = options.runProcess ?? defaultRunProcess;
+  const code = await runProcess(
+    process.execPath,
+    [playwrightCli, "install", "chromium"],
+    {
+      env: sanitizedBrowserInstallEnv(options.env ?? process.env),
+      stdio: "inherit",
+    },
+  );
+  if (code !== 0) {
+    fail("bootstrap_browser_install_failed", "Playwright exited with code " + code);
+  }
+  if (!await fileExists(executablePath)) {
+    fail("bootstrap_browser_install_failed", "Chromium executable is missing after installation");
+  }
+  return { required: true, cacheHit: false, executablePath };
 }
 
 export async function forwardRunnerCommand(options) {
