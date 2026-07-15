@@ -9,7 +9,7 @@
     "node": ">=20"
   },
   "scripts": {
-    "build": "tsc -p tsconfig.json && node scripts/copy-schemas.mjs",
+    "build": "tsc -p tsconfig.json && node scripts/copy-schemas.mjs && node scripts/copy-renderer.mjs",
     "test": "tsx --test tests/*.test.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "prepack": "npm run build"
@@ -27,6 +27,7 @@
     "typescript": "^5.8.3"
   },
   "files": [
-    "dist"
+    "dist",
+    "vendor"
   ]
 }
