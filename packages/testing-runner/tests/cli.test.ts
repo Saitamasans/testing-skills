@@ -6,7 +6,7 @@ import path from "node:path";
 import test from "node:test";
 
 import { TEN_COLUMNS } from "../src/input/detect-input.js";
-import { runCli } from "../src/cli.js";
+import { normalizeRunCliOptions, runCli } from "../src/cli.js";
 import { createApproval } from "../src/security/approval.js";
 import type { ExecutionProfile, ManifestAction, RunManifest, RunManifestCase, RunResult } from "../src/types.js";
 import { startDemoApp } from "./fixtures/demo-app.js";
@@ -127,6 +127,55 @@ async function runTestingRunner(args: string[]): Promise<number> {
     process.exitCode = previous;
   }
 }
+
+test("run CLI preserves visible browser settings and custom slow motion", () => {
+  assert.deepEqual(
+    normalizeRunCliOptions({
+      manifest: "run-manifest.json",
+      approval: "approval.json",
+      outputDir: "result",
+      mode: "interactive",
+      browser: "visible",
+      slowMo: "350",
+    }),
+    {
+      manifest: "run-manifest.json",
+      approval: "approval.json",
+      outputDir: "result",
+      mode: "interactive",
+      browser: "visible",
+      slowMo: 350,
+    },
+  );
+});
+
+test("run CLI rejects invalid browser visibility", () => {
+  assert.throws(
+    () => normalizeRunCliOptions({
+      manifest: "run-manifest.json",
+      approval: "approval.json",
+      outputDir: "result",
+      mode: "interactive",
+      browser: "background",
+      slowMo: "200",
+    }),
+    /browser_configuration_invalid: browser must be auto, visible, or headless/,
+  );
+});
+
+test("run CLI rejects invalid slow motion before execution", () => {
+  assert.throws(
+    () => normalizeRunCliOptions({
+      manifest: "run-manifest.json",
+      approval: "approval.json",
+      outputDir: "result",
+      mode: "ci",
+      browser: "auto",
+      slowMo: "12.5",
+    }),
+    /browser_configuration_invalid: slow-mo must be an integer from 0 to 5000/,
+  );
+});
 
 test("run command writes run result plus Excel and HTML for a passing approved API flow", async () => {
   const app = await startDemoApp();

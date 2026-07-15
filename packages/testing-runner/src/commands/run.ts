@@ -1,8 +1,6 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 
-import { chromium, type Browser, type Page } from "playwright";
-
 import { executeAction as executeRegisteredAction } from "../actions/action-registry.js";
 import { sha256Canonical } from "../compiler/canonical-json.js";
 import { TEN_COLUMNS, type NativeReportDocument } from "../input/detect-input.js";
@@ -10,6 +8,11 @@ import { projectExecutionReport, renderExecutionReports } from "../reporting/rep
 import { verifyReportConsistency } from "../reporting/consistency-gate.js";
 import { runApprovedManifest } from "../runtime/run-orchestrator.js";
 import { createExecutionContext, type CreateExecutionContextInput } from "../runtime/execution-context.js";
+import {
+  openBrowserSession,
+  type BrowserSessionOptions,
+  type BrowserVisibility,
+} from "../runtime/browser-session.js";
 import {
   EXIT_BLOCKED_OR_MANUAL,
   EXIT_UNSAFE_OR_INVALID,
@@ -34,6 +37,8 @@ export interface RunCommandOptions {
   approval: string;
   outputDir: string;
   mode?: "interactive" | "ci";
+  browser?: BrowserVisibility;
+  slowMo?: number;
 }
 
 type RuntimeExecutionProfile = ExecutionProfile & {
@@ -80,19 +85,6 @@ function credentialRefs(profile: RuntimeExecutionProfile): CredentialRef[] {
     source: "configured_env",
     name: ref.name,
   }));
-}
-
-function hasWebActions(manifest: RunManifest): boolean {
-  return manifest.cases.some((item) =>
-    item.steps.some((action) => action.type.startsWith("web.") || action.type === "cleanup.web")
-  );
-}
-
-async function openBrowserIfNeeded(manifest: RunManifest): Promise<{ browser?: Browser; page?: Page }> {
-  if (!hasWebActions(manifest)) return {};
-  const browser = await chromium.launch({ headless: true });
-  const page = await browser.newPage();
-  return { browser, page };
 }
 
 function reportFromManifest(manifest: RunManifest): NativeReportDocument {
@@ -191,7 +183,14 @@ export async function runRunCommand(options: RunCommandOptions): Promise<number>
     throw error;
   }
 
-  const { browser, page } = await openBrowserIfNeeded(manifest);
+  const browserOptions: BrowserSessionOptions = {
+    manifest,
+    mode,
+    outputDir: options.outputDir,
+  };
+  if (options.browser !== undefined) browserOptions.visibility = options.browser;
+  if (options.slowMo !== undefined) browserOptions.slowMo = options.slowMo;
+  const browserSession = await openBrowserSession(browserOptions);
   try {
     const contextInput: CreateExecutionContextInput = {
       targets: profile.targets,
@@ -200,7 +199,7 @@ export async function runRunCommand(options: RunCommandOptions): Promise<number>
       secrets,
       mode,
     };
-    if (page) contextInput.page = page;
+    if (browserSession?.page) contextInput.page = browserSession.page;
     const context = createExecutionContext(contextInput);
     const result = validateDocument<RunResult>("run-result", await runApprovedManifest({
       manifest,
@@ -218,7 +217,7 @@ export async function runRunCommand(options: RunCommandOptions): Promise<number>
     }
     throw error;
   } finally {
-    await browser?.close();
+    await browserSession?.close();
   }
 }
 

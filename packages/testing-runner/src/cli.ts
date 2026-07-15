@@ -5,8 +5,44 @@ import { Command } from "commander";
 
 import { runApproveCommand } from "./commands/approve.js";
 import { runPlanCommand } from "./commands/plan.js";
-import { runRunCommand, runCommandErrorExitCode } from "./commands/run.js";
+import {
+  runRunCommand,
+  runCommandErrorExitCode,
+  type RunCommandOptions,
+} from "./commands/run.js";
 import { reportVerificationErrorExitCode, runVerifyReportCommand } from "./commands/verify-report.js";
+import type { BrowserVisibility } from "./runtime/browser-session.js";
+
+interface RunCliOptions {
+  manifest: string;
+  approval: string;
+  outputDir: string;
+  mode: "interactive" | "ci";
+  browser: string;
+  slowMo: string;
+}
+
+function browserConfigurationError(message: string): Error {
+  return new Error(`browser_configuration_invalid: ${message}`);
+}
+
+export function normalizeRunCliOptions(options: RunCliOptions): RunCommandOptions {
+  if (!["auto", "visible", "headless"].includes(options.browser)) {
+    throw browserConfigurationError("browser must be auto, visible, or headless");
+  }
+  const slowMo = Number(options.slowMo);
+  if (!Number.isSafeInteger(slowMo) || slowMo < 0 || slowMo > 5000) {
+    throw browserConfigurationError("slow-mo must be an integer from 0 to 5000");
+  }
+  return {
+    manifest: options.manifest,
+    approval: options.approval,
+    outputDir: options.outputDir,
+    mode: options.mode,
+    browser: options.browser as BrowserVisibility,
+    slowMo,
+  };
+}
 
 export async function runCli(argv = process.argv): Promise<void> {
   const program = new Command();
@@ -50,14 +86,11 @@ export async function runCli(argv = process.argv): Promise<void> {
     .requiredOption("--approval <file>")
     .requiredOption("--output-dir <dir>")
     .option("--mode <mode>", "interactive or ci", "interactive")
-    .action(async (options: {
-      manifest: string;
-      approval: string;
-      outputDir: string;
-      mode: "interactive" | "ci";
-    }) => {
+    .option("--browser <visibility>", "auto, visible, or headless", "auto")
+    .option("--slow-mo <milliseconds>", "visible browser delay from 0 to 5000", "200")
+    .action(async (options: RunCliOptions) => {
       try {
-        process.exitCode = await runRunCommand(options);
+        process.exitCode = await runRunCommand(normalizeRunCliOptions(options));
       } catch (error) {
         console.error(error instanceof Error ? error.message : String(error));
         process.exitCode = runCommandErrorExitCode(error);
