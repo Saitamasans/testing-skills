@@ -92,3 +92,31 @@ test("visible session launches headed and writes Playwright trace", async () => 
     "trace",
   );
 });
+
+test("browser setup failure closes the partial context and browser", async () => {
+  const outputDir = await mkdtemp(path.join(os.tmpdir(), "failed-browser-setup-"));
+  let contextClosed = false;
+  let browserClosed = false;
+  const context = {
+    tracing: {
+      start: async () => { throw new Error("trace setup failed"); },
+    },
+    close: async () => { contextClosed = true; },
+  };
+  const browser = {
+    newContext: async () => context,
+    close: async () => { browserClosed = true; },
+  };
+
+  await assert.rejects(
+    openBrowserSession({
+      manifest: manifestWith("web.goto"),
+      mode: "interactive",
+      outputDir,
+      launchBrowser: async () => browser as unknown as Browser,
+    }),
+    /trace setup failed/,
+  );
+  assert.equal(contextClosed, true);
+  assert.equal(browserClosed, true);
+});

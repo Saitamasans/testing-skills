@@ -177,6 +177,20 @@ test("run CLI rejects invalid slow motion before execution", () => {
   );
 });
 
+test("run CLI rejects an invalid execution mode", () => {
+  assert.throws(
+    () => normalizeRunCliOptions({
+      manifest: "run-manifest.json",
+      approval: "approval.json",
+      outputDir: "result",
+      mode: "batch",
+      browser: "auto",
+      slowMo: "200",
+    }),
+    /run_configuration_invalid: mode must be interactive or ci/,
+  );
+});
+
 test("run command writes run result plus Excel and HTML for a passing approved API flow", async () => {
   const app = await startDemoApp();
   const directory = await mkdtemp(path.join(os.tmpdir(), "runner-cli-pass-"));

@@ -19,8 +19,8 @@ function manifest(overrides = {}) {
     schema_version: 1,
     runner: {
       name: "@saitamasans/testing-runner",
-      version: "1.0.0",
-      download_url: "https://github.com/Saitamasans/testing-skills/releases/download/testing-runner-v1.0.0/saitamasans-testing-runner-1.0.0.tgz",
+      version: "1.0.1",
+      download_url: "https://github.com/Saitamasans/testing-skills/releases/download/testing-runner-v1.0.1/saitamasans-testing-runner-1.0.1.tgz",
       sha256: "7f9dd89333da866ba6dba0a0bcff749c5e70d0558753811259f179ea9db74071",
       size_bytes: ASSET.length,
       minimum_node: 20,
@@ -74,6 +74,8 @@ async function fixture(overrides = {}) {
       env: {
         TESTING_SKILLS_HOME: home,
         TESTING_SKILLS_NPM_CLI: npmCli,
+        TEST_API_KEY: "must-not-propagate",
+        TEST_DATABASE_URL: "must-not-propagate",
         NPM_TOKEN: "must-not-propagate",
         NODE_AUTH_TOKEN: "must-not-propagate",
       },
@@ -98,7 +100,7 @@ async function fixture(overrides = {}) {
 }
 
 test("validates only the fixed project GitHub Release", () => {
-  assert.equal(validateReleaseManifest(manifest()).runner.version, "1.0.0");
+  assert.equal(validateReleaseManifest(manifest()).runner.version, "1.0.1");
   assert.throws(
     () => validateReleaseManifest(manifest({ download_url: "https://example.com/runner.tgz" })),
     /bootstrap_manifest_invalid/,
@@ -115,12 +117,12 @@ test("resolves a versioned user cache and renders the required notice", async ()
   const paths = resolveRuntimePaths(value, { TESTING_SKILLS_HOME: home });
   assert.equal(
     paths.runtimeDir,
-    path.join(home, "runtime", "testing-runner", "1.0.0"),
+    path.join(home, "runtime", "testing-runner", "1.0.1"),
   );
   const notice = renderBootstrapNotice(value, paths);
   assert.match(notice, /首次运行/);
   assert.match(notice, /GitHub Release/);
-  assert.match(notice, /Runner 1\.0\.0/);
+  assert.match(notice, /Runner 1\.0\.1/);
   assert.match(notice, /Chromium/);
   assert.ok(notice.includes(home));
 });
@@ -131,7 +133,7 @@ test("first bootstrap announces, downloads, verifies, and installs once", async 
   assert.equal(result.cacheHit, false);
   assert.equal(state.counters.downloads(), 1);
   assert.equal(state.counters.installs(), 1);
-  assert.match(state.logs.join("\n"), /Runner 1\.0\.0/);
+  assert.match(state.logs.join("\n"), /Runner 1\.0\.1/);
   assert.match(state.logs.join("\n"), /Runner 下载进度：0%/);
   assert.match(state.logs.join("\n"), /Runner 下载进度：100%/);
   assert.ok(state.counters.fetchSignal());
@@ -140,6 +142,8 @@ test("first bootstrap announces, downloads, verifies, and installs once", async 
   assert.ok(await readFile(result.cliPath));
   assert.equal(state.counters.installEnv().NPM_TOKEN, undefined);
   assert.equal(state.counters.installEnv().NODE_AUTH_TOKEN, undefined);
+  assert.equal(state.counters.installEnv().TEST_API_KEY, undefined);
+  assert.equal(state.counters.installEnv().TEST_DATABASE_URL, undefined);
 });
 
 test("hash mismatch removes the archive and blocks installation", async () => {
@@ -150,6 +154,34 @@ test("hash mismatch removes the archive and blocks installation", async () => {
     ensureRunnerRuntime(state.options),
     /bootstrap_integrity_failed/,
   );
+  assert.equal(state.counters.installs(), 0);
+});
+
+test("oversized Runner response is cancelled before reading more data", async () => {
+  const state = await fixture();
+  let reads = 0;
+  let cancelled = false;
+  state.options.fetchImpl = async () => ({
+    ok: true,
+    status: 200,
+    body: {
+      getReader: () => ({
+        read: async () => {
+          reads += 1;
+          if (reads === 1) return { done: false, value: Buffer.alloc(ASSET.length + 1) };
+          throw new Error("read continued past declared size");
+        },
+        cancel: async () => { cancelled = true; },
+        releaseLock: () => {},
+      }),
+    },
+  });
+  await assert.rejects(
+    ensureRunnerRuntime(state.options),
+    /bootstrap_integrity_failed: downloaded Runner exceeds release manifest size/,
+  );
+  assert.equal(reads, 1);
+  assert.equal(cancelled, true);
   assert.equal(state.counters.installs(), 0);
 });
 

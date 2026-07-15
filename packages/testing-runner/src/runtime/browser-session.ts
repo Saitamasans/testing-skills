@@ -1,7 +1,13 @@
 import { mkdir } from "node:fs/promises";
 import path from "node:path";
 
-import { chromium, type Browser, type LaunchOptions, type Page } from "playwright";
+import {
+  chromium,
+  type Browser,
+  type BrowserContext,
+  type LaunchOptions,
+  type Page,
+} from "playwright";
 
 import type { RunManifest } from "../types.js";
 
@@ -81,9 +87,34 @@ export async function openBrowserSession(
     throw error;
   }
 
-  const context = await browser.newContext();
-  await context.tracing.start({ screenshots: true, snapshots: true, sources: true });
-  const page = await context.newPage();
+  let context: BrowserContext | undefined;
+  let page: Page;
+  try {
+    context = await browser.newContext();
+    await context.tracing.start({ screenshots: true, snapshots: true, sources: true });
+    page = await context.newPage();
+  } catch (error) {
+    const cleanupErrors: unknown[] = [];
+    if (context) {
+      try {
+        await context.close();
+      } catch (cleanupError) {
+        cleanupErrors.push(cleanupError);
+      }
+    }
+    try {
+      await browser.close();
+    } catch (cleanupError) {
+      cleanupErrors.push(cleanupError);
+    }
+    if (cleanupErrors.length > 0) {
+      throw new AggregateError(
+        [error, ...cleanupErrors],
+        "browser_setup_failed: " + (error instanceof Error ? error.message : String(error)),
+      );
+    }
+    throw error;
+  }
   let closed = false;
 
   return {
@@ -110,4 +141,3 @@ export async function openBrowserSession(
     },
   };
 }
-

@@ -17,7 +17,7 @@ interface RunCliOptions {
   manifest: string;
   approval: string;
   outputDir: string;
-  mode: "interactive" | "ci";
+  mode: string;
   browser: string;
   slowMo: string;
 }
@@ -26,7 +26,14 @@ function browserConfigurationError(message: string): Error {
   return new Error(`browser_configuration_invalid: ${message}`);
 }
 
+function runConfigurationError(message: string): Error {
+  return new Error(`run_configuration_invalid: ${message}`);
+}
+
 export function normalizeRunCliOptions(options: RunCliOptions): RunCommandOptions {
+  if (!["interactive", "ci"].includes(options.mode)) {
+    throw runConfigurationError("mode must be interactive or ci");
+  }
   if (!["auto", "visible", "headless"].includes(options.browser)) {
     throw browserConfigurationError("browser must be auto, visible, or headless");
   }
@@ -38,7 +45,7 @@ export function normalizeRunCliOptions(options: RunCliOptions): RunCommandOption
     manifest: options.manifest,
     approval: options.approval,
     outputDir: options.outputDir,
-    mode: options.mode,
+    mode: options.mode as "interactive" | "ci",
     browser: options.browser as BrowserVisibility,
     slowMo,
   };
@@ -49,7 +56,7 @@ export async function runCli(argv = process.argv): Promise<void> {
   program
     .name("testing-runner")
     .description("Plan and approve locked Web/API test execution manifests")
-    .version("1.0.0");
+    .version("1.0.1");
 
   program.command("plan")
     .requiredOption("--input <file>")

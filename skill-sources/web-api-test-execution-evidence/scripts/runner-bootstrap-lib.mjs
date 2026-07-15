@@ -20,6 +20,37 @@ const RELEASE_PATH_PREFIX = "/Saitamasans/testing-skills/releases/download/testi
 const DEFAULT_LOCK_RETRY_MS = 100;
 const DEFAULT_DOWNLOAD_TIMEOUT_MS = 5 * 60 * 1000;
 const STALE_LOCK_MS = 10 * 60 * 1000;
+const RUNTIME_ENV_ALLOWLIST = new Set([
+  "ALL_PROXY",
+  "APPDATA",
+  "CI",
+  "COMSPEC",
+  "HOME",
+  "HTTPS_PROXY",
+  "HTTP_PROXY",
+  "LANG",
+  "LOCALAPPDATA",
+  "NODE_EXTRA_CA_CERTS",
+  "NO_PROXY",
+  "OS",
+  "PATH",
+  "PATHEXT",
+  "PLAYWRIGHT_BROWSERS_PATH",
+  "PLAYWRIGHT_DOWNLOAD_CONNECTION_TIMEOUT",
+  "PROCESSOR_ARCHITECTURE",
+  "PROGRAMDATA",
+  "PROGRAMFILES",
+  "PROGRAMFILES(X86)",
+  "SSL_CERT_DIR",
+  "SSL_CERT_FILE",
+  "SYSTEMROOT",
+  "TEMP",
+  "TMP",
+  "TMPDIR",
+  "USERPROFILE",
+  "WINDIR",
+  "XDG_CACHE_HOME",
+]);
 
 export class BootstrapError extends Error {
   constructor(code, message) {
@@ -51,8 +82,8 @@ export function validateReleaseManifest(value) {
   if (runner.name !== PACKAGE_NAME) {
     fail("bootstrap_manifest_invalid", "runner.name must be " + PACKAGE_NAME);
   }
-  if (runner.version !== "1.0.0") {
-    fail("bootstrap_manifest_invalid", "runner.version must be 1.0.0");
+  if (runner.version !== "1.0.1") {
+    fail("bootstrap_manifest_invalid", "runner.version must be 1.0.1");
   }
   if (!/^[a-f0-9]{64}$/.test(String(runner.sha256 ?? ""))) {
     fail("bootstrap_manifest_invalid", "runner.sha256 must be 64 lowercase hexadecimal characters");
@@ -172,12 +203,19 @@ async function readReady(paths, digest, releaseSha) {
   }
 }
 
-function sanitizedInstallEnv(env, npmrcPath) {
+function sanitizedRuntimeEnv(env) {
   const output = {};
   for (const [key, value] of Object.entries(env)) {
-    if (/TOKEN|AUTH|NPM_CONFIG_USERCONFIG/i.test(key)) continue;
-    output[key] = value;
+    const normalized = key.toUpperCase();
+    if (RUNTIME_ENV_ALLOWLIST.has(normalized) || normalized.startsWith("LC_")) {
+      output[key] = value;
+    }
   }
+  return output;
+}
+
+function sanitizedInstallEnv(env, npmrcPath) {
+  const output = sanitizedRuntimeEnv(env);
   output.NPM_CONFIG_USERCONFIG = npmrcPath;
   output.NPM_CONFIG_AUDIT = "false";
   output.NPM_CONFIG_FUND = "false";
@@ -186,45 +224,7 @@ function sanitizedInstallEnv(env, npmrcPath) {
 }
 
 function sanitizedBrowserInstallEnv(env) {
-  const allowed = new Set([
-    "ALL_PROXY",
-    "APPDATA",
-    "CI",
-    "COMSPEC",
-    "HOME",
-    "HTTPS_PROXY",
-    "HTTP_PROXY",
-    "LANG",
-    "LOCALAPPDATA",
-    "NODE_EXTRA_CA_CERTS",
-    "NO_PROXY",
-    "OS",
-    "PATH",
-    "PATHEXT",
-    "PLAYWRIGHT_BROWSERS_PATH",
-    "PLAYWRIGHT_DOWNLOAD_CONNECTION_TIMEOUT",
-    "PROCESSOR_ARCHITECTURE",
-    "PROGRAMDATA",
-    "PROGRAMFILES",
-    "PROGRAMFILES(X86)",
-    "SSL_CERT_DIR",
-    "SSL_CERT_FILE",
-    "SYSTEMROOT",
-    "TEMP",
-    "TMP",
-    "TMPDIR",
-    "USERPROFILE",
-    "WINDIR",
-    "XDG_CACHE_HOME",
-  ]);
-  const output = {};
-  for (const [key, value] of Object.entries(env)) {
-    const normalized = key.toUpperCase();
-    if (allowed.has(normalized) || normalized.startsWith("LC_")) {
-      output[key] = value;
-    }
-  }
-  return output;
+  return sanitizedRuntimeEnv(env);
 }
 
 export async function defaultRunProcess(command, args, options = {}) {
@@ -260,6 +260,14 @@ async function downloadResponseToFile(response, file, expectedSize, log) {
     while (true) {
       const { done, value } = await reader.read();
       if (done) break;
+      if (received + value.byteLength > expectedSize) {
+        try {
+          await reader.cancel("download exceeds release manifest size");
+        } catch {
+          // Preserve the integrity failure as the primary error.
+        }
+        fail("bootstrap_integrity_failed", "downloaded Runner exceeds release manifest size");
+      }
       let offset = 0;
       while (offset < value.byteLength) {
         const { bytesWritten } = await handle.write(
