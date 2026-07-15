@@ -185,6 +185,33 @@ test("oversized Runner response is cancelled before reading more data", async ()
   assert.equal(state.counters.installs(), 0);
 });
 
+test("production bootstrap prefers curl with visible progress before fetch fallback", async () => {
+  const state = await fixture();
+  let curlCommand;
+  let curlArgs = [];
+  state.options.preferCurl = true;
+  state.options.curlCommand = "curl-fixture";
+  state.options.fetchImpl = async () => {
+    throw new Error("fetch fallback must not run when curl succeeds");
+  };
+  state.options.downloadProcess = async (command, args) => {
+    curlCommand = command;
+    curlArgs = args;
+    const output = args[args.indexOf("--output") + 1];
+    await writeFile(output, ASSET);
+    return 0;
+  };
+
+  const result = await ensureRunnerRuntime(state.options);
+
+  assert.equal(result.cacheHit, false);
+  assert.equal(curlCommand, "curl-fixture");
+  assert.ok(curlArgs.includes("--progress-bar"));
+  assert.ok(curlArgs.includes(manifest().runner.download_url));
+  assert.match(state.logs.join("\n"), /curl/);
+  assert.equal(state.counters.installs(), 1);
+});
+
 test("second bootstrap reuses the verified cache", async () => {
   const state = await fixture();
   await ensureRunnerRuntime(state.options);

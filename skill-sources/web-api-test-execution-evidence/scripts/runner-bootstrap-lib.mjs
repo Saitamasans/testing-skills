@@ -18,7 +18,7 @@ const PACKAGE_NAME = "@saitamasans/testing-runner";
 const RELEASE_HOST = "github.com";
 const RELEASE_PATH_PREFIX = "/Saitamasans/testing-skills/releases/download/testing-runner-v";
 const DEFAULT_LOCK_RETRY_MS = 100;
-const DEFAULT_DOWNLOAD_TIMEOUT_MS = 5 * 60 * 1000;
+const DEFAULT_DOWNLOAD_TIMEOUT_MS = 15 * 60 * 1000;
 const STALE_LOCK_MS = 10 * 60 * 1000;
 const RUNTIME_ENV_ALLOWLIST = new Set([
   "ALL_PROXY",
@@ -387,30 +387,71 @@ export async function ensureRunnerRuntime(options) {
 
     log(renderBootstrapNotice(manifest, paths));
     await mkdir(path.dirname(paths.archivePath), { recursive: true });
-    let response;
-    try {
-      const downloadTimeoutMs = options.downloadTimeoutMs ?? DEFAULT_DOWNLOAD_TIMEOUT_MS;
-      response = await fetchImpl(manifest.runner.download_url, {
-        redirect: "follow",
-        signal: AbortSignal.timeout(downloadTimeoutMs),
-      });
-    } catch (error) {
-      fail("bootstrap_network_failed", error instanceof Error ? error.message : String(error));
-    }
-    if (!response?.ok) {
-      fail("bootstrap_network_failed", "GitHub Release returned HTTP " + (response?.status ?? "unknown"));
-    }
+    const downloadTimeoutMs = options.downloadTimeoutMs ?? DEFAULT_DOWNLOAD_TIMEOUT_MS;
     let downloadedSize;
-    try {
-      downloadedSize = await downloadResponseToFile(
-        response,
-        tempArchive,
-        manifest.runner.size_bytes,
-        log,
-      );
-    } catch (error) {
-      if (error instanceof BootstrapError) throw error;
-      fail("bootstrap_network_failed", error instanceof Error ? error.message : String(error));
+    const preferCurl = options.preferCurl ?? options.fetchImpl === undefined;
+    if (preferCurl) {
+      const curl = options.curlCommand ?? (process.platform === "win32" ? "curl.exe" : "curl");
+      const downloadProcess = options.downloadProcess ?? defaultRunProcess;
+      log("Runner 下载方式：系统 curl（自动调用，显示实时进度）。");
+      try {
+        const curlCode = await downloadProcess(
+          curl,
+          [
+            "--location",
+            "--fail",
+            "--show-error",
+            "--progress-bar",
+            "--proto",
+            "=https",
+            "--tlsv1.2",
+            "--max-time",
+            String(Math.ceil(downloadTimeoutMs / 1000)),
+            "--output",
+            tempArchive,
+            manifest.runner.download_url,
+          ],
+          {
+            env: sanitizedRuntimeEnv(env),
+            stdio: "inherit",
+          },
+        );
+        if (curlCode !== 0) {
+          fail("bootstrap_network_failed", "curl exited with code " + curlCode);
+        }
+        downloadedSize = (await stat(tempArchive)).size;
+      } catch (error) {
+        if (error instanceof BootstrapError) throw error;
+        if (error?.code !== "ENOENT") {
+          fail("bootstrap_network_failed", error instanceof Error ? error.message : String(error));
+        }
+        log("系统未找到 curl，改用 Node 流式下载。");
+      }
+    }
+    if (downloadedSize === undefined) {
+      let response;
+      try {
+        response = await fetchImpl(manifest.runner.download_url, {
+          redirect: "follow",
+          signal: AbortSignal.timeout(downloadTimeoutMs),
+        });
+      } catch (error) {
+        fail("bootstrap_network_failed", error instanceof Error ? error.message : String(error));
+      }
+      if (!response?.ok) {
+        fail("bootstrap_network_failed", "GitHub Release returned HTTP " + (response?.status ?? "unknown"));
+      }
+      try {
+        downloadedSize = await downloadResponseToFile(
+          response,
+          tempArchive,
+          manifest.runner.size_bytes,
+          log,
+        );
+      } catch (error) {
+        if (error instanceof BootstrapError) throw error;
+        fail("bootstrap_network_failed", error instanceof Error ? error.message : String(error));
+      }
     }
     if (downloadedSize !== manifest.runner.size_bytes) {
       fail("bootstrap_integrity_failed", "downloaded Runner size does not match release manifest");
