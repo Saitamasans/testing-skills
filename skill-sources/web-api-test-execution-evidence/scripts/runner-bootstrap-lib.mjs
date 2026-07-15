@@ -18,6 +18,7 @@ const PACKAGE_NAME = "@saitamasans/testing-runner";
 const RELEASE_HOST = "github.com";
 const RELEASE_PATH_PREFIX = "/Saitamasans/testing-skills/releases/download/testing-runner-v";
 const DEFAULT_LOCK_RETRY_MS = 100;
+const DEFAULT_DOWNLOAD_TIMEOUT_MS = 5 * 60 * 1000;
 const STALE_LOCK_MS = 10 * 60 * 1000;
 
 export class BootstrapError extends Error {
@@ -247,6 +248,46 @@ async function sha256File(file) {
   return createHash("sha256").update(bytes).digest("hex");
 }
 
+async function downloadResponseToFile(response, file, expectedSize, log) {
+  if (!response?.body || typeof response.body.getReader !== "function") {
+    fail("bootstrap_network_failed", "GitHub Release response has no readable body");
+  }
+  const handle = await open(file, "wx");
+  const reader = response.body.getReader();
+  let received = 0;
+  let lastReported = 0;
+  log("Runner 下载进度：0%");
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      let offset = 0;
+      while (offset < value.byteLength) {
+        const { bytesWritten } = await handle.write(
+          value,
+          offset,
+          value.byteLength - offset,
+          null,
+        );
+        offset += bytesWritten;
+      }
+      received += value.byteLength;
+      const percent = Math.min(100, Math.floor(received * 100 / expectedSize));
+      if (percent === 100 || percent >= lastReported + 10) {
+        lastReported = percent;
+        log("Runner 下载进度：" + percent + "%");
+      }
+    }
+  } finally {
+    reader.releaseLock();
+    await handle.close();
+  }
+  if (received === expectedSize && lastReported < 100) {
+    log("Runner 下载进度：100%");
+  }
+  return received;
+}
+
 async function removeStaleLock(lockPath) {
   try {
     const info = await stat(lockPath);
@@ -321,18 +362,32 @@ export async function ensureRunnerRuntime(options) {
     await mkdir(path.dirname(paths.archivePath), { recursive: true });
     let response;
     try {
-      response = await fetchImpl(manifest.runner.download_url, { redirect: "follow" });
+      const downloadTimeoutMs = options.downloadTimeoutMs ?? DEFAULT_DOWNLOAD_TIMEOUT_MS;
+      response = await fetchImpl(manifest.runner.download_url, {
+        redirect: "follow",
+        signal: AbortSignal.timeout(downloadTimeoutMs),
+      });
     } catch (error) {
       fail("bootstrap_network_failed", error instanceof Error ? error.message : String(error));
     }
     if (!response?.ok) {
       fail("bootstrap_network_failed", "GitHub Release returned HTTP " + (response?.status ?? "unknown"));
     }
-    const bytes = Buffer.from(await response.arrayBuffer());
-    if (bytes.length !== manifest.runner.size_bytes) {
+    let downloadedSize;
+    try {
+      downloadedSize = await downloadResponseToFile(
+        response,
+        tempArchive,
+        manifest.runner.size_bytes,
+        log,
+      );
+    } catch (error) {
+      if (error instanceof BootstrapError) throw error;
+      fail("bootstrap_network_failed", error instanceof Error ? error.message : String(error));
+    }
+    if (downloadedSize !== manifest.runner.size_bytes) {
       fail("bootstrap_integrity_failed", "downloaded Runner size does not match release manifest");
     }
-    await writeFile(tempArchive, bytes, { flag: "wx" });
     const actualSha = await sha256File(tempArchive);
     if (actualSha !== manifest.runner.sha256) {
       fail("bootstrap_integrity_failed", "downloaded Runner SHA-256 does not match release manifest");

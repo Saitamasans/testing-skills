@@ -40,8 +40,10 @@ async function fixture(overrides = {}) {
   let downloads = 0;
   let installs = 0;
   let installEnv = {};
-  const fetchImpl = async () => {
+  let fetchSignal;
+  const fetchImpl = async (_url, init) => {
     downloads += 1;
+    fetchSignal = init?.signal;
     return new Response(ASSET, { status: 200 });
   };
   const runProcess = async (_command, args, options) => {
@@ -80,6 +82,7 @@ async function fixture(overrides = {}) {
       downloads: () => downloads,
       installs: () => installs,
       installEnv: () => installEnv,
+      fetchSignal: () => fetchSignal,
     },
   };
 }
@@ -119,6 +122,9 @@ test("first bootstrap announces, downloads, verifies, and installs once", async 
   assert.equal(state.counters.downloads(), 1);
   assert.equal(state.counters.installs(), 1);
   assert.match(state.logs.join("\n"), /Runner 1\.0\.0/);
+  assert.match(state.logs.join("\n"), /Runner 下载进度：0%/);
+  assert.match(state.logs.join("\n"), /Runner 下载进度：100%/);
+  assert.ok(state.counters.fetchSignal());
   assert.ok(await readFile(result.cliPath));
   assert.equal(state.counters.installEnv().NPM_TOKEN, undefined);
   assert.equal(state.counters.installEnv().NODE_AUTH_TOKEN, undefined);
