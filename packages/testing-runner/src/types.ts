@@ -51,6 +51,15 @@ export interface SourceSnapshot {
   modified_at: string;
   input_kind: InputKind;
   sheet_names: string[];
+  rows?: OriginalSourceRow[];
+}
+
+export interface OriginalSourceRow {
+  source: string;
+  source_sheet: string;
+  source_row: number;
+  columns: string[];
+  raw_values: unknown[];
 }
 
 export interface NormalizedCase {
@@ -71,6 +80,16 @@ export interface NormalizedCaseSet {
   cases: NormalizedCase[];
   source_snapshot: SourceSnapshot;
   skill_invocation?: SkillInvocation;
+  normalization_metadata?: {
+    mapping: {
+      source_sha256: string;
+      proposal_sha256: string;
+      confirmed_at: string;
+      confirmed_by: string;
+      column_rules: unknown[];
+      split_rule_versions: string[];
+    };
+  };
 }
 export type RunStatus =
   | "planned"
