@@ -1,0 +1,38 @@
+name: Testing Runner
+
+on:
+  workflow_dispatch:
+  pull_request:
+
+jobs:
+  locked-web-api-tests:
+    runs-on: ubuntu-latest
+    env:
+      TESTING_API_TOKEN: ${{ secrets.TESTING_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Run locked Web/API tests
+        id: run-tests
+        continue-on-error: true
+        run: |
+          npx @saitamasans/testing-runner@1.0.0 run \
+            --manifest .testing-run/run-manifest.json \
+            --approval .testing-run/approval.json \
+            --output-dir .testing-run/result \
+            --mode ci
+
+      - name: Upload execution evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: testing-runner-result
+          path: .testing-run/result
+
+      - name: Fail job on nonzero runner exit
+        if: steps.run-tests.outcome == 'failure'
+        run: exit 1

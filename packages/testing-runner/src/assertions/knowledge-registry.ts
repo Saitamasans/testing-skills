@@ -1,5 +1,7 @@
+import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 
 import type { VerdictPolicy } from "./assertion-engine.js";
 
@@ -29,8 +31,14 @@ export interface RuleSelectionInput {
   automatic_assertion_count: number;
 }
 
-function knowledgePath(fileName: string): string {
-  return path.resolve(process.cwd(), "knowledge", fileName);
+function knowledgePath(fileName: string): URL {
+  const bundled = new URL(`../knowledge/${fileName}`, import.meta.url);
+  if (existsSync(bundled)) return bundled;
+
+  const workspace = new URL(`../../../../knowledge/${fileName}`, import.meta.url);
+  if (existsSync(workspace)) return workspace;
+
+  return pathToFileURL(path.resolve(process.cwd(), "knowledge", fileName));
 }
 
 async function readRules(fileName: string): Promise<KnowledgeRule[]> {

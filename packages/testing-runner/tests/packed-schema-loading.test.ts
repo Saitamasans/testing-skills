@@ -20,9 +20,10 @@ function runNpm(args: string[], cwd: string): string {
   return result.stdout;
 }
 
-test("packed Runner loads its bundled schemas outside the monorepo", async () => {
+test("packed Runner loads its bundled schemas and rules outside the monorepo", async () => {
   const temporaryRoot = await mkdtemp(path.join(tmpdir(), "testing-runner-pack-"));
   const consumerRoot = path.join(temporaryRoot, "consumer");
+  const originalCwd = process.cwd();
 
   try {
     await mkdir(consumerRoot);
@@ -41,8 +42,21 @@ test("packed Runner loads its bundled schemas outside the monorepo", async () =>
       "dist",
       "schema-registry.js",
     );
+    const knowledgePath = path.join(
+      consumerRoot,
+      "node_modules",
+      "@saitamasans",
+      "testing-runner",
+      "dist",
+      "assertions",
+      "knowledge-registry.js",
+    );
+    process.chdir(consumerRoot);
     const registry = (await import(pathToFileURL(registryPath).href)) as {
       validateDocument<T>(schemaId: string, value: unknown): T;
+    };
+    const knowledge = (await import(pathToFileURL(knowledgePath).href)) as {
+      loadKnowledgeRules(): Promise<unknown[]>;
     };
     const profile = {
       protocol_version: "1.0.0",
@@ -52,7 +66,9 @@ test("packed Runner loads its bundled schemas outside the monorepo", async () =>
     };
 
     assert.equal(registry.validateDocument("execution-profile", profile), profile);
+    assert.ok((await knowledge.loadKnowledgeRules()).length > 0);
   } finally {
+    process.chdir(originalCwd);
     await rm(temporaryRoot, { recursive: true, force: true });
     await rm(path.join(packageRoot, "dist"), { recursive: true, force: true });
   }

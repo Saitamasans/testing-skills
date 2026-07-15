@@ -1,0 +1,92 @@
+{
+  "protocol_version": "1.0.0",
+  "profile_id": "local-example",
+  "targets": {
+    "api": {
+      "kind": "api",
+      "origin": "https://api.example.test"
+    },
+    "web": {
+      "kind": "web",
+      "origin": "https://web.example.test"
+    },
+    "readonly_db": {
+      "kind": "database",
+      "dialect": "mysql",
+      "host": "readonly-db.example.test",
+      "database": "testing_readonly"
+    }
+  },
+  "credentials": {
+    "api_token": {
+      "source": "env",
+      "name": "TESTING_API_TOKEN"
+    }
+  },
+  "data": {
+    "item_payload": {
+      "name": "Example item"
+    }
+  },
+  "case_plans": {
+    "CASE-001": [
+      {
+        "type": "api.request",
+        "action_id": "CASE-001-create",
+        "target_alias": "api",
+        "method": "POST",
+        "path": "/api/items",
+        "input_ref": {
+          "source": "fixture",
+          "name": "item_payload"
+        },
+        "risk": "R1"
+      },
+      {
+        "type": "api.extract",
+        "action_id": "CASE-001-extract-id",
+        "target_alias": "api",
+        "from": "/body/id",
+        "as": "item_id",
+        "risk": "R0"
+      },
+      {
+        "type": "web.goto",
+        "action_id": "CASE-001-open-detail",
+        "target_alias": "web",
+        "url": "https://web.example.test/items/{{item_id}}",
+        "risk": "R0"
+      },
+      {
+        "type": "web.assert",
+        "action_id": "CASE-001-web-assert",
+        "target_alias": "web",
+        "assertion": "text=Example item",
+        "risk": "R0"
+      },
+      {
+        "type": "db.select",
+        "action_id": "CASE-001-db-readonly-check",
+        "target_alias": "readonly_db",
+        "query": "SELECT id, name FROM items WHERE id = ? LIMIT 1",
+        "params_ref": {
+          "source": "output",
+          "name": "item_id"
+        },
+        "limit": 1,
+        "risk": "R0"
+      },
+      {
+        "type": "cleanup.api",
+        "action_id": "CASE-001-cleanup",
+        "target_alias": "api",
+        "method": "DELETE",
+        "path": "/api/items/{{item_id}}",
+        "risk": "R1"
+      }
+    ]
+  },
+  "rule_versions": [
+    "1.0.0"
+  ]
+}
