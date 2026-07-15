@@ -10,10 +10,12 @@ import type {
   RunManifestCase,
 } from "../types.js";
 import { classifyRisk } from "./risk-classifier.js";
+import type { RiskContext } from "./risk-classifier.js";
 import { sha256Canonical } from "./canonical-json.js";
 
 export interface ExecutionProfileWithPlans extends ExecutionProfile {
   case_plans: Record<string, ManifestAction[]>;
+  risk_contexts?: Record<string, Omit<RiskContext, "target">>;
   rule_versions?: string[];
   manifest_id?: string;
 }
@@ -44,7 +46,14 @@ export function compileManifest(
       return {
         case_id: item.id,
         original: structuredClone(item.values) as RunManifestCase["original"],
-        steps: declaredActions.map((action) => compileAction(action, item.id, profile.targets)),
+        steps: declaredActions.map((action) =>
+          compileAction(
+            action,
+            item.id,
+            profile.targets,
+            plannedProfile.risk_contexts?.[action.action_id],
+          )
+        ),
       };
     });
 
@@ -67,6 +76,7 @@ function compileAction(
   action: ManifestAction,
   caseId: string,
   targets: Record<string, ExecutionTarget>,
+  riskContext: Omit<RiskContext, "target"> = {},
 ): ManifestAction {
   if (!action.action_id || !action.target_alias || !action.type) {
     throw new Error(`Declared action for ${caseId} is incomplete`);
@@ -75,7 +85,7 @@ function compileAction(
   if (!target) throw new Error(`Action ${action.action_id} references unknown target ${action.target_alias}`);
 
   const compiled = structuredClone(action);
-  compiled.risk = classifyRisk(compiled, { target }).level;
+  compiled.risk = classifyRisk(compiled, { ...riskContext, target }).level;
   compiled.source_step ??= caseId;
   compiled.retry_eligible ??= isRetryEligible(compiled);
   return compiled;

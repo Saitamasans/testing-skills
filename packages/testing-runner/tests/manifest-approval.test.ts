@@ -31,6 +31,14 @@ const REMARK = TEN_COLUMNS[9];
 type ProfileWithPlans = ExecutionProfile & {
   case_plans: Record<string, ManifestAction[]>;
   rule_versions?: string[];
+  risk_contexts?: Record<string, {
+    effect?: "business_write" | "asset_deduction" | "award_issuance" | "configuration_change" | "external_notification" | "irreversible";
+    data_sensitivity?: "normal" | "sensitive";
+    shared_data?: boolean;
+    high_privilege?: boolean;
+    mixed_target?: boolean;
+    environment_label?: string;
+  }>;
 };
 
 type CompiledManifest = RunManifest & {
@@ -218,7 +226,7 @@ test("approval locks manifest, source, target, runner and rule versions", () => 
     manifest,
     issued_by: "qa-owner",
     issued_at: "2026-07-15T00:00:00.000Z",
-    expires_at: "2026-07-15T01:00:00.000Z",
+    expires_at: "2999-07-15T01:00:00.000Z",
     approved_risks: ["R0", "R1", "R2"],
     approved_r3_action_ids: [],
   });
@@ -249,7 +257,7 @@ test("CI approval accepts only locked R0/R1 and R3 requires explicit action appr
     manifest,
     issued_by: "qa-owner",
     issued_at: "2026-07-15T00:00:00.000Z",
-    expires_at: "2026-07-15T01:00:00.000Z",
+    expires_at: "2999-07-15T01:00:00.000Z",
     approved_risks: ["R0", "R1", "R2"],
     approved_r3_action_ids: [],
   });
@@ -268,7 +276,7 @@ test("CI approval accepts only locked R0/R1 and R3 requires explicit action appr
     manifest: r3Manifest,
     issued_by: "qa-owner",
     issued_at: "2026-07-15T00:00:00.000Z",
-    expires_at: "2026-07-15T01:00:00.000Z",
+    expires_at: "2999-07-15T01:00:00.000Z",
     approved_risks: ["R0", "R1", "R2", "R3"],
     approved_r3_action_ids: [],
   });
@@ -278,11 +286,43 @@ test("CI approval accepts only locked R0/R1 and R3 requires explicit action appr
     manifest: r3Manifest,
     issued_by: "qa-owner",
     issued_at: "2026-07-15T00:00:00.000Z",
-    expires_at: "2026-07-15T01:00:00.000Z",
+    expires_at: "2999-07-15T01:00:00.000Z",
     approved_risks: ["R0", "R1", "R2", "R3"],
     approved_r3_action_ids: ["API-001-award"],
   });
   assert.equal(verifyApproval(r3Manifest, namedR3, "interactive").status, "approved");
+});
+
+test("approval verification blocks expired approvals", () => {
+  const manifest = compileManifest(caseSet(), profile()) as CompiledManifest;
+  const expired = createApproval({
+    manifest,
+    issued_by: "qa-owner",
+    issued_at: "2000-01-01T00:00:00.000Z",
+    expires_at: "2000-01-01T01:00:00.000Z",
+    approved_risks: ["R0", "R1", "R2"],
+    approved_r3_action_ids: [],
+  });
+  assert.match(verifyApproval(manifest, expired, "interactive").reasons.join("\n"), /expired/i);
+});
+
+test("manifest compiler passes actual-effect risk context into classification", () => {
+  const contextualProfile = profile();
+  contextualProfile.risk_contexts = {
+    "API-001-request": {
+      environment_label: "test",
+      effect: "award_issuance",
+    },
+    "API-002-db": {
+      environment_label: "test",
+      data_sensitivity: "sensitive",
+      shared_data: true,
+    },
+  };
+
+  const manifest = compileManifest(caseSet(), contextualProfile);
+  assert.equal(manifest.cases[0]?.steps[0]?.risk, "R3");
+  assert.equal(manifest.cases[1]?.steps[0]?.risk, "R2");
 });
 
 test("target origin normalization is deterministic and excludes database hosts from URL approval scope", () => {

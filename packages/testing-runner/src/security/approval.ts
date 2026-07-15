@@ -74,6 +74,10 @@ export function verifyApproval(
   if (JSON.stringify([...approval.targets].sort()) !== JSON.stringify([...(lockableManifest.targets ?? [])].sort())) {
     reasons.push("target origin mismatch");
   }
+  const expiryMs = Date.parse(approval.expires_at);
+  if (!Number.isFinite(expiryMs) || expiryMs <= Date.now()) {
+    reasons.push("approval expired");
+  }
 
   const actionRisks = manifest.cases.flatMap((item) => item.steps.map((action) => action.risk));
   const approvedRisks = new Set(approval.approved_risks);
