@@ -74,8 +74,7 @@ export function normalizeSourceRows(rows: readonly SourceRow[]): NormalizedCase[
     const normalizedValues = rawValues.map(asText);
     const source = `${row.sheet}!${row.row}`;
     const originalStatus = normalizedValues[8] ?? "";
-    const divider =
-      row.divider ?? (normalizedValues[0] === "【模块分割行】" || originalStatus === "-");
+    const divider = row.divider ?? normalizedValues[0] === "【模块分割行】";
     const values = Object.fromEntries(
       TEN_COLUMNS.map((column, index) => [column, normalizedValues[index] ?? ""]),
     ) as Record<TenColumnName, string>;

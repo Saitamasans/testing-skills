@@ -135,6 +135,16 @@ test("recognizes a divider row from formula display values", async () => {
   assert.equal(result.cases[0]?.status, "-");
 });
 
+test("rejects a dash status on an ordinary Excel case", async () => {
+  const dir = await mkdtemp(path.join(os.tmpdir(), "runner-native-"));
+  const file = path.join(dir, "dash-status.xlsx");
+  const rows = CASE_ROWS.map((row) => [...row]);
+  rows[1]![8] = "-";
+  await writeWorkbook(file, TEN_COLUMNS, rows);
+
+  await assert.rejects(() => readStandardExcel(file), /执行结果无效：-（用例!3）/);
+});
+
 test("rejects empty and duplicate IDs in native and standard inputs", async () => {
   const dir = await mkdtemp(path.join(os.tmpdir(), "runner-native-"));
   const nativeValue = JSON.parse(await readFile(REPORT_FIXTURE, "utf8")) as {
