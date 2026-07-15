@@ -1,6 +1,7 @@
 import type { Page } from "playwright";
 
 import { VariableStore } from "../actions/variable-store.js";
+import type { DatabaseAdapter } from "../actions/database-adapter.js";
 import type { RuntimeSecretStore } from "../security/credential-resolver.js";
 import type { SecretFingerprint } from "../security/redactor.js";
 import type { DataReference, ExecutionTarget, ManifestAction } from "../types.js";
@@ -53,6 +54,7 @@ export interface ExecutionContext {
   mode: "interactive" | "ci";
   redactionFingerprints: SecretFingerprint[];
   lastApiResponse?: LastApiResponse;
+  databaseAdapters?: Partial<Record<"mysql" | "postgresql", DatabaseAdapter>>;
 }
 
 export interface CreateExecutionContextInput {
@@ -63,6 +65,7 @@ export interface CreateExecutionContextInput {
   page?: Page;
   mode?: "interactive" | "ci";
   redactionFingerprints?: SecretFingerprint[];
+  databaseAdapters?: Partial<Record<"mysql" | "postgresql", DatabaseAdapter>>;
 }
 
 export class ActionExecutionError extends Error {
@@ -88,6 +91,7 @@ export function createExecutionContext(input: CreateExecutionContextInput): Exec
     redactionFingerprints: input.redactionFingerprints ?? input.secrets.fingerprints(),
   };
   if (input.page) context.page = input.page;
+  if (input.databaseAdapters) context.databaseAdapters = input.databaseAdapters;
   return context;
 }
 

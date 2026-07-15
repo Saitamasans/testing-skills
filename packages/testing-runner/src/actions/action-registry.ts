@@ -1,4 +1,5 @@
 import { executeApiAction } from "./api-adapter.js";
+import { executeDatabaseAction } from "./database-adapter.js";
 import { executeWebAction } from "./web-adapter.js";
 import {
   ActionExecutionError,
@@ -65,12 +66,11 @@ export async function executeAction(action: ManifestAction, context: ExecutionCo
       return blocked(action, startedAt, "unknown_action", `Action type is not allowlisted: ${action.type}`);
     }
     targetFor(context, action.target_alias, actionTargetKind(action));
-    if (action.type === "db.select") {
-      return blocked(action, startedAt, "database_not_enabled", "Database actions are handled by the read-only adapter task");
-    }
-    const result = action.type.startsWith("web.") || action.type === "cleanup.web"
-      ? await executeWebAction(action as Parameters<typeof executeWebActionType>[0], context)
-      : await executeApiAction(action as Parameters<typeof executeApiActionType>[0], context);
+    const result = action.type === "db.select"
+      ? await executeDatabaseAction(action, context)
+      : action.type.startsWith("web.") || action.type === "cleanup.web"
+        ? await executeWebAction(action as Parameters<typeof executeWebActionType>[0], context)
+        : await executeApiAction(action as Parameters<typeof executeApiActionType>[0], context);
     return completed(action, startedAt, result, context);
   } catch (error) {
     if (error instanceof ActionExecutionError) {
