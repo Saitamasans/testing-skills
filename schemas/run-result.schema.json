@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://saitamasans.dev/schemas/run-result.schema.json",
+  "title": "Run result protocol 1.0.0",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["protocol_version", "run_id", "manifest_hash", "run_status", "started_at", "cases"],
+  "properties": {
+    "protocol_version": { "const": "1.0.0" },
+    "run_id": { "allOf": [{ "$ref": "https://saitamasans.dev/schemas/persisted-value.schema.json#/$defs/persistedString" }, { "type": "string", "minLength": 1 }] },
+    "manifest_hash": { "$ref": "#/$defs/sha256" },
+    "run_status": { "$ref": "#/$defs/runStatus" },
+    "started_at": { "allOf": [{ "$ref": "https://saitamasans.dev/schemas/persisted-value.schema.json#/$defs/persistedString" }, { "type": "string", "minLength": 1 }] },
+    "completed_at": { "allOf": [{ "$ref": "https://saitamasans.dev/schemas/persisted-value.schema.json#/$defs/persistedString" }, { "type": "string", "minLength": 1 }] },
+    "cases": { "type": "array", "items": { "$ref": "#/$defs/caseResult" } }
+  },
+  "$defs": {
+    "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "runStatus": { "enum": ["planned", "running", "completed", "blocked", "executor_error", "infrastructure_error", "manual_required"] },
+    "caseStatus": { "enum": ["未执行", "通过", "不通过", "待定"] },
+    "assertion": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["assertion_id", "passed"],
+      "properties": {
+        "assertion_id": { "allOf": [{ "$ref": "https://saitamasans.dev/schemas/persisted-value.schema.json#/$defs/persistedString" }, { "type": "string", "minLength": 1 }] },
+        "passed": { "type": "boolean" },
+        "actual": { "$ref": "https://saitamasans.dev/schemas/persisted-value.schema.json#/$defs/persistedJsonValue" },
+        "expected": { "$ref": "https://saitamasans.dev/schemas/persisted-value.schema.json#/$defs/persistedJsonValue" }
+      }
+    },
+    "evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256"],
+      "properties": {
+        "path": { "allOf": [{ "$ref": "https://saitamasans.dev/schemas/persisted-value.schema.json#/$defs/persistedString" }, { "type": "string", "minLength": 1 }] },
+        "sha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "caseResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["case_id", "case_status", "run_status", "assertions", "evidence"],
+      "properties": {
+        "case_id": { "allOf": [{ "$ref": "https://saitamasans.dev/schemas/persisted-value.schema.json#/$defs/persistedString" }, { "type": "string", "minLength": 1 }] },
+        "case_status": { "$ref": "#/$defs/caseStatus" },
+        "run_status": { "$ref": "#/$defs/runStatus" },
+        "assertions": { "type": "array", "items": { "$ref": "#/$defs/assertion" } },
+        "evidence": { "type": "array", "items": { "$ref": "#/$defs/evidence" } }
+      }
+    }
+  }
+}

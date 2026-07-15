@@ -3,7 +3,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { buildReportId, renderBoth, renderXlsx, validateReport } from "../tooling/test-case-renderer.mjs";
+import { buildReportId, renderBoth, renderHtml, renderXlsx, validateReport } from "../tooling/test-case-renderer.mjs";
 
 const fixture = JSON.parse(await fs.readFile(new URL("./fixtures/sample-report.json", import.meta.url), "utf8"));
 
@@ -31,6 +31,16 @@ test("renders xlsx html and all sheet previews", async () => {
   assert.match(html, /待定/);
   const previews = await fs.readdir(path.join(out, "sample-previews"));
   assert.equal(previews.length, fixture.sheets.length);
+});
+
+test("generated inline script is syntactically valid", async () => {
+  const out = await fs.mkdtemp(path.join(os.tmpdir(), "testing-skills-html-"));
+  const target = path.join(out, "sample.html");
+  await renderHtml(fixture, target);
+  const html = await fs.readFile(target, "utf8");
+  const script = html.match(/<script>([\s\S]*?)<\/script>/);
+  assert.ok(script);
+  assert.doesNotThrow(() => new Function(script[1]));
 });
 
 test("portable xlsx fallback has no third-party runtime dependency", async () => {

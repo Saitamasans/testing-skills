@@ -3,8 +3,13 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
+  "workspaces": [
+    "packages/*"
+  ],
   "scripts": {
     "test": "node --test tests/*.test.mjs",
+    "test:runner": "npm test --workspace @saitamasans/testing-runner",
+    "build:runner": "npm run build --workspace @saitamasans/testing-runner",
     "render:sample": "node tooling/test-case-renderer.mjs --input tests/fixtures/sample-report.json --output-dir build/test-output --basename sample"
   },
   "devDependencies": {

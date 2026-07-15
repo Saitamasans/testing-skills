@@ -1,0 +1,38 @@
+[
+  {
+    "rule_id": "duplicate-submission-idempotency",
+    "version": "1.0.0",
+    "source": "high-risk-heuristics",
+    "title": "Duplicate submission should be idempotent for business writes",
+    "confidence": 0.8,
+    "verdict_policy": "candidate_only",
+    "automatic": false,
+    "needs_human_review": true,
+    "applies_to": { "risks": ["duplicate-submission", "idempotency"] },
+    "exceptions": ["Product explicitly defines repeat submissions as separate records"]
+  },
+  {
+    "rule_id": "asset-deduction-single-effect",
+    "version": "1.0.0",
+    "source": "high-risk-heuristics",
+    "title": "Asset deduction should not be applied more than once",
+    "confidence": 0.85,
+    "verdict_policy": "candidate_only",
+    "automatic": false,
+    "needs_human_review": true,
+    "applies_to": { "risks": ["asset-deduction", "duplicate-submission"] },
+    "exceptions": ["Approved repeated deduction scenario"]
+  },
+  {
+    "rule_id": "tenant-isolation-candidate",
+    "version": "1.0.0",
+    "source": "high-risk-heuristics",
+    "title": "Tenant data should remain isolated across accounts",
+    "confidence": 0.78,
+    "verdict_policy": "candidate_only",
+    "automatic": false,
+    "needs_human_review": true,
+    "applies_to": { "risks": ["tenant-isolation", "authorization"] },
+    "exceptions": ["Shared tenant deliberately configured for test"]
+  }
+]

@@ -1,0 +1,77 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://saitamasans.dev/schemas/execution-profile.schema.json",
+  "title": "Execution profile protocol 1.0.0",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["protocol_version", "profile_id", "targets", "credentials"],
+  "properties": {
+    "protocol_version": { "const": "1.0.0" },
+    "profile_id": { "type": "string", "minLength": 1 },
+    "targets": {
+      "type": "object",
+      "propertyNames": { "pattern": "^[A-Za-z][A-Za-z0-9_-]*$" },
+      "additionalProperties": { "$ref": "#/$defs/target" }
+    },
+    "credentials": {
+      "type": "object",
+      "propertyNames": {
+        "pattern": "^[A-Za-z][A-Za-z0-9_-]*$"
+      },
+      "additionalProperties": { "$ref": "#/$defs/credentialReference" }
+    }
+  },
+  "$defs": {
+    "safeHttpUrl": {
+      "type": "string",
+      "pattern": "^[Hh][Tt][Tt][Pp][Ss]?://[^\\s]+$"
+    },
+    "databaseHost": {
+      "type": "string",
+      "minLength": 1
+    },
+    "credentialReference": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source", "name"],
+      "properties": {
+        "source": { "const": "env" },
+        "name": { "type": "string", "pattern": "^[A-Z][A-Z0-9_]*$" }
+      }
+    },
+    "target": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "origin"],
+          "properties": {
+            "kind": { "const": "web" },
+            "origin": { "$ref": "#/$defs/safeHttpUrl" }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "origin"],
+          "properties": {
+            "kind": { "const": "api" },
+            "origin": { "$ref": "#/$defs/safeHttpUrl" }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "dialect", "host", "database"],
+          "properties": {
+            "kind": { "const": "database" },
+            "dialect": { "enum": ["mysql", "postgresql"] },
+            "host": { "$ref": "#/$defs/databaseHost" },
+            "port": { "type": "integer", "minimum": 1, "maximum": 65535 },
+            "database": { "type": "string", "pattern": "^[A-Za-z0-9_.-]+$" }
+          }
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,50 @@
+[
+  {
+    "rule_id": "http-status-body-consistency",
+    "version": "1.0.0",
+    "source": "technical-rules",
+    "title": "HTTP status and body consistency",
+    "confidence": 1,
+    "verdict_policy": "auto",
+    "automatic": true,
+    "needs_human_review": false,
+    "applies_to": { "protocols": ["http", "api"] },
+    "exceptions": ["Endpoints intentionally returning empty 204 bodies"]
+  },
+  {
+    "rule_id": "declared-content-type",
+    "version": "1.0.0",
+    "source": "technical-rules",
+    "title": "Declared content type matches response shape",
+    "confidence": 0.98,
+    "verdict_policy": "auto",
+    "automatic": true,
+    "needs_human_review": false,
+    "applies_to": { "protocols": ["http", "api"] },
+    "exceptions": ["Download endpoints with binary evidence"]
+  },
+  {
+    "rule_id": "auth-leakage",
+    "version": "1.0.0",
+    "source": "technical-rules",
+    "title": "Authentication material must not appear in persisted evidence",
+    "confidence": 1,
+    "verdict_policy": "auto",
+    "automatic": true,
+    "needs_human_review": false,
+    "applies_to": { "protocols": ["http", "web", "api"] },
+    "exceptions": ["Explicit absence or redaction markers"]
+  },
+  {
+    "rule_id": "cross-layer-identifier-consistency",
+    "version": "1.0.0",
+    "source": "technical-rules",
+    "title": "Identifiers reused across Web, API and DB must match exactly",
+    "confidence": 0.95,
+    "verdict_policy": "auto",
+    "automatic": true,
+    "needs_human_review": false,
+    "applies_to": { "protocols": ["web", "api", "database"] },
+    "exceptions": ["Documented masking or aliasing rules"]
+  }
+]

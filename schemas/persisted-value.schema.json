@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://saitamasans.dev/schemas/persisted-value.schema.json",
+  "title": "Persisted non-secret value policy",
+  "$defs": {
+    "persistedString": { "type": "string" },
+    "persistedJsonValue": {
+      "oneOf": [
+        { "$ref": "#/$defs/persistedString" },
+        { "type": "number" },
+        { "type": "boolean" },
+        { "type": "null" },
+        { "type": "array", "items": { "$ref": "#/$defs/persistedJsonValue" } },
+        {
+          "type": "object",
+          "additionalProperties": { "$ref": "#/$defs/persistedJsonValue" }
+        }
+      ]
+    }
+  }
+}

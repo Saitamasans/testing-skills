@@ -30,4 +30,4 @@ if __name__ == "__main__":
     if problems:
         print("\n".join(problems))
         raise SystemExit(1)
-    print("七个源 Skill 校验通过")
+    print("八个源 Skill 校验通过")

@@ -55,6 +55,15 @@
       "short_description": "开测前识别需求歧义、缺失规则与待确认事项",
       "default_prompt": "请从测试视角澄清这份需求，暂时不要生成用例。",
       "case_output": false
+    },
+    {
+      "source": "skill-sources/web-api-test-execution-evidence/Web-API测试用例自动执行与证据回填_Skill.md",
+      "slug": "web-api-test-execution-evidence",
+      "display_name": "Web/API 测试用例自动执行与证据回填",
+      "short_description": "安全执行 Web/API 用例并回填证据与双格式报告",
+      "default_prompt": "请执行这批 Web/API 测试用例，先检查准备材料并展示执行预览。",
+      "case_output": false,
+      "execution_skill": true
     }
   ]
 }
