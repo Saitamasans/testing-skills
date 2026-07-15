@@ -23,6 +23,8 @@
         "sha256": { "$ref": "#/$defs/sha256" }
       }
     },
+    "targets": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/safeHttpUrl" } },
+    "rule_versions": { "type": "array", "items": { "type": "string", "minLength": 1 } },
     "cases": {
       "type": "array",
       "minItems": 1,

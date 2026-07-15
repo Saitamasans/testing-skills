@@ -258,6 +258,8 @@ export interface RunManifest {
   manifest_id: string;
   runner: { version: ProtocolVersion };
   source: { path: string; sha256: string };
+  targets?: HttpUrl[];
+  rule_versions?: string[];
   cases: RunManifestCase[];
 }
 
@@ -266,6 +268,8 @@ export interface Approval {
   approval_id: string;
   manifest_hash: string;
   source_hash: string;
+  runner?: { version: ProtocolVersion };
+  rule_versions?: string[];
   targets: HttpUrl[];
   approved_risks: RiskLevel[];
   approved_r3_action_ids: string[];

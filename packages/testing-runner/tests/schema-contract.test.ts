@@ -85,6 +85,8 @@ const validApproval = {
   approval_id: "approval-001",
   manifest_hash: "b".repeat(64),
   source_hash: "a".repeat(64),
+  runner: { version: "1.0.0" },
+  rule_versions: ["1.0.0"],
   targets: ["https://api.example.test"],
   approved_risks: ["R0"],
   approved_r3_action_ids: [],
