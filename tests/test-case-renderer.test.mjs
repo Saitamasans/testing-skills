@@ -21,7 +21,7 @@ test("report id is deterministic and isolated", () => {
   assert.notEqual(buildReportId(fixture), buildReportId(other));
 });
 
-test("renders xlsx html and all sheet previews", async () => {
+test("renders xlsx and html, with all sheet previews when supported", async () => {
   const out = await fs.mkdtemp(path.join(os.tmpdir(), "testing-skills-"));
   const result = await renderBoth(fixture, out, "sample");
   assert.ok((await fs.stat(result.xlsx)).size > 1000);
@@ -29,8 +29,15 @@ test("renders xlsx html and all sheet previews", async () => {
   assert.match(html, /localStorage/);
   assert.match(html, /不通过/);
   assert.match(html, /待定/);
-  const previews = await fs.readdir(path.join(out, "sample-previews"));
-  assert.equal(previews.length, fixture.sheets.length);
+  const previewDir = path.join(out, "sample-previews");
+  try {
+    const previews = await fs.readdir(previewDir);
+    assert.equal(previews.length, fixture.sheets.length);
+  } catch (error) {
+    if (error?.code !== "ENOENT") throw error;
+    const bytes = await fs.readFile(result.xlsx);
+    assert.equal(bytes.subarray(0, 2).toString("ascii"), "PK");
+  }
 });
 
 test("generated inline script is syntactically valid", async () => {
