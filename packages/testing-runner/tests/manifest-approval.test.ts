@@ -4,6 +4,8 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 
+import ExcelJS from "exceljs";
+
 import { runApproveCommand } from "../src/commands/approve.js";
 import { runPlanCommand } from "../src/commands/plan.js";
 import { TEN_COLUMNS } from "../src/input/detect-input.js";
@@ -106,6 +108,16 @@ async function writeProfileFixture(directory: string, actionRisk: "R1" | "R3" = 
       ],
     },
   }, null, 2), "utf8");
+  return file;
+}
+
+async function writeNonstandardExcelFixture(directory: string): Promise<string> {
+  const file = path.join(directory, "nonstandard.xlsx");
+  const workbook = new ExcelJS.Workbook();
+  const sheet = workbook.addWorksheet("Cases");
+  sheet.addRow(["编号", "模块", "标题", "步骤", "预期", "优先级", "执行状态"]);
+  sheet.addRow(["API-001", "orders", "create order", "POST /orders", "201 created", "P0", "未执行"]);
+  await workbook.xlsx.writeFile(file);
   return file;
 }
 
@@ -416,6 +428,27 @@ test("plan command writes inspection, readiness, normalized profile, manifest an
   }
   const manifestJson = await readJson(path.join(outputDir, "run-manifest.json"));
   assert.equal(validateDocument("run-manifest", manifestJson), manifestJson);
+});
+
+test("plan command writes a mapping proposal before blocking nonstandard Excel without approval", async () => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), "runner-plan-mapping-"));
+  const input = await writeNonstandardExcelFixture(directory);
+  const profileFile = await writeProfileFixture(directory);
+  const outputDir = path.join(directory, "out");
+
+  await assert.rejects(
+    () => runPlanCommand({ input, profile: profileFile, outputDir }),
+    /mapping-approval/,
+  );
+
+  const inspection = await readJson(path.join(outputDir, "input-inspection.json")) as { input_kind?: string };
+  assert.equal(inspection.input_kind, "nonstandard-excel");
+  const proposal = await readJson(path.join(outputDir, "mapping-proposal.json")) as { proposal_sha256?: string };
+  assert.equal(proposal.proposal_sha256?.length, 64);
+  await assert.rejects(
+    () => readFile(path.join(outputDir, "run-manifest.json"), "utf8"),
+    /ENOENT/,
+  );
 });
 
 test("approve command writes scoped approval and requires explicit R3 action ids", async () => {

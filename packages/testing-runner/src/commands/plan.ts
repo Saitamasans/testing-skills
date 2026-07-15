@@ -15,7 +15,7 @@ import {
   proposeMapping,
   type MappingProposal,
 } from "../input/mapping-proposal.js";
-import type { ExecutionProfile, NormalizedCaseSet, RunManifest } from "../types.js";
+import type { ExecutionProfile, NormalizedCaseSet, RunManifest, SourceSnapshot } from "../types.js";
 
 export interface PlanCommandOptions {
   input: string;
@@ -31,10 +31,31 @@ export interface PlanCommandResult {
   readiness: ReturnType<typeof assessReadiness>;
 }
 
+type ReadCasesResult =
+  | {
+      state: "ready";
+      caseSet: NormalizedCaseSet;
+      mappingProposal?: MappingProposal;
+    }
+  | {
+      state: "mapping-approval-required";
+      mappingProposal: MappingProposal;
+    };
+
+const MAPPING_APPROVAL_REQUIRED_MESSAGE = "Nonstandard Excel requires --mapping-approval before manifest planning";
+
 export async function runPlanCommand(options: PlanCommandOptions): Promise<PlanCommandResult> {
   await mkdir(options.outputDir, { recursive: true });
   const profile = await readProfile(options.profile);
-  const { caseSet, mappingProposal } = await readCases(options);
+  const cases = await readCases(options);
+  if (cases.state === "mapping-approval-required") {
+    await writeInputInspection(options.outputDir, cases.mappingProposal.source_snapshot);
+    await writeJson(options.outputDir, "mapping-proposal.json", cases.mappingProposal);
+    throw new Error(MAPPING_APPROVAL_REQUIRED_MESSAGE);
+  }
+
+  const { caseSet } = cases;
+  const mappingProposal = "mappingProposal" in cases ? cases.mappingProposal : undefined;
   const manifest = compileManifest(caseSet, profile);
   const readiness = assessReadiness({
     case_set: caseSet,
@@ -43,10 +64,7 @@ export async function runPlanCommand(options: PlanCommandOptions): Promise<PlanC
     runtime_probe: defaultRuntimeProbe(),
   });
 
-  await writeJson(options.outputDir, "input-inspection.json", {
-    input_kind: caseSet.source_snapshot.input_kind,
-    source_snapshot: caseSet.source_snapshot,
-  });
+  await writeInputInspection(options.outputDir, caseSet.source_snapshot);
   if (mappingProposal) await writeJson(options.outputDir, "mapping-proposal.json", mappingProposal);
   await writeJson(options.outputDir, "readiness.json", readiness);
   await writeJson(options.outputDir, "execution-profile.normalized.json", profile);
@@ -72,24 +90,30 @@ async function readProfile(file: string): Promise<ExecutionProfileWithPlans> {
   return raw;
 }
 
-async function readCases(options: PlanCommandOptions): Promise<{
-  caseSet: NormalizedCaseSet;
-  mappingProposal?: MappingProposal;
-}> {
+async function readCases(options: PlanCommandOptions): Promise<ReadCasesResult> {
   const kind = await detectInputKind(options.input);
-  if (kind === "native-report") return { caseSet: await readNativeReport(options.input) };
-  if (kind === "standard-excel") return { caseSet: await readStandardExcel(options.input) };
+  if (kind === "native-report") return { state: "ready", caseSet: await readNativeReport(options.input) };
+  if (kind === "standard-excel") return { state: "ready", caseSet: await readStandardExcel(options.input) };
 
   const inspection = await inspectNonstandardWorkbook(options.input);
   const mappingProposal = proposeMapping(inspection);
   if (!options.mappingApproval) {
-    throw new Error("Nonstandard Excel requires --mapping-approval before manifest planning");
+    return { state: "mapping-approval-required", mappingProposal };
   }
   const approval = JSON.parse(await readFile(options.mappingApproval, "utf8")) as Parameters<typeof applyConfirmedMapping>[1];
   return {
+    state: "ready",
     caseSet: await applyConfirmedMapping(mappingProposal, approval),
     mappingProposal,
   };
+}
+
+async function writeInputInspection(directory: string, snapshot: SourceSnapshot): Promise<void> {
+  const { rows: _rows, ...sourceSnapshot } = snapshot;
+  await writeJson(directory, "input-inspection.json", {
+    input_kind: sourceSnapshot.input_kind,
+    source_snapshot: sourceSnapshot,
+  });
 }
 
 async function writeJson(directory: string, fileName: string, value: unknown): Promise<void> {
