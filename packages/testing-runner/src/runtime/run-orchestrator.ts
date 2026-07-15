@@ -2,6 +2,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import type { AssertionResult, EvidenceReference, JsonValue, RunManifest, RunResult } from "../types.js";
+import { sha256Canonical } from "../compiler/canonical-json.js";
 import type { ActionOutcome } from "./execution-context.js";
 import { EventWriter } from "./event-writer.js";
 import { storeEvidence } from "./evidence-store.js";
@@ -105,7 +106,7 @@ export async function runApprovedManifest(input: RunInput): Promise<RunResult> {
   const result: RunResult = {
     protocol_version: "1.0.0",
     run_id,
-    manifest_hash: input.manifest.manifest_id,
+    manifest_hash: sha256Canonical(input.manifest),
     run_status: runStatus,
     started_at: new Date().toISOString(),
     completed_at: new Date().toISOString(),

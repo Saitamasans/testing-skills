@@ -5,6 +5,8 @@ import { Command } from "commander";
 
 import { runApproveCommand } from "./commands/approve.js";
 import { runPlanCommand } from "./commands/plan.js";
+import { runRunCommand, runCommandErrorExitCode } from "./commands/run.js";
+import { reportVerificationErrorExitCode, runVerifyReportCommand } from "./commands/verify-report.js";
 
 export async function runCli(argv = process.argv): Promise<void> {
   const program = new Command();
@@ -41,6 +43,40 @@ export async function runCli(argv = process.argv): Promise<void> {
       confirmedBy?: string;
     }) => {
       await runApproveCommand(options);
+    });
+
+  program.command("run")
+    .requiredOption("--manifest <file>")
+    .requiredOption("--approval <file>")
+    .requiredOption("--output-dir <dir>")
+    .option("--mode <mode>", "interactive or ci", "interactive")
+    .action(async (options: {
+      manifest: string;
+      approval: string;
+      outputDir: string;
+      mode: "interactive" | "ci";
+    }) => {
+      try {
+        process.exitCode = await runRunCommand(options);
+      } catch (error) {
+        console.error(error instanceof Error ? error.message : String(error));
+        process.exitCode = runCommandErrorExitCode(error);
+      }
+    });
+
+  program.command("verify-report")
+    .requiredOption("--report <file>")
+    .requiredOption("--run-result <file>")
+    .action(async (options: {
+      report: string;
+      runResult: string;
+    }) => {
+      try {
+        process.exitCode = await runVerifyReportCommand(options);
+      } catch (error) {
+        console.error(error instanceof Error ? error.message : String(error));
+        process.exitCode = reportVerificationErrorExitCode();
+      }
     });
 
   await program.parseAsync(argv);
