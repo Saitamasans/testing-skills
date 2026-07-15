@@ -349,6 +349,66 @@ test("E3 exposes all available preparation categories before approval", () => {
   );
 });
 
+test("E1 still returns compile and runtime blockers found in the same pass", () => {
+  const runtimeProbe: RuntimeProbeReport = {
+    ...healthyRuntimeProbe(),
+    browsers: [
+      {
+        package: "chromium",
+        source: "playwright",
+        version: "not installed",
+        installed: false,
+        impact: "web actions cannot run",
+      },
+    ],
+  };
+
+  const assessment = assessReadiness({
+    case_set: caseSet([
+      normalizedCase("WEB-001", {
+        [STEPS]: "",
+        [EXPECTED]: "",
+      }),
+    ]),
+    manifest: publicWebManifest(),
+    profile: completeProfile({ targets: {}, credentials: {}, public_targets: [] }),
+    required_targets: [{ alias: "public_web", kind: "web", example_origin: "https://docs.example.test" }],
+    required_credentials: [
+      {
+        alias: "web_user",
+        target_alias: "public_web",
+        kind: "web",
+        env: "TESTING_WEB_USER",
+      },
+    ],
+    runtime_probe: runtimeProbe,
+  });
+
+  assert.equal(assessment.level, "E1");
+  assert.deepEqual(assessment.blocking, [
+    "Missing target: public_web",
+    "Missing credential reference: web_user",
+    "WEB-001: test steps are empty.",
+    "WEB-001: expected result is empty.",
+    "Missing runtime software: chromium",
+  ]);
+});
+
+test("cleanup strategy is assessed from manifest cleanup actions and profile state", () => {
+  const assessment = assessReadiness({
+    case_set: readyCaseSet,
+    manifest: readyManifest,
+    profile: completeProfile({ cleanup_strategies: {} }),
+    runtime_probe: healthyRuntimeProbe(),
+  });
+
+  assert.equal(assessment.level, "E2");
+  assert.deepEqual(assessment.blocking, ["API-001: cleanup strategy is missing."]);
+  assert.deepEqual(assessment.copyable_examples.cleanup, {
+    cleanup_strategies: { "API-001": "api" },
+  });
+});
+
 test("copyable guidance is context-aware and never embeds secret values", () => {
   const assessment = assessReadiness({
     case_set: readyCaseSet,
@@ -477,6 +537,11 @@ test("runtime probe reports missing software without install instructions", () =
       impact: "database assertions are unavailable",
     },
   ]);
+  assert.equal(assessment.runtime_probe.runner.version, "1.0.0");
+  assert.equal(assessment.runtime_probe.node.required_version, ">=20");
+  assert.equal(assessment.runtime_probe.browsers[0]?.package, "chromium");
+  assert.equal(assessment.runtime_probe.target_connectivity[0]?.target_alias, "api");
+  assert.equal(assessment.runtime_probe.optional_db_drivers[0]?.package, "pg");
   assert.equal("install_command" in assessment.runtime_probe.missing_software[0]!, false);
   assert.equal(assessment.level, "E2");
   assert.deepEqual(assessment.blocking, ["Missing runtime software: chromium"]);

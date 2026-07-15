@@ -108,6 +108,11 @@ export interface MissingSoftware {
 }
 
 export interface RuntimeProbeAssessment {
+  runner?: RuntimeCompatibilityStatus;
+  node?: RuntimeCompatibilityStatus;
+  browsers: RuntimeBrowserStatus[];
+  target_connectivity: RuntimeConnectivityStatus[];
+  optional_db_drivers: RuntimeDbDriverStatus[];
   missing_software: MissingSoftware[];
 }
 
@@ -329,6 +334,16 @@ function assessCompilation(cases: readonly NormalizedCase[], input: ReadinessInp
     state.blockers.push(`${item.case_id}: mandatory assertion is missing.`);
   }
 
+  for (const item of input.manifest?.cases ?? []) {
+    const hasCleanupAction = item.steps.some((action) =>
+      action.type === "cleanup.api" || action.type === "cleanup.web"
+    );
+    if (!hasCleanupAction) continue;
+    if (input.profile?.cleanup_strategies?.[item.case_id]) continue;
+    state.missingCleanup = true;
+    state.blockers.push(`${item.case_id}: cleanup strategy is missing.`);
+  }
+
   for (const gap of input.compilation_gaps ?? []) {
     state.blockers.push(gapMessage(gap));
     if (gap.kind === "missing_data") {
@@ -347,7 +362,19 @@ function assessCompilation(cases: readonly NormalizedCase[], input: ReadinessInp
     for (const name of names) dataExamples[name] = { source: "fixture", name };
   }
   if (Object.keys(dataExamples).length > 0) copyable.data = { data: dataExamples };
-  if (state.missingCleanup) copyable.cleanup = { cleanup_strategies: { "CASE-ID": "api" } };
+  if (state.missingCleanup) {
+    const cleanupExamples: Record<string, string> = {};
+    for (const item of input.manifest?.cases ?? []) {
+      const hasCleanupAction = item.steps.some((action) =>
+        action.type === "cleanup.api" || action.type === "cleanup.web"
+      );
+      if (hasCleanupAction && !input.profile?.cleanup_strategies?.[item.case_id]) {
+        cleanupExamples[item.case_id] = "api";
+      }
+    }
+    if (Object.keys(cleanupExamples).length === 0) cleanupExamples["CASE-ID"] = "api";
+    copyable.cleanup = { cleanup_strategies: cleanupExamples };
+  }
 
   return state;
 }
@@ -369,7 +396,18 @@ function assessRuntime(
   const missing: MissingSoftware[] = [];
   const blockers: string[] = [];
   const optional: string[] = [];
-  if (!probe) return { probe: { missing_software: [] }, blockers, optional };
+  if (!probe) {
+    return {
+      probe: {
+        browsers: [],
+        target_connectivity: [],
+        optional_db_drivers: [],
+        missing_software: [],
+      },
+      blockers,
+      optional,
+    };
+  }
 
   for (const item of [probe.runner, probe.node]) {
     if (item.compatible) continue;
@@ -399,7 +437,18 @@ function assessRuntime(
   }
 
   if (missing.length > 0) copyable.runtime = { missing_software: missing };
-  return { probe: { missing_software: missing }, blockers, optional };
+  return {
+    probe: {
+      runner: probe.runner,
+      node: probe.node,
+      browsers: [...probe.browsers],
+      target_connectivity: [...probe.target_connectivity],
+      optional_db_drivers: [...probe.optional_db_drivers],
+      missing_software: missing,
+    },
+    blockers,
+    optional,
+  };
 }
 
 function availableCategories(
@@ -462,7 +511,7 @@ export function assessReadiness(input: ReadinessInput): ReadinessAssessment {
     return {
       level: "E1",
       available: availableCategories(cases, input, targetBlockers, credentialBlockers, compile, runtime.blockers),
-      blocking: e1Blockers,
+      blocking: [...e1Blockers, ...e2Blockers],
       optional: runtime.optional,
       reasons: ["Complete target addresses and credential references before compiling the manifest."],
       copyable_examples: copyable,
