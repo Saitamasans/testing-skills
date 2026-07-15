@@ -111,6 +111,16 @@ test("executes a mixed approved API and Web flow with declared variable reuse", 
     for (const action of actions) outcomes.push(await executeAction(action, context));
 
     assert.deepEqual(outcomes.map(({ status }) => status), Array.from({ length: actions.length }, () => "passed"));
+    assert.ok(
+      outcomes
+        .find((outcome) => outcome.action_id === "API-001-create")
+        ?.attachments.some((item) => item.relativePath.endsWith("api-request-response.json")),
+    );
+    assert.ok(
+      outcomes
+        .find((outcome) => outcome.action_id === "API-001-web-assert")
+        ?.attachments.some((item) => item.relativePath.endsWith("web-page.png") && Buffer.isBuffer(item.content)),
+    );
     assert.equal(context.variables.get("created_item_id").value, app.lastCreatedItemId());
     assert.equal(context.variables.get("created_item_id").provenance.action_id, "API-001-extract");
   } finally {

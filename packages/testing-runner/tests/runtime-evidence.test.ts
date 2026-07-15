@@ -3,6 +3,7 @@ import { mkdtemp, readFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
+import { setTimeout as delay } from "node:timers/promises";
 
 import { EventWriter } from "../src/runtime/event-writer.js";
 import { storeEvidence } from "../src/runtime/evidence-store.js";
@@ -56,6 +57,27 @@ function manifest(): RunManifest {
         ],
       },
     ],
+  };
+}
+
+function manifestWithCases(caseIds: string[]): RunManifest {
+  const base = manifest();
+  return {
+    ...base,
+    cases: caseIds.map((caseId) => ({
+      ...base.cases[0]!,
+      case_id: caseId,
+      original: {
+        ...base.cases[0]!.original,
+        "用例 ID": caseId,
+      } as RunManifest["cases"][number]["original"],
+      steps: [
+        {
+          ...base.cases[0]!.steps[0]!,
+          action_id: `${caseId}-request`,
+        },
+      ],
+    })),
   };
 }
 
@@ -143,4 +165,117 @@ test("orchestrator preserves first-attempt evidence when retry succeeds", async 
   assert.equal(events.filter((event) => event.attempt === 1 && event.type === "action.failed").length, 1);
   assert.equal(events.filter((event) => event.type === "retry.scheduled").length, 1);
   assert.ok(await readFile(path.join(directory, "run-retry", "evidence", "CASE-001", "attempt-1", "failure.json"), "utf8"));
+});
+
+test("orchestrator stores passed action attachments and records the real run window", async () => {
+  const directory = await tempDir("runner-success-evidence-");
+  let actionStartedAt = 0;
+
+  const result = await runApprovedManifest({
+    manifest: manifest(),
+    outputDir: directory,
+    run_id: "run-success-evidence",
+    executeAction: async (action) => {
+      actionStartedAt = Date.now();
+      await delay(20);
+      return {
+        action_id: action.action_id,
+        started_at: new Date(actionStartedAt).toISOString(),
+        finished_at: new Date().toISOString(),
+        status: "passed",
+        actual: { status: 200 },
+        attachments: [
+          {
+            relativePath: `${action.action_id}/web-success.png`,
+            content: Buffer.from("fake png"),
+          },
+          {
+            relativePath: `${action.action_id}/api-request-response.json`,
+            content: JSON.stringify({ request: { method: "GET", path: "/ok" }, response: { status: 200 } }),
+          },
+        ],
+      };
+    },
+  });
+
+  const runStartedAt = Date.parse(result.started_at);
+  assert.ok(runStartedAt <= actionStartedAt, `${result.started_at} should be captured before the action starts`);
+  assert.ok(Date.parse(result.completed_at ?? "") >= actionStartedAt);
+  assert.equal(result.cases[0]?.case_status, "通过");
+  assert.equal(result.cases[0]?.evidence.length, 2);
+
+  const runDir = path.join(directory, "run-success-evidence");
+  assert.equal(
+    await readFile(path.join(runDir, "evidence", "CASE-001", "attempt-1", "CASE-001-request", "web-success.png"), "utf8"),
+    "fake png",
+  );
+  const apiEvidence = await readFile(
+    path.join(runDir, "evidence", "CASE-001", "attempt-1", "CASE-001-request", "api-request-response.json"),
+    "utf8",
+  );
+  assert.match(apiEvidence, /"status":200|status/);
+});
+
+test("orchestrator marks executed expectation conflicts as 待定", async () => {
+  const directory = await tempDir("runner-pending-evidence-");
+  const result = await runApprovedManifest({
+    manifest: manifest(),
+    outputDir: directory,
+    run_id: "run-pending",
+    executeAction: async (action) => ({
+      action_id: action.action_id,
+      started_at: new Date().toISOString(),
+      finished_at: new Date().toISOString(),
+      status: "pending",
+      actual: {
+        conflict: "coupon expiry boundary",
+        product_rule: "client click time",
+        api_rule: "server receive time",
+      },
+      attachments: [
+        {
+          relativePath: `${action.action_id}/expectation-conflict.json`,
+          content: JSON.stringify({ product_rule: "client click time", api_rule: "server receive time" }),
+        },
+      ],
+    }),
+  });
+
+  assert.equal(result.run_status, "completed");
+  assert.equal(result.cases[0]?.run_status, "completed");
+  assert.equal(result.cases[0]?.case_status, "待定");
+  assert.equal(result.cases[0]?.evidence.length, 2);
+  assert.ok(await readFile(path.join(directory, "run-pending", "evidence", "CASE-001", "attempt-1", "pending.json"), "utf8"));
+});
+
+test("orchestrator aggregates repeated failed Test Cases by root cause without dropping evidence", async () => {
+  const directory = await tempDir("runner-root-defect-");
+  const result = await runApprovedManifest({
+    manifest: manifestWithCases(["IDEMP-001", "IDEMP-002"]),
+    outputDir: directory,
+    run_id: "run-root-defect",
+    executeAction: async (action) => ({
+      action_id: action.action_id,
+      started_at: new Date().toISOString(),
+      finished_at: new Date().toISOString(),
+      status: "failed",
+      root_cause_key: "orders.idempotency.duplicate-lock",
+      actual: { duplicate_orders: 2, locked_stock_times: 2 },
+      attachments: [
+        {
+          relativePath: `${action.action_id}/duplicate-order.json`,
+          content: JSON.stringify({ duplicate_orders: 2, locked_stock_times: 2 }),
+        },
+      ],
+      error: { type: "business_assertion_failed", message: "Duplicate idempotency key created two orders" },
+    }),
+  });
+
+  assert.equal(result.cases.length, 2);
+  assert.deepEqual(result.cases.map((item) => item.case_status), ["不通过", "不通过"]);
+  assert.equal(result.cases.every((item) => item.evidence.length >= 2), true);
+  assert.equal(result.defects?.length, 1);
+  assert.equal(result.defects?.[0]?.root_cause_key, "orders.idempotency.duplicate-lock");
+  assert.deepEqual(result.defects?.[0]?.case_ids, ["IDEMP-001", "IDEMP-002"]);
+  assert.equal(result.defects?.[0]?.evidence.length, 2);
 });

@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { mkdtemp, mkdir, readFile, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
+import { gzipSync } from "node:zlib";
 
 import {
   ensureRunnerRuntime,
@@ -12,7 +14,45 @@ import {
   validateReleaseManifest,
 } from "../skill-sources/web-api-test-execution-evidence/scripts/runner-bootstrap-lib.mjs";
 
-const ASSET = Buffer.from("runner archive fixture");
+function tarHeader(name, size, type = "0") {
+  const header = Buffer.alloc(512, 0);
+  header.write(name, 0, 100, "utf8");
+  header.write("0000777\0", 100, 8, "ascii");
+  header.write("0000000\0", 108, 8, "ascii");
+  header.write("0000000\0", 116, 8, "ascii");
+  header.write(size.toString(8).padStart(11, "0") + "\0", 124, 12, "ascii");
+  header.write("00000000000\0", 136, 12, "ascii");
+  header.fill(" ", 148, 156, "ascii");
+  header.write(type, 156, 1, "ascii");
+  header.write("ustar\0", 257, 6, "ascii");
+  header.write("00", 263, 2, "ascii");
+  let checksum = 0;
+  for (const byte of header) checksum += byte;
+  header.write(checksum.toString(8).padStart(6, "0") + "\0 ", 148, 8, "ascii");
+  return header;
+}
+
+function tarEntry(name, content) {
+  const body = Buffer.isBuffer(content) ? content : Buffer.from(content, "utf8");
+  const padding = Buffer.alloc((512 - (body.length % 512)) % 512, 0);
+  return Buffer.concat([tarHeader(name, body.length), body, padding]);
+}
+
+function runnerArchiveFixture() {
+  const archive = gzipSync(Buffer.concat([
+    tarHeader("package/", 0, "5"),
+    tarHeader("package/dist/", 0, "5"),
+    tarEntry("package/dist/cli.js", "#!/usr/bin/env node\nconsole.log('runner');\n"),
+    Buffer.alloc(1024, 0),
+  ]));
+  return {
+    archive,
+    sha256: createHash("sha256").update(archive).digest("hex"),
+  };
+}
+
+const RUNNER_ARCHIVE = runnerArchiveFixture();
+const ASSET = RUNNER_ARCHIVE.archive;
 
 function manifest(overrides = {}) {
   return {
@@ -21,7 +61,7 @@ function manifest(overrides = {}) {
       name: "@saitamasans/testing-runner",
       version: "1.0.1",
       download_url: "https://github.com/Saitamasans/testing-skills/releases/download/testing-runner-v1.0.1/saitamasans-testing-runner-1.0.1.tgz",
-      sha256: "7f9dd89333da866ba6dba0a0bcff749c5e70d0558753811259f179ea9db74071",
+      sha256: RUNNER_ARCHIVE.sha256,
       size_bytes: ASSET.length,
       minimum_node: 20,
       ...overrides,
@@ -41,32 +81,15 @@ async function fixture(overrides = {}) {
   const logs = [];
   let downloads = 0;
   let installs = 0;
-  let installEnv = {};
-  let installCommand;
-  let installArgs = [];
   let fetchSignal;
   const fetchImpl = async (_url, init) => {
     downloads += 1;
     fetchSignal = init?.signal;
     return new Response(ASSET, { status: 200 });
   };
-  const runProcess = async (command, args, options) => {
+  const runProcess = async () => {
     installs += 1;
-    installCommand = command;
-    installArgs = args;
-    installEnv = options.env;
-    const prefix = args[args.indexOf("--prefix") + 1];
-    const cli = path.join(
-      prefix,
-      "node_modules",
-      "@saitamasans",
-      "testing-runner",
-      "dist",
-      "cli.js",
-    );
-    await mkdir(path.dirname(cli), { recursive: true });
-    await writeFile(cli, "#!/usr/bin/env node\n", "utf8");
-    return 0;
+    throw new Error("bootstrap must not call npm/pnpm/npx");
   };
   return {
     options: {
@@ -90,10 +113,7 @@ async function fixture(overrides = {}) {
     counters: {
       downloads: () => downloads,
       installs: () => installs,
-      installEnv: () => installEnv,
       fetchSignal: () => fetchSignal,
-      installCommand: () => installCommand,
-      installArgs: () => installArgs,
       npmCli: () => npmCli,
     },
   };
@@ -127,23 +147,36 @@ test("resolves a versioned user cache and renders the required notice", async ()
   assert.ok(notice.includes(home));
 });
 
-test("first bootstrap announces, downloads, verifies, and installs once", async () => {
+test("first bootstrap announces, downloads, verifies, and extracts once", async () => {
   const state = await fixture();
   const result = await ensureRunnerRuntime(state.options);
   assert.equal(result.cacheHit, false);
   assert.equal(state.counters.downloads(), 1);
-  assert.equal(state.counters.installs(), 1);
+  assert.equal(state.counters.installs(), 0);
   assert.match(state.logs.join("\n"), /Runner 1\.0\.1/);
   assert.match(state.logs.join("\n"), /Runner 下载进度：0%/);
   assert.match(state.logs.join("\n"), /Runner 下载进度：100%/);
   assert.ok(state.counters.fetchSignal());
-  assert.equal(state.counters.installCommand(), process.execPath);
-  assert.equal(state.counters.installArgs()[0], state.counters.npmCli());
-  assert.ok(await readFile(result.cliPath));
-  assert.equal(state.counters.installEnv().NPM_TOKEN, undefined);
-  assert.equal(state.counters.installEnv().NODE_AUTH_TOKEN, undefined);
-  assert.equal(state.counters.installEnv().TEST_API_KEY, undefined);
-  assert.equal(state.counters.installEnv().TEST_DATABASE_URL, undefined);
+  assert.match(await readFile(result.cliPath, "utf8"), /console\.log\('runner'\)/);
+});
+
+test("bootstrap extracts the locked archive without any npm command", async () => {
+  const home = await mkdtemp(path.join(os.tmpdir(), "runner-bootstrap-no-npm-"));
+  const { archive, sha256 } = runnerArchiveFixture();
+  const result = await ensureRunnerRuntime({
+    manifest: manifest({ sha256, size_bytes: archive.length }),
+    env: { TESTING_SKILLS_HOME: home },
+    fetchImpl: async () => new Response(archive, { status: 200 }),
+    runProcess: async () => {
+      throw new Error("npm/pnpm/npx must not be called by bootstrap extraction");
+    },
+    log: () => {},
+    lockRetryMs: 5,
+    preferCurl: false,
+  });
+
+  assert.equal(result.cacheHit, false);
+  assert.match(await readFile(result.cliPath, "utf8"), /console\.log\('runner'\)/);
 });
 
 test("hash mismatch removes the archive and blocks installation", async () => {
@@ -209,7 +242,7 @@ test("production bootstrap prefers curl with visible progress before fetch fallb
   assert.ok(curlArgs.includes("--progress-bar"));
   assert.ok(curlArgs.includes(manifest().runner.download_url));
   assert.match(state.logs.join("\n"), /curl/);
-  assert.equal(state.counters.installs(), 1);
+  assert.equal(state.counters.installs(), 0);
 });
 
 test("second bootstrap reuses the verified cache", async () => {
@@ -218,17 +251,17 @@ test("second bootstrap reuses the verified cache", async () => {
   const second = await ensureRunnerRuntime(state.options);
   assert.equal(second.cacheHit, true);
   assert.equal(state.counters.downloads(), 1);
-  assert.equal(state.counters.installs(), 1);
+  assert.equal(state.counters.installs(), 0);
 });
 
-test("concurrent bootstrap performs one download and one install", async () => {
+test("concurrent bootstrap performs one download and one extraction", async () => {
   const state = await fixture();
   const [first, second] = await Promise.all([
     ensureRunnerRuntime(state.options),
     ensureRunnerRuntime(state.options),
   ]);
   assert.equal(state.counters.downloads(), 1);
-  assert.equal(state.counters.installs(), 1);
+  assert.equal(state.counters.installs(), 0);
   assert.equal(first.runtimeDir, second.runtimeDir);
   assert.equal([first.cacheHit, second.cacheHit].filter(Boolean).length, 1);
 });

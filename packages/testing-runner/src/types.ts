@@ -298,6 +298,13 @@ export interface RunCaseResult {
   evidence: EvidenceReference[];
 }
 
+export interface RootDefectSummary {
+  defect_id: string;
+  root_cause_key: string;
+  case_ids: string[];
+  evidence: EvidenceReference[];
+}
+
 export interface RunResult {
   protocol_version: ProtocolVersion;
   run_id: string;
@@ -306,4 +313,5 @@ export interface RunResult {
   started_at: string;
   completed_at?: string;
   cases: RunCaseResult[];
+  defects?: RootDefectSummary[];
 }

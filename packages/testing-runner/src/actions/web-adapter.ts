@@ -111,11 +111,34 @@ async function executeAssert(action: WebAssertAction, context: ExecutionContext)
   throw new ActionExecutionError("blocked", "unsupported_assertion", `Unsupported Web assertion: ${action.assertion}`);
 }
 
+async function withPageScreenshot(
+  action: WebExecutableAction,
+  context: ExecutionContext,
+  result: ActionStepResult,
+): Promise<ActionStepResult> {
+  if (!context.page) return result;
+  const content = await context.page.screenshot({ fullPage: true }).catch(() => undefined);
+  if (!content) return result;
+  return {
+    ...result,
+    attachments: [
+      ...(result.attachments ?? []),
+      { relativePath: `${action.action_id}/web-page.png`, content },
+    ],
+  };
+}
+
 export async function executeWebAction(action: WebExecutableAction, context: ExecutionContext): Promise<ActionStepResult> {
-  if (action.type === "web.goto") return executeGoto(action, context);
-  if (action.type === "web.fill") return executeFill(action, context);
-  if (action.type === "web.click" || action.type === "cleanup.web") return executeClick(action, context);
-  if (action.type === "web.select") return executeSelect(action, context);
-  if (action.type === "web.wait") return executeWait(action, context);
-  return executeAssert(action, context);
+  const result = action.type === "web.goto"
+    ? await executeGoto(action, context)
+    : action.type === "web.fill"
+      ? await executeFill(action, context)
+      : action.type === "web.click" || action.type === "cleanup.web"
+        ? await executeClick(action, context)
+        : action.type === "web.select"
+          ? await executeSelect(action, context)
+          : action.type === "web.wait"
+            ? await executeWait(action, context)
+            : await executeAssert(action, context);
+  return withPageScreenshot(action, context, result);
 }

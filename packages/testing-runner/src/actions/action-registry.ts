@@ -55,6 +55,7 @@ function completed(action: ManifestAction, startedAt: string, result: ActionStep
   if (result.actual !== undefined) {
     outcome.actual = redact(result.actual, { fingerprints: context.redactionFingerprints });
   }
+  if (result.root_cause_key) outcome.root_cause_key = result.root_cause_key;
   if (result.error) outcome.error = result.error;
   return outcome;
 }

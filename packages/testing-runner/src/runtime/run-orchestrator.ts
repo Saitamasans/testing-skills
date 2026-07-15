@@ -17,6 +17,7 @@ export interface RunInput {
 
 const PASSED = "通过" as const;
 const FAILED = "不通过" as const;
+const PENDING = "待定" as const;
 const NOT_EXECUTED = "未执行" as const;
 
 function runId(manifest: RunManifest): string {
@@ -31,12 +32,34 @@ function jsonValue(value: unknown): JsonValue {
   return JSON.parse(JSON.stringify(value ?? null)) as JsonValue;
 }
 
+async function storeOutcomeAttachments(
+  runDir: string,
+  caseId: string,
+  attempt: number,
+  outcome: ActionOutcome,
+): Promise<EvidenceReference[]> {
+  const references: EvidenceReference[] = [];
+  for (const attachment of outcome.attachments) {
+    const entry = await storeEvidence({
+      runDir,
+      case_id: caseId,
+      attempt,
+      relativePath: attachment.relativePath,
+      content: attachment.content,
+    });
+    references.push(evidenceReference(entry));
+  }
+  return references;
+}
+
 export async function runApprovedManifest(input: RunInput): Promise<RunResult> {
   const run_id = input.run_id ?? runId(input.manifest);
   const runDir = path.join(input.outputDir, run_id);
+  const startedAt = new Date().toISOString();
   await mkdir(runDir, { recursive: true });
   const writer = new EventWriter(path.join(runDir, "run-events.jsonl"));
   const cases: RunResult["cases"] = [];
+  const defects = new Map<string, { case_ids: string[]; evidence: EvidenceReference[] }>();
   let runStatus: RunResult["run_status"] = "completed";
 
   for (const item of input.manifest.cases) {
@@ -52,9 +75,26 @@ export async function runApprovedManifest(input: RunInput): Promise<RunResult> {
       for (const action of item.steps) {
         await writer.appendEvent({ run_id, case_id: item.case_id, action_id: action.action_id, attempt, type: "action.started" });
         const outcome = await input.executeAction(action, attempt);
+        evidence.push(...await storeOutcomeAttachments(runDir, item.case_id, attempt, outcome));
         if (outcome.status === "passed") {
           await writer.appendEvent({ run_id, case_id: item.case_id, action_id: action.action_id, attempt, type: "action.passed", data: outcome.actual });
           continue;
+        }
+
+        if (outcome.status === "pending") {
+          await writer.appendEvent({ run_id, case_id: item.case_id, action_id: action.action_id, attempt, type: "action.pending", data: outcome.actual });
+          const entry = await storeEvidence({
+            runDir,
+            case_id: item.case_id,
+            attempt,
+            relativePath: "pending.json",
+            content: JSON.stringify(outcome, null, 2),
+          });
+          evidence.push(evidenceReference(entry));
+          caseStatus = PENDING;
+          assertions.push({ assertion_id: action.action_id, passed: false, actual: jsonValue(outcome.actual) });
+          completed = true;
+          break;
         }
 
         await writer.appendEvent({ run_id, case_id: item.case_id, action_id: action.action_id, attempt, type: "action.failed", data: outcome.error });
@@ -65,7 +105,8 @@ export async function runApprovedManifest(input: RunInput): Promise<RunResult> {
           relativePath: "failure.json",
           content: JSON.stringify(outcome, null, 2),
         });
-        evidence.push(evidenceReference(entry));
+        const failureEvidence = evidenceReference(entry);
+        evidence.push(failureEvidence);
 
         const decision = retryDecision({ kind: outcome.error?.type ?? outcome.status }, attempt);
         if (decision.retry) {
@@ -77,6 +118,12 @@ export async function runApprovedManifest(input: RunInput): Promise<RunResult> {
         if (outcome.status === "failed") {
           caseStatus = FAILED;
           assertions.push({ assertion_id: action.action_id, passed: false, actual: jsonValue(outcome.actual) });
+          if (outcome.root_cause_key) {
+            const summary = defects.get(outcome.root_cause_key) ?? { case_ids: [], evidence: [] };
+            if (!summary.case_ids.includes(item.case_id)) summary.case_ids.push(item.case_id);
+            summary.evidence.push(failureEvidence);
+            defects.set(outcome.root_cause_key, summary);
+          }
         } else {
           caseStatus = NOT_EXECUTED;
           caseRunStatus = outcome.status === "manual_required" ? "manual_required" : "executor_error";
@@ -108,10 +155,18 @@ export async function runApprovedManifest(input: RunInput): Promise<RunResult> {
     run_id,
     manifest_hash: sha256Canonical(input.manifest),
     run_status: runStatus,
-    started_at: new Date().toISOString(),
+    started_at: startedAt,
     completed_at: new Date().toISOString(),
     cases,
   };
+  if (defects.size > 0) {
+    result.defects = [...defects.entries()].map(([root_cause_key, summary], index) => ({
+      defect_id: `DEFECT-${String(index + 1).padStart(3, "0")}`,
+      root_cause_key,
+      case_ids: summary.case_ids,
+      evidence: summary.evidence,
+    }));
+  }
   await writeFile(path.join(runDir, "run-result.json"), `${JSON.stringify(result, null, 2)}\n`, "utf8");
   return result;
 }

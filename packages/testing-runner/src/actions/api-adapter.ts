@@ -35,6 +35,13 @@ function selectedHeaders(headers: Headers): Record<string, string> {
   return Object.fromEntries([...headers.entries()].filter(([key]) => selected.has(key.toLowerCase())));
 }
 
+function jsonAttachment(relativePath: string, value: unknown) {
+  return {
+    relativePath,
+    content: `${JSON.stringify(value, null, 2)}\n`,
+  };
+}
+
 async function executeRequest(
   action: ApiRequestAction | CleanupApiAction,
   context: ExecutionContext,
@@ -57,12 +64,14 @@ async function executeRequest(
     url: response.url,
   };
   context.lastApiResponse = lastResponse;
+  const actual = {
+    request: { method: action.method, path: url.pathname },
+    response: { status: response.status, headers: lastResponse.headers, body: boundedBody(body) },
+  };
   return {
     status: response.ok ? "passed" : "failed",
-    actual: {
-      request: { method: action.method, path: url.pathname },
-      response: { status: response.status, headers: lastResponse.headers, body: boundedBody(body) },
-    },
+    actual,
+    attachments: [jsonAttachment(`${action.action_id}/api-request-response.json`, actual)],
   };
 }
 
@@ -87,9 +96,14 @@ function executeAssert(action: ApiAssertAction, context: ExecutionContext): Acti
     throw new ActionExecutionError("blocked", "unsupported_assertion", `Unsupported API assertion: ${action.assertion}`);
   }
   const expected = Number(match[1]);
+  const actual = { status: context.lastApiResponse.status, expected };
   return {
     status: context.lastApiResponse.status === expected ? "passed" : "failed",
-    actual: { status: context.lastApiResponse.status, expected },
+    actual,
+    attachments: [jsonAttachment(`${action.action_id}/api-assertion.json`, {
+      assertion: action.assertion,
+      actual,
+    })],
   };
 }
 

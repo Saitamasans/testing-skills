@@ -9,9 +9,15 @@ import type { DataReference, ExecutionTarget, ManifestAction } from "../types.js
 export type ActionOutcomeStatus =
   | "passed"
   | "failed"
+  | "pending"
   | "blocked"
   | "manual_required"
   | "executor_error";
+
+export interface ActionAttachment {
+  relativePath: string;
+  content: string | Buffer;
+}
 
 export interface ActionOutcome {
   action_id: string;
@@ -19,7 +25,8 @@ export interface ActionOutcome {
   finished_at: string;
   status: ActionOutcomeStatus;
   actual?: unknown;
-  attachments: string[];
+  attachments: ActionAttachment[];
+  root_cause_key?: string;
   error?: {
     type: string;
     message: string;
@@ -29,7 +36,8 @@ export interface ActionOutcome {
 export interface ActionStepResult {
   status: ActionOutcomeStatus;
   actual?: unknown;
-  attachments?: string[];
+  attachments?: ActionAttachment[];
+  root_cause_key?: string;
   error?: {
     type: string;
     message: string;
