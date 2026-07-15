@@ -4,7 +4,6 @@
   "title": "Execution profile protocol 1.0.0",
   "type": "object",
   "additionalProperties": false,
-  "propertyNames": { "not": { "$ref": "#/$defs/sensitiveKey" } },
   "required": ["protocol_version", "profile_id", "targets", "credentials"],
   "properties": {
     "protocol_version": { "const": "1.0.0" },
@@ -17,10 +16,7 @@
     "credentials": {
       "type": "object",
       "propertyNames": {
-        "allOf": [
-          { "pattern": "^[A-Za-z][A-Za-z0-9_-]*$" },
-          { "not": { "$ref": "#/$defs/sensitiveKey" } }
-        ]
+        "pattern": "^[A-Za-z][A-Za-z0-9_-]*$"
       },
       "additionalProperties": { "$ref": "#/$defs/credentialReference" }
     }
@@ -28,22 +24,11 @@
   "$defs": {
     "safeHttpUrl": {
       "type": "string",
-      "allOf": [
-        { "pattern": "^https?://(?![^/?#]*@)[^\\s]+$" },
-        { "not": { "$ref": "#/$defs/credentialQuery" } }
-      ]
-    },
-    "credentialQuery": {
-      "type": "string",
-      "pattern": "[?&](?:[Pp][Aa][Ss][Ss][Ww][Oo][Rr][Dd]|[Ss][Ee][Cc][Rr][Ee][Tt]|[Tt][Oo][Kk][Ee][Nn]|[Cc][Oo][Oo][Kk][Ii][Ee]|[Aa][Pp][Ii][_-]?[Kk][Ee][Yy])="
+      "pattern": "^[Hh][Tt][Tt][Pp][Ss]?://[^\\s]+$"
     },
     "databaseHost": {
       "type": "string",
-      "pattern": "^(?![A-Za-z][A-Za-z0-9+.-]*://)(?!.*@)[A-Za-z0-9.-]+$"
-    },
-    "sensitiveKey": {
-      "type": "string",
-      "pattern": "[Pp][Aa][Ss][Ss][Ww][Oo][Rr][Dd]|[Ss][Ee][Cc][Rr][Ee][Tt]|[Tt][Oo][Kk][Ee][Nn][_-]?[Vv][Aa][Ll][Uu][Ee]|[Cc][Oo][Oo][Kk][Ii][Ee][_-]?[Vv][Aa][Ll][Uu][Ee]|[Cc][Oo][Nn][Nn][Ee][Cc][Tt][Ii][Oo][Nn][_-]?[Ss][Tt][Rr][Ii][Nn][Gg](?:[_-]?[Vv][Aa][Ll][Uu][Ee])?"
+      "minLength": 1
     },
     "credentialReference": {
       "type": "object",

@@ -3,6 +3,7 @@ import { existsSync, readFileSync } from "node:fs";
 import type { ErrorObject, ValidateFunction } from "ajv";
 import { Ajv2020 } from "ajv/dist/2020.js";
 
+import { findPersistedSecretIssues } from "./security/persisted-secret-policy.js";
 import type { SchemaId } from "./types.js";
 
 interface JsonSchema {
@@ -17,6 +18,12 @@ const schemaFiles: Record<SchemaId, string> = {
   approval: "approval.schema.json",
   "run-result": "run-result.schema.json",
 };
+const semanticSchemaIds = new Set<SchemaId>([
+  "execution-profile",
+  "run-manifest",
+  "approval",
+  "run-result",
+]);
 
 function loadSchema(fileName: string): JsonSchema {
   const bundledUrl = new URL(`./schemas/${fileName}`, import.meta.url);
@@ -89,6 +96,12 @@ export function validateDocument<T>(schemaId: SchemaId, value: unknown): T {
       schemaId,
       normalizeErrors(validator?.errors ?? []),
     );
+  }
+  if (semanticSchemaIds.has(schemaId)) {
+    const semanticErrors = findPersistedSecretIssues(value);
+    if (semanticErrors.length > 0) {
+      throw new ProtocolValidationError(schemaId, semanticErrors);
+    }
   }
   return value as T;
 }

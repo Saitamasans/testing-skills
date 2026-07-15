@@ -21,10 +21,7 @@
     "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
     "safeHttpUrl": {
       "type": "string",
-      "allOf": [
-        { "pattern": "^https?://(?![^/?#]*@)[^\\s]+$" },
-        { "not": { "pattern": "[?&](?:[Pp][Aa][Ss][Ss][Ww][Oo][Rr][Dd]|[Ss][Ee][Cc][Rr][Ee][Tt]|[Tt][Oo][Kk][Ee][Nn]|[Cc][Oo][Oo][Kk][Ii][Ee]|[Aa][Pp][Ii][_-]?[Kk][Ee][Yy])=" } }
-      ]
+      "pattern": "^[Hh][Tt][Tt][Pp][Ss]?://[^\\s]+$"
     }
   }
 }

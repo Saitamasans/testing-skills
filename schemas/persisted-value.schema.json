@@ -3,28 +3,7 @@
   "$id": "https://saitamasans.dev/schemas/persisted-value.schema.json",
   "title": "Persisted non-secret value policy",
   "$defs": {
-    "credentialKey": {
-      "type": "string",
-      "pattern": "^(?:[Pp][Aa][Ss][Ss][Ww][Oo][Rr][Dd]|[Ss][Ee][Cc][Rr][Ee][Tt]|[Cc][Ll][Ii][Ee][Nn][Tt][_-]?[Ss][Ee][Cc][Rr][Ee][Tt]|(?:[Aa][Cc][Cc][Ee][Ss][Ss]|[Rr][Ee][Ff][Rr][Ee][Ss][Hh]|[Ii][Dd])[_-]?[Tt][Oo][Kk][Ee][Nn]|[Tt][Oo][Kk][Ee][Nn](?:[_-]?[Vv][Aa][Ll][Uu][Ee])?|[Aa][Uu][Tt][Hh][Oo][Rr][Ii][Zz][Aa][Tt][Ii][Oo][Nn]|[Pp][Rr][Oo][Xx][Yy][_-]?[Aa][Uu][Tt][Hh][Oo][Rr][Ii][Zz][Aa][Tt][Ii][Oo][Nn]|[Cc][Oo][Oo][Kk][Ii][Ee](?:[_-]?[Vv][Aa][Ll][Uu][Ee])?|[Ss][Ee][Tt][_-]?[Cc][Oo][Oo][Kk][Ii][Ee]|[Aa][Pp][Ii][_-]?[Kk][Ee][Yy]|[Cc][Oo][Nn][Nn][Ee][Cc][Tt][Ii][Oo][Nn][_-]?[Ss][Tt][Rr][Ii][Nn][Gg](?:[_-]?[Vv][Aa][Ll][Uu][Ee])?)$"
-    },
-    "persistedString": {
-      "type": "string",
-      "allOf": [
-        {
-          "not": {
-            "pattern": "[?&](?:[Pp][Aa][Ss][Ss][Ww][Oo][Rr][Dd]|[Ss][Ee][Cc][Rr][Ee][Tt]|[Cc][Ll][Ii][Ee][Nn][Tt][_-]?[Ss][Ee][Cc][Rr][Ee][Tt]|(?:[Aa][Cc][Cc][Ee][Ss][Ss]|[Rr][Ee][Ff][Rr][Ee][Ss][Hh]|[Ii][Dd])[_-]?[Tt][Oo][Kk][Ee][Nn]|[Tt][Oo][Kk][Ee][Nn]|[Aa][Uu][Tt][Hh][Oo][Rr][Ii][Zz][Aa][Tt][Ii][Oo][Nn]|[Pp][Rr][Oo][Xx][Yy][_-]?[Aa][Uu][Tt][Hh][Oo][Rr][Ii][Zz][Aa][Tt][Ii][Oo][Nn]|[Cc][Oo][Oo][Kk][Ii][Ee]|[Ss][Ee][Tt][_-]?[Cc][Oo][Oo][Kk][Ii][Ee]|[Aa][Pp][Ii][_-]?[Kk][Ee][Yy]|[Cc][Oo][Nn][Nn][Ee][Cc][Tt][Ii][Oo][Nn][_-]?[Ss][Tt][Rr][Ii][Nn][Gg])="
-          }
-        },
-        {
-          "not": {
-            "pattern": "(?:^|[\\s,;{(\\[\"'])(?:[Pp][Aa][Ss][Ss][Ww][Oo][Rr][Dd]|[Ss][Ee][Cc][Rr][Ee][Tt]|[Cc][Ll][Ii][Ee][Nn][Tt][_-]?[Ss][Ee][Cc][Rr][Ee][Tt]|(?:[Aa][Cc][Cc][Ee][Ss][Ss]|[Rr][Ee][Ff][Rr][Ee][Ss][Hh]|[Ii][Dd])[_-]?[Tt][Oo][Kk][Ee][Nn]|[Tt][Oo][Kk][Ee][Nn]|[Aa][Uu][Tt][Hh][Oo][Rr][Ii][Zz][Aa][Tt][Ii][Oo][Nn]|[Pp][Rr][Oo][Xx][Yy][_-]?[Aa][Uu][Tt][Hh][Oo][Rr][Ii][Zz][Aa][Tt][Ii][Oo][Nn]|[Cc][Oo][Oo][Kk][Ii][Ee]|[Ss][Ee][Tt][_-]?[Cc][Oo][Oo][Kk][Ii][Ee]|[Aa][Pp][Ii][_-]?[Kk][Ee][Yy]|[Cc][Oo][Nn][Nn][Ee][Cc][Tt][Ii][Oo][Nn][_-]?[Ss][Tt][Rr][Ii][Nn][Gg])[\"']?\\s*[:=]\\s*(?!\\$[0-9]+(?:\\b|$)|\\?(?:\\s|$)|:[A-Za-z_][A-Za-z0-9_]*(?:\\b|$)|@[A-Za-z_][A-Za-z0-9_]*(?:\\b|$))\\S+"
-          }
-        },
-        { "not": { "pattern": "(?:^|\\s)(?:[Bb][Ee][Aa][Rr][Ee][Rr]|[Bb][Aa][Ss][Ii][Cc])\\s+\\S+" } },
-        { "not": { "pattern": "(?:https?|wss?):\\/\\/[^\\s:/?#]+:[^\\s@/?#]+@" } },
-        { "not": { "pattern": "(?:[Pp][Oo][Ss][Tt][Gg][Rr][Ee][Ss](?:[Qq][Ll])?|[Mm][Yy][Ss][Qq][Ll]|[Mm][Oo][Nn][Gg][Oo][Dd][Bb](?:\\+[Ss][Rr][Vv])?|[Rr][Ee][Dd][Ii][Ss]):\\/\\/" } }
-      ]
-    },
+    "persistedString": { "type": "string" },
     "persistedJsonValue": {
       "oneOf": [
         { "$ref": "#/$defs/persistedString" },
@@ -34,7 +13,6 @@
         { "type": "array", "items": { "$ref": "#/$defs/persistedJsonValue" } },
         {
           "type": "object",
-          "propertyNames": { "not": { "$ref": "#/$defs/credentialKey" } },
           "additionalProperties": { "$ref": "#/$defs/persistedJsonValue" }
         }
       ]

@@ -172,6 +172,7 @@ test("execution profile rejects literal password fields", () => {
 test("credential-bearing target URLs and database hosts are rejected", () => {
   const unsafeTargets = [
     { api: { kind: "api", origin: "https://admin:password@api.example.test" } },
+    { api: { kind: "api", origin: "HTTPS://admin:password@api.example.test" } },
     { api: { kind: "api", origin: "https://api.example.test/orders?token=literal-token" } },
     {
       database: {
@@ -201,6 +202,7 @@ test("credential-bearing target URLs and database hosts are rejected", () => {
 test("approval rejects URL userinfo", () => {
   for (const unsafeTarget of [
     "https://admin:password@api.example.test",
+    "HTTPS://admin:password@api.example.test",
     "https://api.example.test/orders?token=literal-token",
   ]) {
     const value = structuredClone(validApproval);
@@ -271,7 +273,7 @@ test("manifest data inputs use structured references instead of literal strings"
   }
 });
 
-test("API and cleanup paths reject credential query parameters", () => {
+test("API and cleanup paths reject every query string and fragment", () => {
   const unsafeActions = [
     {
       type: "web.goto",
@@ -282,18 +284,18 @@ test("API and cleanup paths reject credential query parameters", () => {
     },
     {
       type: "api.request",
-      action_id: "API-001-login",
+      action_id: "API-001-search",
       target_alias: "api",
       method: "GET",
-      path: "/login?access_token=literal-token",
+      path: "/search?mode=tokenization",
       risk: "R0",
     },
     {
       type: "cleanup.api",
-      action_id: "API-001-logout",
+      action_id: "API-001-cleanup",
       target_alias: "api",
       method: "DELETE",
-      path: "/session?refresh_token=literal-token",
+      path: "/session#cleanup",
       risk: "R1",
     },
   ];
@@ -337,18 +339,22 @@ test("persisted assertions and SQL reject credential literals", () => {
   }
 });
 
-test("run results recursively reject common secret keys", () => {
+test("run results classify snake, kebab, and camel credential aliases", () => {
   const secretKeys = [
-    "access_token",
+    "user_password",
+    "dbPassword",
+    "new-password",
+    "password_value",
+    "accessToken",
     "refresh_token",
-    "id_token",
-    "client_secret",
+    "idToken",
+    "clientSecret",
+    "apiKey",
     "authorization",
-    "proxy-authorization",
+    "proxyAuthorization",
     "cookie",
-    "set-cookie",
-    "api_key",
-    "connection_string",
+    "setCookie",
+    "connectionString",
   ];
 
   for (const secretKey of secretKeys) {
@@ -364,12 +370,29 @@ test("run results recursively reject common secret keys", () => {
   }
 });
 
+test("semantic errors include the nested JSON Pointer", () => {
+  const value = structuredClone(validRunResult);
+  value.cases[0].assertions = [
+    {
+      assertion_id: "assertion-1",
+      passed: false,
+      actual: { response: [{ dbPassword: "literal-secret" }] },
+    },
+  ] as never;
+
+  assert.throws(
+    () => validateDocument("run-result", value),
+    /\/cases\/0\/assertions\/0\/actual\/response\/0\/dbPassword/,
+  );
+});
+
 test("run-result strings reject auth schemes, connection URIs, and URL userinfo", () => {
   const unsafeValues = [
     "Bearer literal-token",
     "Basic dXNlcjpwYXNzd29yZA==",
     "postgresql://admin:password@db.example.test/orders",
     "https://admin:password@api.example.test/result",
+    "HTTPS://admin:password@api.example.test/result",
   ];
 
   for (const unsafeValue of unsafeValues) {
@@ -390,6 +413,40 @@ test("run-result strings reject auth schemes, connection URIs, and URL userinfo"
     { path: "https://admin:password@files.example.test/evidence.json", sha256: "c".repeat(64) },
   ];
   assert.throws(() => validateDocument("run-result", evidenceValue), /path|password/);
+});
+
+test("safe absence and masking prose remains valid", () => {
+  const manifest = structuredClone(validManifest);
+  manifest.cases[0].steps[0] = {
+    type: "api.assert",
+    action_id: "API-001-safe-auth",
+    target_alias: "api",
+    assertion: "Authorization: header must be absent; Cookie: not present",
+    risk: "R0",
+  } as never;
+  manifest.cases[0].original["备注"] = "Authorization: omitted; Cookie: empty";
+  assert.equal(validateDocument("run-manifest", manifest), manifest);
+
+  const result = structuredClone(validRunResult);
+  result.cases[0].assertions = [
+    {
+      assertion_id: "assertion-1",
+      passed: true,
+      actual: {
+        authorization: "header must be absent",
+        cookie: "not present",
+        proxyAuthorization: "redacted",
+        clientSecret: "masked",
+        accessToken: "omitted",
+        refresh_token: "empty",
+        connectionString: "null",
+        apiKey: null,
+        password_value: "已脱敏",
+        setCookie: "未返回",
+      },
+    },
+  ] as never;
+  assert.equal(validateDocument("run-result", result), result);
 });
 
 test("safe business text, nested data, paths, and parameterized SQL remain valid", () => {
@@ -414,6 +471,7 @@ test("safe business text, nested data, paths, and parameterized SQL remain valid
         order: {
           status: "paid",
           tokenization: "completed",
+          secretary: "available",
           messages: ["Password field is required", "business token expired"],
         },
       },
@@ -423,7 +481,7 @@ test("safe business text, nested data, paths, and parameterized SQL remain valid
   assert.equal(validateDocument("run-result", result), result);
 
   const request = structuredClone(validManifest);
-  request.cases[0].steps[0].path = "/search?mode=tokenization&status=active";
+  request.cases[0].steps[0].path = "/search";
   assert.equal(validateDocument("run-manifest", request), request);
 });
 
