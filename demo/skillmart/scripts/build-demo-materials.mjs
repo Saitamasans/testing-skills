@@ -1,4 +1,5 @@
-import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import { mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -113,6 +114,25 @@ async function copyText(source, target) {
   await writeFile(target, await readFile(source, "utf8"), "utf8");
 }
 
+async function listFileEvidence(baseDir, currentDir = baseDir) {
+  const entries = await readdir(currentDir, { withFileTypes: true });
+  const files = [];
+  for (const entry of entries.sort((left, right) => left.name.localeCompare(right.name, "zh-CN"))) {
+    const absolutePath = path.join(currentDir, entry.name);
+    if (entry.isDirectory()) {
+      files.push(...await listFileEvidence(baseDir, absolutePath));
+      continue;
+    }
+    if (!entry.isFile() || entry.name === "material-index.json") continue;
+    const content = await readFile(absolutePath);
+    files.push({
+      path: path.relative(baseDir, absolutePath).split(path.sep).join("/"),
+      sha256: createHash("sha256").update(content).digest("hex"),
+    });
+  }
+  return files;
+}
+
 function simpleHtmlReport(rows) {
   const headers = Object.keys(rows[0]);
   const head = headers.map((item) => `<th>${item}</th>`).join("");
@@ -188,6 +208,7 @@ async function main() {
     },
   }, null, 2)}\n`, "utf8");
 
+  const fileEvidence = await listFileEvidence(outDir);
   await writeFile(path.join(outDir, "material-index.json"), `${JSON.stringify({
     generated_at: new Date().toISOString(),
     demo: "SkillMart",
@@ -201,10 +222,10 @@ async function main() {
     ],
     execution_skill: "web-api-test-execution-evidence",
     note: "This is a reproducible material skeleton. It does not claim static files are real Skill invocation outputs.",
+    files: fileEvidence,
   }, null, 2)}\n`, "utf8");
 
   console.log(`SkillMart demo materials generated: ${outDir}`);
 }
 
 await main();
-
