@@ -73,12 +73,14 @@ Do not trigger this Skill merely to generate test cases, clarify requirements, o
 
 只使用本 Skill 安装目录内的 `scripts/testing-runner.mjs`，先解析 Skill 根目录的绝对路径，再调用启动器；不使用 latest，也不调用本地仓库中的 Runner。
 
-首次运行时，启动器先告知 Runner 来源、固定版本、下载体积和缓存位置，再从项目 GitHub Release 自动下载并校验 SHA-256。无需 npm 账号，无需用户手工输入 npm 或 Runner 安装命令。只有执行清单包含 Web 动作时才自动下载 Playwright Chromium；API-only 不下载浏览器。交互模式默认打开可见浏览器并使用 200ms 操作间隔，CI 模式固定无界面。
+首次运行时，启动器先告知 Runner 来源、固定版本、下载体积和缓存位置，再从项目 GitHub Release 自动下载并校验 SHA-256。无需 npm 账号，无需用户手工输入 npm 或 Runner 安装命令。交互可见执行需要 Web 动作或 API-only 全屏看板时，自动准备 Playwright Chromium；CI、headless 或显式关闭 API-only 面板时不额外下载浏览器。
+
+交互可见执行默认最大化浏览器并开启实时执行面板：持续展示当前测试用例（Test Case）的序号、ID、中文标题、模块、当前 Web/API 动作、API 方法与路径、响应状态、断言结果、四状态统计、manifest hash 和目标 origin。Web/混合场景使用不参与定位和点击的页面浮层，API-only 使用全屏执行看板。正式 Web 证据 PNG 不包含执行面板，桌面教程录制保留面板；CI 和 `--browser headless` 不显示面板。只有用户显式要求关闭时才传 `--progress off`。
 
 ```bash
 node <ABSOLUTE_SKILL_ROOT>/scripts/testing-runner.mjs plan --input report.json --profile execution-profile.json --output-dir .testing-run
 node <ABSOLUTE_SKILL_ROOT>/scripts/testing-runner.mjs approve --manifest .testing-run/run-manifest.json --out .testing-run/approval.json --expires-at <ISO_EXPIRES_AT> --confirmed-by reviewer-name
-node <ABSOLUTE_SKILL_ROOT>/scripts/testing-runner.mjs run --manifest .testing-run/run-manifest.json --approval .testing-run/approval.json --output-dir .testing-run/result --mode interactive --browser auto --slow-mo 200
+node <ABSOLUTE_SKILL_ROOT>/scripts/testing-runner.mjs run --manifest .testing-run/run-manifest.json --approval .testing-run/approval.json --output-dir .testing-run/result --mode interactive --browser auto --slow-mo 200 --progress auto
 ```
 
 `<ABSOLUTE_SKILL_ROOT>` 必须替换为当前已安装 Skill 的绝对目录，路径含空格时正确加引号。`<ISO_EXPIRES_AT>` 使用本次执行窗口内的短期过期时间，不使用长期或永久审批。CI、退出码和完整参数读取 `references/runner-commands.md`。
@@ -100,6 +102,7 @@ CI 证据、报告一致性、上传产物和失败退出码读取 `references/c
 - [ ] 是否对非标准 Excel 做了字段映射确认？
 - [ ] 是否保护密钥，没有把账号密码、token、连接串写入产物？
 - [ ] 是否使用本 Skill 内置启动器、固定 Runner 版本和审批文件？
+- [ ] 交互可见执行是否默认最大化并显示当前测试用例（Test Case）和动作，且正式 PNG 不含执行面板？
 - [ ] 是否保留未执行、通过、不通过、待定四状态和七个运行状态的区别？
 - [ ] 是否通过 Excel/HTML/JSON 一致性门禁后再交付？
 

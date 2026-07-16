@@ -169,7 +169,7 @@ export function renderBootstrapNotice(manifestValue, paths) {
   return [
     "第八个 Skill 首次运行需要自动准备执行环境。",
     "- Runner " + manifest.runner.version + " 与锁定依赖：项目 GitHub Release（约 " + formatMegabytes(manifest.runner.size_bytes) + "）",
-    "- 浏览器组件：Playwright Chromium（按 Web 用例需要下载，约 " + formatMegabytes(manifest.browser.estimated_size_bytes) + "）",
+    "- 浏览器组件：Playwright Chromium（按 Web 动作或交互可视执行需要下载，约 " + formatMegabytes(manifest.browser.estimated_size_bytes) + "）",
     "- 缓存位置：" + paths.runtimeDir,
     "- 无需 npm 账号，也不需要手动输入 Runner 安装命令；下载完成后将复用缓存。",
   ].join("\n");
@@ -585,6 +585,11 @@ function commandOption(args, name) {
   return args[index + 1];
 }
 
+function commandOptionOr(args, name, fallback) {
+  const index = args.indexOf(name);
+  return index >= 0 && args[index + 1] ? args[index + 1] : fallback;
+}
+
 function manifestHasWebActions(value) {
   if (!value || !Array.isArray(value.cases)) {
     fail("bootstrap_browser_manifest_invalid", "run manifest must contain cases");
@@ -637,7 +642,15 @@ export async function prepareBrowserForCommand(options) {
       error instanceof Error ? error.message : String(error),
     );
   }
-  if (!manifestHasWebActions(runManifest)) {
+  const hasWebActions = manifestHasWebActions(runManifest);
+  const mode = commandOptionOr(args, "--mode", "interactive");
+  const browser = commandOptionOr(args, "--browser", "auto");
+  const progress = commandOptionOr(args, "--progress", "auto");
+  const needsVisualDashboard = !hasWebActions
+    && mode === "interactive"
+    && browser !== "headless"
+    && progress !== "off";
+  if (!hasWebActions && !needsVisualDashboard) {
     return { required: false, cacheHit: true };
   }
 
@@ -655,7 +668,9 @@ export async function prepareBrowserForCommand(options) {
     return { required: true, cacheHit: true, executablePath };
   }
 
-  log("检测到 Web 用例：首次运行将由 Playwright 自动下载 Chromium；后续运行复用浏览器缓存。");
+  log(hasWebActions
+    ? "检测到 Web 用例：首次运行将由 Playwright 自动下载 Chromium；后续运行复用浏览器缓存。"
+    : "检测到 API-only 交互可视执行：首次运行将自动下载 Chromium 显示全屏执行看板；后续运行复用浏览器缓存。");
   const runProcess = options.runProcess ?? defaultRunProcess;
   const code = await runProcess(
     process.execPath,

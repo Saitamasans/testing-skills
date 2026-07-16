@@ -266,7 +266,7 @@ test("concurrent bootstrap performs one download and one extraction", async () =
   assert.equal([first.cacheHit, second.cacheHit].filter(Boolean).length, 1);
 });
 
-async function browserFixture(actionType) {
+async function browserFixture(actionType, extraArgs = []) {
   const directory = await mkdtemp(path.join(os.tmpdir(), "runner-browser-bootstrap-"));
   const manifestPath = path.join(directory, "run-manifest.json");
   await writeFile(manifestPath, JSON.stringify({
@@ -292,7 +292,7 @@ async function browserFixture(actionType) {
   const logs = [];
   const options = {
     cliPath,
-    args: ["run", "--manifest", manifestPath],
+    args: ["run", "--manifest", manifestPath, ...extraArgs],
     env: {
       TEST_API_TOKEN: "must-not-propagate",
       TEST_API_KEY: "must-not-propagate",
@@ -317,12 +317,29 @@ async function browserFixture(actionType) {
   return { options, logs, installs: () => installs };
 }
 
-test("API-only run does not prepare Chromium", async () => {
+test("interactive API-only run prepares Chromium for the default visual dashboard", async () => {
   const state = await browserFixture("api.request");
-  const result = await prepareBrowserForCommand(state.options);
-  assert.deepEqual(result, { required: false, cacheHit: true });
-  assert.equal(state.installs(), 0);
+  const first = await prepareBrowserForCommand(state.options);
+  const second = await prepareBrowserForCommand(state.options);
+  assert.equal(first.required, true);
+  assert.equal(first.cacheHit, false);
+  assert.equal(second.cacheHit, true);
+  assert.equal(state.installs(), 1);
+  assert.match(state.logs.join("\n"), /API-only|可视/);
 });
+
+for (const [name, args] of [
+  ["progress off", ["--progress", "off"]],
+  ["CI", ["--mode", "ci"]],
+  ["headless", ["--browser", "headless"]],
+]) {
+  test(`API-only ${name} run does not prepare Chromium`, async () => {
+    const state = await browserFixture("api.request", args);
+    const result = await prepareBrowserForCommand(state.options);
+    assert.deepEqual(result, { required: false, cacheHit: true });
+    assert.equal(state.installs(), 0);
+  });
+}
 
 test("Web run installs Chromium once and reuses the verified executable", async () => {
   const state = await browserFixture("web.goto");
