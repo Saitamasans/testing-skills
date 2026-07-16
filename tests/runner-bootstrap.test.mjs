@@ -59,8 +59,8 @@ function manifest(overrides = {}) {
     schema_version: 1,
     runner: {
       name: "@saitamasans/testing-runner",
-      version: "1.0.1",
-      download_url: "https://github.com/Saitamasans/testing-skills/releases/download/testing-runner-v1.0.1/saitamasans-testing-runner-1.0.1.tgz",
+      version: "1.0.2",
+      download_url: "https://github.com/Saitamasans/testing-skills/releases/download/testing-runner-v1.0.2/saitamasans-testing-runner-1.0.2.tgz",
       sha256: RUNNER_ARCHIVE.sha256,
       size_bytes: ASSET.length,
       minimum_node: 20,
@@ -120,7 +120,7 @@ async function fixture(overrides = {}) {
 }
 
 test("validates only the fixed project GitHub Release", () => {
-  assert.equal(validateReleaseManifest(manifest()).runner.version, "1.0.1");
+  assert.equal(validateReleaseManifest(manifest()).runner.version, "1.0.2");
   assert.throws(
     () => validateReleaseManifest(manifest({ download_url: "https://example.com/runner.tgz" })),
     /bootstrap_manifest_invalid/,
@@ -137,12 +137,12 @@ test("resolves a versioned user cache and renders the required notice", async ()
   const paths = resolveRuntimePaths(value, { TESTING_SKILLS_HOME: home });
   assert.equal(
     paths.runtimeDir,
-    path.join(home, "runtime", "testing-runner", "1.0.1"),
+    path.join(home, "runtime", "testing-runner", "1.0.2"),
   );
   const notice = renderBootstrapNotice(value, paths);
   assert.match(notice, /首次运行/);
   assert.match(notice, /GitHub Release/);
-  assert.match(notice, /Runner 1\.0\.1/);
+  assert.match(notice, /Runner 1\.0\.2/);
   assert.match(notice, /Chromium/);
   assert.ok(notice.includes(home));
 });
@@ -153,7 +153,7 @@ test("first bootstrap announces, downloads, verifies, and extracts once", async 
   assert.equal(result.cacheHit, false);
   assert.equal(state.counters.downloads(), 1);
   assert.equal(state.counters.installs(), 0);
-  assert.match(state.logs.join("\n"), /Runner 1\.0\.1/);
+  assert.match(state.logs.join("\n"), /Runner 1\.0\.2/);
   assert.match(state.logs.join("\n"), /Runner 下载进度：0%/);
   assert.match(state.logs.join("\n"), /Runner 下载进度：100%/);
   assert.ok(state.counters.fetchSignal());

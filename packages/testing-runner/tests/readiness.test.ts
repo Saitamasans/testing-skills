@@ -349,6 +349,38 @@ test("E3 exposes all available preparation categories before approval", () => {
   );
 });
 
+test("explicit execution.blocked is a locked verdict route instead of a missing assertion", () => {
+  const manifest: RunManifest = {
+    ...apiManifest(),
+    manifest_id: "manifest-explicit-blocked",
+    cases: [
+      {
+        case_id: "API-001",
+        original: original(),
+        steps: [
+          {
+            type: "execution.blocked",
+            action_id: "API-001-blocked",
+            target_alias: "api",
+            reason: "The source contract has no observable amount field.",
+            risk: "R0",
+          },
+        ],
+      },
+    ],
+  };
+
+  const assessment = assessReadiness({
+    case_set: readyCaseSet,
+    manifest,
+    profile: readyProfile,
+    runtime_probe: healthyRuntimeProbe(),
+  });
+
+  assert.equal(assessment.level, "E3");
+  assert.deepEqual(assessment.blocking, ["Awaiting execution approval for the manifest preview."]);
+});
+
 test("E1 still returns compile and runtime blockers found in the same pass", () => {
   const runtimeProbe: RuntimeProbeReport = {
     ...healthyRuntimeProbe(),

@@ -190,6 +190,8 @@ export class VisualProgressController implements RunObserver {
   constructor(
     private readonly page: Page,
     private readonly fullscreen: boolean,
+    private readonly actionResultPauseMs = 0,
+    private readonly pause: (milliseconds: number) => Promise<void> = delay,
   ) {}
 
   private async render(): Promise<void> {
@@ -247,6 +249,7 @@ export class VisualProgressController implements RunObserver {
       this.state.actionSummary = `${summarizeProgressAction(event.action)} · HTTP ${responseStatus}`;
     }
     await this.render();
+    if (this.actionResultPauseMs > 0) await this.pause(this.actionResultPauseMs);
   }
 
   async caseCompleted(event: CaseCompletedEvent): Promise<void> {

@@ -25,8 +25,9 @@ const riskRank: Record<RiskLevel, number> = { R0: 0, R1: 1, R2: 2, R3: 3 };
 
 export function classifyRisk(action: ManifestAction, context: RiskContext = {}): RiskAssessment {
   const assessments: RiskAssessment[] = [declaredRisk(action)];
+  const readOnly = isReadAction(action);
 
-  if (isReadAction(action)) {
+  if (readOnly) {
     assessments.push({ level: "R0", reasons: ["read-only action"] });
   } else {
     assessments.push({ level: "R1", reasons: ["reversible business write or UI mutation"] });
@@ -42,7 +43,7 @@ export function classifyRisk(action: ManifestAction, context: RiskContext = {}):
     assessments.push({ level: "R2", reasons: ["shared, sensitive, high-privilege, mixed-target, or database scope"] });
   }
 
-  if (isR3Effect(context.effect) || actionLooksIrreversible(action)) {
+  if (isR3Effect(context.effect) || (!readOnly && actionLooksIrreversible(action))) {
     assessments.push({ level: "R3", reasons: ["irreversible or externally material side effect"] });
   }
 
@@ -63,7 +64,7 @@ function isReadAction(action: ManifestAction): boolean {
     action.type === "web.assert" ||
     action.type === "web.goto" ||
     action.type === "web.wait" ||
-    (action.type === "api.request" && action.method === "GET")
+    ((action.type === "api.request" || action.type === "api.concurrent") && action.method === "GET")
   );
 }
 

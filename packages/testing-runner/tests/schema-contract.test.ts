@@ -165,6 +165,63 @@ test("manifest rejects arbitrary executable actions", () => {
   assert.throws(() => validateDocument("run-manifest", value), /shell\.exec/);
 });
 
+test("manifest accepts reference-only request controls and explicit execution verdict metadata", () => {
+  const value = structuredClone(validManifest);
+  value.cases[0].steps = [
+    {
+      type: "api.request",
+      action_id: "API-001-request-controls",
+      target_alias: "api",
+      method: "POST",
+      path: "/orders",
+      header_refs: {
+        "x-user-id": { source: "fixture", name: "user_a" },
+        authorization: { source: "env", name: "api_authorization" },
+      },
+      query_refs: { dry_run: { source: "fixture", name: "dry_run" } },
+      json_body_refs: { order_id: { source: "output", name: "order_id" } },
+      risk: "R1",
+    },
+    {
+      type: "api.request",
+      action_id: "API-001-raw-body",
+      target_alias: "api",
+      method: "POST",
+      path: "/orders",
+      raw_body_ref: { source: "fixture", name: "malformed_json" },
+      risk: "R1",
+    },
+    {
+      type: "api.assert",
+      action_id: "API-001-assert",
+      target_alias: "api",
+      assertion: "body /body/order_id equals output:order_id",
+      verdict_policy: "pending_only",
+      root_cause_key: "orders.idempotency.duplicate-lock",
+      risk: "R0",
+    },
+    {
+      type: "api.concurrent",
+      action_id: "API-001-concurrent",
+      target_alias: "api",
+      method: "GET",
+      path: "/orders",
+      concurrency: 5,
+      header_refs: { "x-user-id": { source: "fixture", name: "user_a" } },
+      risk: "R0",
+    },
+    {
+      type: "execution.blocked",
+      action_id: "API-001-blocked",
+      target_alias: "api",
+      reason: "缺少金额可观察字段",
+      risk: "R0",
+    },
+  ] as never;
+
+  assert.equal(validateDocument("run-manifest", value), value);
+});
+
 test("execution profile rejects literal password fields", () => {
   const value = structuredClone(validExecutionProfile) as Record<string, unknown>;
   value.password = "do-not-store-this";

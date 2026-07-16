@@ -5,6 +5,10 @@ export interface SkillMartApp {
   close(): Promise<void>;
 }
 
+export interface SkillMartAppOptions {
+  port?: number;
+}
+
 interface Product {
   sku: string;
   name: string;
@@ -46,7 +50,7 @@ function writeHtml(response: http.ServerResponse, html: string): void {
   response.end(html);
 }
 
-export async function startSkillMartApp(): Promise<SkillMartApp> {
+export async function startSkillMartApp(options: SkillMartAppOptions = {}): Promise<SkillMartApp> {
   let products = seedProducts();
   const orders = new Map<string, Order>();
   let orderCounter = 0;
@@ -115,11 +119,50 @@ export async function startSkillMartApp(): Promise<SkillMartApp> {
       }
 
       if (request.method === "POST" && url.pathname === "/api/orders") {
-        const body = await readJsonBody(request);
-        const sku = String(body.sku ?? "");
-        const quantity = Number(body.quantity ?? 1);
-        const userId = String(body.user_id ?? "user-a");
+        const contentType = String(request.headers["content-type"] ?? "")
+          .split(";", 1)[0]!
+          .trim()
+          .toLowerCase();
+        if (contentType !== "application/json") {
+          writeJson(response, 400, { error: "content_type_invalid" });
+          return;
+        }
+        let body: Record<string, unknown>;
+        try {
+          body = await readJsonBody(request);
+        } catch {
+          writeJson(response, 400, { error: "invalid_json" });
+          return;
+        }
+        const sku = body.sku;
+        const quantity = body.quantity ?? 1;
+        const requestUserId = String(request.headers["x-user-id"] ?? "").trim();
+        const bodyUserId = String(body.user_id ?? requestUserId);
         const idempotencyKey = String(request.headers["x-idempotency-key"] ?? "");
+        if (!requestUserId) {
+          writeJson(response, 401, { error: "user_identity_required" });
+          return;
+        }
+        if (!idempotencyKey.trim()) {
+          writeJson(response, 400, { error: "idempotency_key_required" });
+          return;
+        }
+        if (bodyUserId !== requestUserId) {
+          writeJson(response, 400, { error: "user_identity_mismatch" });
+          return;
+        }
+        if (typeof sku !== "string" || !sku.trim()) {
+          writeJson(response, 400, { error: "sku_invalid" });
+          return;
+        }
+        if (body.coupon_code !== undefined && typeof body.coupon_code !== "string") {
+          writeJson(response, 400, { error: "coupon_code_invalid" });
+          return;
+        }
+        if (typeof quantity !== "number" || !Number.isInteger(quantity) || quantity <= 0) {
+          writeJson(response, 400, { error: "quantity_invalid" });
+          return;
+        }
         const product = productBySku(sku);
         if (!product || product.stock < quantity) {
           writeJson(response, 409, { error: "stock_not_enough" });
@@ -129,7 +172,7 @@ export async function startSkillMartApp(): Promise<SkillMartApp> {
         product.stock -= quantity;
         const order: Order = {
           order_id: `ORD-${String(++orderCounter).padStart(4, "0")}`,
-          user_id: userId,
+          user_id: requestUserId,
           sku,
           quantity,
           status: "PENDING_PAYMENT",
@@ -147,6 +190,15 @@ export async function startSkillMartApp(): Promise<SkillMartApp> {
           writeJson(response, 404, { error: "order_not_found" });
           return;
         }
+        const requestUserId = String(request.headers["x-user-id"] ?? "").trim();
+        if (!requestUserId) {
+          writeJson(response, 401, { error: "user_identity_required" });
+          return;
+        }
+        if (requestUserId !== order.user_id) {
+          writeJson(response, 403, { error: "order_forbidden" });
+          return;
+        }
         writeJson(response, 200, order);
         return;
       }
@@ -156,6 +208,15 @@ export async function startSkillMartApp(): Promise<SkillMartApp> {
         const order = orders.get(cancelMatch[1]!);
         if (!order) {
           writeJson(response, 404, { error: "order_not_found" });
+          return;
+        }
+        const requestUserId = String(request.headers["x-user-id"] ?? "").trim();
+        if (!requestUserId) {
+          writeJson(response, 401, { error: "user_identity_required" });
+          return;
+        }
+        if (requestUserId !== order.user_id) {
+          writeJson(response, 403, { error: "order_forbidden" });
           return;
         }
         if (order.status !== "PENDING_PAYMENT") {
@@ -197,7 +258,7 @@ export async function startSkillMartApp(): Promise<SkillMartApp> {
             document.querySelector('[data-testid="create-order"]').addEventListener('click', async () => {
               const response = await fetch('/api/orders', {
                 method: 'POST',
-                headers: { 'content-type': 'application/json', 'x-idempotency-key': 'web-demo-key' },
+                headers: { 'content-type': 'application/json', 'x-idempotency-key': 'web-demo-key', 'x-user-id': 'user-a' },
                 body: JSON.stringify({ user_id: 'user-a', sku: 'SKU-BOOK-001', quantity: 1, coupon_code: 'SKILL20' })
               });
               const json = await response.json();
@@ -215,7 +276,7 @@ export async function startSkillMartApp(): Promise<SkillMartApp> {
     }
   });
 
-  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  await new Promise<void>((resolve) => server.listen(options.port ?? 0, "127.0.0.1", resolve));
   const address = server.address();
   if (!address || typeof address === "string") throw new Error("SkillMart failed to bind a TCP port");
   return {
@@ -223,4 +284,3 @@ export async function startSkillMartApp(): Promise<SkillMartApp> {
     close: () => new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve())),
   };
 }
-

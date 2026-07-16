@@ -135,7 +135,9 @@ export async function openBrowserSession(
     throw error;
   }
   let closed = false;
-  const progressController = showProgress ? new VisualProgressController(page, !webActions) : undefined;
+  const progressController = showProgress
+    ? new VisualProgressController(page, !webActions, settings.slowMo)
+    : undefined;
 
   const session: BrowserSession = {
     page,

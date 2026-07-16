@@ -1,0 +1,73 @@
+{
+  "schema_version": 1,
+  "demo_title": "SkillMart 八 Skill 真实桌面演示",
+  "workspace": "C:/Users/Admin/Desktop/710codex5.6审计优化7skill/.worktrees/eight-skill-demo",
+  "output_root": "build/skillmart-demo/11-真实桌面录制_Real-Desktop-Recording/01-现场输出_Live-Outputs",
+  "chapters": [
+    {
+      "id": "01",
+      "title": "需求澄清",
+      "primary_skill": "requirement-clarification-test",
+      "prompt": "本章只调用 requirement-clarification-test。请读取 C:/Users/Admin/Desktop/710codex5.6审计优化7skill/.worktrees/eight-skill-demo/demo/skillmart/requirements/prd-v0.md，从测试视角判断能否开测，只输出需求缺口、P0 ⛔ BLOCKING、产品核对问题和准入结论，不生成测试用例（Test Cases）。同时把完整结果保存到 build/skillmart-demo/11-真实桌面录制_Real-Desktop-Recording/01-现场输出_Live-Outputs/01-requirement-clarification/response.md。",
+      "expected_response_markers": ["requirement-clarification-test", "P0 ⛔ BLOCKING", "不生成测试用例"],
+      "visible_artifact": "build/skillmart-demo/11-真实桌面录制_Real-Desktop-Recording/01-现场输出_Live-Outputs/01-requirement-clarification/response.md"
+    },
+    {
+      "id": "02",
+      "title": "需求工作台",
+      "primary_skill": "requirement-test-workbench",
+      "prompt": "本章只调用 requirement-test-workbench。请读取 C:/Users/Admin/Desktop/710codex5.6审计优化7skill/.worktrees/eight-skill-demo/demo/skillmart/requirements/prd-v1.md 和 product-confirmation.md，完成场景、边界、决策表、状态迁移、权限与风险分析，生成正式十列测试用例（Test Cases）。明确要求交付同源 .xlsx、.html、report.json 和完整 response.md，保存到 build/skillmart-demo/11-真实桌面录制_Real-Desktop-Recording/01-现场输出_Live-Outputs/02-requirement-workbench/。",
+      "expected_response_markers": ["requirement-test-workbench", "测试用例（Test Cases）", ".xlsx", ".html"],
+      "visible_artifact": "build/skillmart-demo/11-真实桌面录制_Real-Desktop-Recording/01-现场输出_Live-Outputs/02-requirement-workbench/response.md"
+    },
+    {
+      "id": "03",
+      "title": "单接口完整版",
+      "primary_skill": "single-api-test-full",
+      "prompt": "本章只调用 single-api-test-full，并按完整版执行。请读取 C:/Users/Admin/Desktop/710codex5.6审计优化7skill/.worktrees/eight-skill-demo/demo/skillmart/contracts/orders-api.md，审查 POST /api/orders，重点覆盖鉴权、参数、幂等、并发、库存锁定、数据副作用和异常路径，生成正式十列测试用例（Test Cases）。交付同源 .xlsx、.html、report.json 和 response.md，保存到 build/skillmart-demo/11-真实桌面录制_Real-Desktop-Recording/01-现场输出_Live-Outputs/03-single-api-full/。",
+      "expected_response_markers": ["single-api-test-full", "POST /api/orders", "幂等", "测试用例（Test Cases）"],
+      "visible_artifact": "build/skillmart-demo/11-真实桌面录制_Real-Desktop-Recording/01-现场输出_Live-Outputs/03-single-api-full/response.md"
+    },
+    {
+      "id": "04",
+      "title": "单接口精炼版",
+      "primary_skill": "single-api-test-concise",
+      "prompt": "本章只调用 single-api-test-concise，明确使用精炼版、快速版、低上下文口令。请读取 C:/Users/Admin/Desktop/710codex5.6审计优化7skill/.worktrees/eight-skill-demo/demo/skillmart/contracts/query-api.md，快速生成 GET /api/orders/{id} 的准确、简短且可执行的正式十列测试用例（Test Cases）。交付同源 .xlsx、.html、report.json 和 response.md，保存到 build/skillmart-demo/11-真实桌面录制_Real-Desktop-Recording/01-现场输出_Live-Outputs/04-single-api-concise/。",
+      "expected_response_markers": ["single-api-test-concise", "精炼版", "GET /api/orders/{id}", "测试用例（Test Cases）"],
+      "visible_artifact": "build/skillmart-demo/11-真实桌面录制_Real-Desktop-Recording/01-现场输出_Live-Outputs/04-single-api-concise/response.md"
+    },
+    {
+      "id": "05",
+      "title": "多接口链路",
+      "primary_skill": "multi-api-flow-test",
+      "prompt": "本章只调用 multi-api-flow-test。请读取 C:/Users/Admin/Desktop/710codex5.6审计优化7skill/.worktrees/eight-skill-demo/demo/skillmart/requirements/prd-v1.md、contracts/orders-api.md 和 contracts/query-api.md，按商品查询→优惠校验→创建订单→支付回调→订单查询→取消与数据重置的真实调用顺序，生成字段依赖、链路断言、状态流转、清理策略和正式十列测试用例（Test Cases）。交付同源 .xlsx、.html、report.json 和 response.md，保存到 build/skillmart-demo/11-真实桌面录制_Real-Desktop-Recording/01-现场输出_Live-Outputs/05-multi-api-flow/。",
+      "expected_response_markers": ["multi-api-flow-test", "字段依赖", "清理策略", "测试用例（Test Cases）"],
+      "visible_artifact": "build/skillmart-demo/11-真实桌面录制_Real-Desktop-Recording/01-现场输出_Live-Outputs/05-multi-api-flow/response.md"
+    },
+    {
+      "id": "06",
+      "title": "正式服只读验证",
+      "primary_skill": "production-verification-test",
+      "prompt": "本章只调用 production-verification-test。验证目标明确声明为上线后正式服验证，但实际演示地址仍为本地隔离系统；不要根据域名或数据猜环境。请读取 C:/Users/Admin/Desktop/710codex5.6审计优化7skill/.worktrees/eight-skill-demo/demo/skillmart/requirements/production-verification-brief.md。由于没有提供生产写入四项门禁，必须拦截写操作，只生成入口、商品查询、配置与监控等 L0 只读正式十列测试用例（Test Cases）。交付同源 .xlsx、.html、report.json 和 response.md，保存到 build/skillmart-demo/11-真实桌面录制_Real-Desktop-Recording/01-现场输出_Live-Outputs/06-production-verification/。",
+      "expected_response_markers": ["production-verification-test", "L0", "只读", "拦截写操作"],
+      "visible_artifact": "build/skillmart-demo/11-真实桌面录制_Real-Desktop-Recording/01-现场输出_Live-Outputs/06-production-verification/response.md"
+    },
+    {
+      "id": "07",
+      "title": "测试用例审计",
+      "primary_skill": "test-case-quality-audit",
+      "prompt": "本章只调用 test-case-quality-audit，并明确授权先审计后修订。请读取 C:/Users/Admin/Desktop/710codex5.6审计优化7skill/.worktrees/eight-skill-demo/demo/skillmart/requirements/prd-v1.md、product-confirmation.md，以及本次第 02 章生成的 report.json；如果现场文件尚未生成，则使用 build/skillmart-demo/02-需求工作台_Requirement-Workbench/04-生成文件/skillmart-requirement-workbench-report.json。检查测试用例（Test Cases）的可执行性、需求证据、漏测、冗余、边界口径和优先级依据，输出审计报告、问题 ID 与修订映射，不改变七个 Skill 的名称或路由。结果保存到 build/skillmart-demo/11-真实桌面录制_Real-Desktop-Recording/01-现场输出_Live-Outputs/07-test-case-audit/response.md。",
+      "expected_response_markers": ["test-case-quality-audit", "门禁结论", "问题 ID", "修订映射"],
+      "visible_artifact": "build/skillmart-demo/11-真实桌面录制_Real-Desktop-Recording/01-现场输出_Live-Outputs/07-test-case-audit/response.md"
+    },
+    {
+      "id": "08",
+      "title": "自动执行与证据",
+      "primary_skill": "web-api-test-execution-evidence",
+      "prompt": "本章只调用 web-api-test-execution-evidence，不生成新的测试用例（Test Cases）。请读取 C:/Users/Admin/Desktop/710codex5.6审计优化7skill/.worktrees/eight-skill-demo/build/skillmart-demo/08-自动执行与证据_Automated-Execution-Evidence/04-执行输入 下五套标准十列 report.json 与 execution-profile.json，目标为本地 SkillMart 演示系统。先清点材料和准备度，展示主 Skill、manifest hash、目标 origin、风险等级、动作数量、环境变量名与执行预览；在我确认前禁止真实执行。确认后必须真实运行 Web/API 动作，输出审批文件、逐步骤 PNG、API 请求响应、日志、Trace、run-result.json，并回填同源 Excel 与 HTML 到 build/skillmart-demo/11-真实桌面录制_Real-Desktop-Recording/01-现场输出_Live-Outputs/08-execution-evidence/。",
+      "approval_prompt": "确认执行。请按刚才锁定的 manifest 和预览开始真实运行五套测试用例（Test Cases），不得跳过 Web 点击、API 请求、断言、证据保存和 Excel/HTML 状态回填。",
+      "expected_response_markers": ["web-api-test-execution-evidence", "执行预览", "manifest hash", "等待确认"],
+      "visible_artifact": "build/skillmart-demo/11-真实桌面录制_Real-Desktop-Recording/01-现场输出_Live-Outputs/08-execution-evidence/run-result.json"
+    }
+  ]
+}

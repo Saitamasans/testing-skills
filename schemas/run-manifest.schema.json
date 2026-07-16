@@ -53,6 +53,11 @@
         "name": { "type": "string", "pattern": "^[A-Za-z][A-Za-z0-9_.-]*$" }
       }
     },
+    "referenceMap": {
+      "type": "object",
+      "propertyNames": { "pattern": "^[A-Za-z][A-Za-z0-9_-]*$" },
+      "additionalProperties": { "$ref": "#/$defs/dataReference" }
+    },
     "nonSecretText": { "$ref": "https://saitamasans.dev/schemas/persisted-value.schema.json#/$defs/persistedString" },
     "original": {
       "type": "object",
@@ -93,8 +98,10 @@
         { "$ref": "#/$defs/webWait" },
         { "$ref": "#/$defs/webAssert" },
         { "$ref": "#/$defs/apiRequest" },
+        { "$ref": "#/$defs/apiConcurrent" },
         { "$ref": "#/$defs/apiExtract" },
         { "$ref": "#/$defs/apiAssert" },
+        { "$ref": "#/$defs/executionBlocked" },
         { "$ref": "#/$defs/dbSelect" },
         { "$ref": "#/$defs/cleanupApi" },
         { "$ref": "#/$defs/cleanupWeb" }
@@ -144,7 +151,11 @@
         "type": { "const": "api.request" },
         "method": { "enum": ["GET", "POST", "PUT", "PATCH", "DELETE"] },
         "path": { "$ref": "#/$defs/relativePath" },
-        "input_ref": { "$ref": "#/$defs/dataReference" }
+        "input_ref": { "$ref": "#/$defs/dataReference" },
+        "raw_body_ref": { "$ref": "#/$defs/dataReference" },
+        "header_refs": { "$ref": "#/$defs/referenceMap" },
+        "query_refs": { "$ref": "#/$defs/referenceMap" },
+        "json_body_refs": { "$ref": "#/$defs/referenceMap" }
       }
     },
     "apiExtract": {
@@ -157,7 +168,37 @@
       "allOf": [{ "$ref": "#/$defs/actionBase" }],
       "type": "object", "unevaluatedProperties": false,
       "required": ["assertion"],
-      "properties": { "type": { "const": "api.assert" }, "assertion": { "$ref": "#/$defs/nonSecretText" } }
+      "properties": {
+        "type": { "const": "api.assert" },
+        "assertion": { "$ref": "#/$defs/nonSecretText" },
+        "verdict_policy": { "enum": ["auto", "pending_only"] },
+        "root_cause_key": { "$ref": "#/$defs/nonSecretText" }
+      }
+    },
+    "apiConcurrent": {
+      "allOf": [{ "$ref": "#/$defs/actionBase" }],
+      "type": "object", "unevaluatedProperties": false,
+      "required": ["method", "path", "concurrency"],
+      "properties": {
+        "type": { "const": "api.concurrent" },
+        "method": { "enum": ["GET", "POST", "PUT", "PATCH", "DELETE"] },
+        "path": { "$ref": "#/$defs/relativePath" },
+        "concurrency": { "type": "integer", "minimum": 2, "maximum": 20 },
+        "input_ref": { "$ref": "#/$defs/dataReference" },
+        "raw_body_ref": { "$ref": "#/$defs/dataReference" },
+        "header_refs": { "$ref": "#/$defs/referenceMap" },
+        "query_refs": { "$ref": "#/$defs/referenceMap" },
+        "json_body_refs": { "$ref": "#/$defs/referenceMap" }
+      }
+    },
+    "executionBlocked": {
+      "allOf": [{ "$ref": "#/$defs/actionBase" }],
+      "type": "object", "unevaluatedProperties": false,
+      "required": ["reason"],
+      "properties": {
+        "type": { "const": "execution.blocked" },
+        "reason": { "$ref": "#/$defs/nonSecretText" }
+      }
     },
     "dbSelect": {
       "allOf": [{ "$ref": "#/$defs/actionBase" }],

@@ -16,9 +16,9 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { gunzipSync } from "node:zlib";
 
 const PACKAGE_NAME = "@saitamasans/testing-runner";
-const VERSION = "1.0.1";
-const FILE_NAME = "saitamasans-testing-runner-1.0.1.tgz";
-const RELEASE_TAG = "testing-runner-v1.0.1";
+const VERSION = "1.0.2";
+const FILE_NAME = "saitamasans-testing-runner-1.0.2.tgz";
+const RELEASE_TAG = "testing-runner-v1.0.2";
 const RELEASE_URL = "https://github.com/Saitamasans/testing-skills/releases/download/"
   + RELEASE_TAG + "/" + FILE_NAME;
 const CHROMIUM_ESTIMATED_SIZE_BYTES = 180_000_000;
@@ -49,6 +49,10 @@ const DEFAULT_MANIFEST_PATH = path.join(
   "assets",
   "runner-release.json",
 );
+
+export function resolveReleaseOutputDir(outputDir = path.join(REPO_ROOT, "build", "releases")) {
+  return path.resolve(REPO_ROOT, outputDir);
+}
 
 async function npmCliPath() {
   if (process.env.npm_execpath) return process.env.npm_execpath;
@@ -146,6 +150,7 @@ export async function buildReleaseTarball(
   outputDir = path.join(REPO_ROOT, "build", "releases"),
   manifestPath = DEFAULT_MANIFEST_PATH,
 ) {
+  outputDir = resolveReleaseOutputDir(outputDir);
   await mkdir(outputDir, { recursive: true });
   const archivePath = path.join(outputDir, FILE_NAME);
   const checksumPath = archivePath + ".sha256";

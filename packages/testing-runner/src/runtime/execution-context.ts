@@ -62,6 +62,7 @@ export interface ExecutionContext {
   mode: "interactive" | "ci";
   redactionFingerprints: SecretFingerprint[];
   lastApiResponse?: LastApiResponse;
+  lastApiResponses?: LastApiResponse[];
   databaseAdapters?: Partial<Record<"mysql" | "postgresql", DatabaseAdapter>>;
 }
 

@@ -17,6 +17,7 @@ const executionSummaryBuilderPath = path.join(repoRoot, "demo", "skillmart", "sc
 const acceptanceNavigationBuilderPath = path.join(repoRoot, "demo", "skillmart", "scripts", "build-acceptance-navigation.mjs");
 const demoRecorderPath = path.join(repoRoot, "demo", "skillmart", "scripts", "record-demo-video.mjs");
 const realDesktopRecorderPath = path.join(repoRoot, "demo", "skillmart", "scripts", "record-real-desktop-demo.mjs");
+const eighthSkillTutorialFinalizerPath = path.join(repoRoot, "demo", "skillmart", "scripts", "finalize-eighth-skill-tutorial.mjs");
 const realDesktopManifestPath = path.join(repoRoot, "demo", "skillmart", "scripts", "desktop-recording-manifest.json");
 const liveDemoScriptPath = path.join(repoRoot, "demo", "skillmart", "scripts", "live-skillmart-demo-script.json");
 
@@ -446,6 +447,17 @@ test("SkillMart acceptance navigation links all eight Skills, evidence and both 
       unique_bug_count: 1,
     }), "utf8");
 
+    const tutorialDir = path.join(root, "12-第八个Skill专用教程_Eighth-Skill-Tutorial", "final-20260716-200006");
+    await mkdir(path.join(tutorialDir, "01-真实执行_Live-Execution"), { recursive: true });
+    await mkdir(path.join(tutorialDir, "02-视频关键帧_Key-Frames"), { recursive: true });
+    for (const file of [
+      "完整未剪辑桌面录屏_Raw-Desktop-Session.mp4",
+      "第八个Skill教程_8th-Skill-Tutorial-Edited.mp4",
+      "证据索引_Evidence-Index.json",
+    ]) await writeFile(path.join(tutorialDir, file), file, "utf8");
+    await writeFile(path.join(tutorialDir, "01-真实执行_Live-Execution", "result.html"), "report", "utf8");
+    await writeFile(path.join(tutorialDir, "02-视频关键帧_Key-Frames", "教程版接触表_Edited-Contact-Sheet.png"), "png", "utf8");
+
     await imported.buildAcceptanceNavigation({ root });
     const navigation = await readFile(path.join(root, "00-演示导航与视频材料", "验收导航.html"), "utf8");
     for (const marker of [
@@ -460,6 +472,11 @@ test("SkillMart acceptance navigation links all eight Skills, evidence and both 
       "测试用例（Test Cases）",
       "完整未剪辑录屏_Raw-Full-Session.mp4",
       "20分钟精剪版_Edited-Demo.mp4",
+      "final-20260716-200006/完整未剪辑桌面录屏_Raw-Desktop-Session.mp4",
+      "final-20260716-200006/第八个Skill教程_8th-Skill-Tutorial-Edited.mp4",
+      "final-20260716-200006/01-真实执行_Live-Execution/result.html",
+      "final-20260716-200006/证据索引_Evidence-Index.json",
+      "final-20260716-200006/02-视频关键帧_Key-Frames/教程版接触表_Edited-Contact-Sheet.png",
     ]) assert.match(navigation, new RegExp(marker.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
 
     const index = JSON.parse(await readFile(path.join(root, "00-演示导航与视频材料", "证据索引.json"), "utf8")) as {
@@ -561,6 +578,39 @@ test("SkillMart recording validation trusts FFprobe values instead of manifest c
     else broken.video_probe[field] = value as string;
     assert.equal(validator.validateRecordingInspection?.(broken).some((item) => item.code === code), true, field);
   }
+});
+
+test("eighth Skill tutorial finalizer rejects invalid media before evidence indexing", async () => {
+  const imported = await import(pathToFileURL(eighthSkillTutorialFinalizerPath).href).catch(() => undefined) as
+    | {
+        validateTutorialVideoProbes?: (raw: unknown, edited: unknown) => Array<{ code: string; target: string }>;
+        validateTutorialNavigationLinks?: (links: Array<{ reference: string; exists: boolean }>) => Array<{ code: string; target: string }>;
+      }
+    | undefined;
+  assert.equal(typeof imported?.validateTutorialVideoProbes, "function");
+
+  const video = {
+    streams: [{ codec_type: "video", codec_name: "h264", width: 1920, height: 1080, avg_frame_rate: "60/1", r_frame_rate: "60/1" }],
+    format: { duration: "76.516" },
+  };
+  assert.deepEqual(imported?.validateTutorialVideoProbes?.(video, {
+    ...structuredClone(video),
+    format: { duration: "73.316" },
+  }), []);
+
+  const invalidEdited = structuredClone(video);
+  invalidEdited.streams[0]!.avg_frame_rate = "30/1";
+  invalidEdited.format.duration = "1200.001";
+  const issues = imported?.validateTutorialVideoProbes?.(video, invalidEdited) ?? [];
+  assert.equal(issues.some((item) => item.code === "video_frame_rate_invalid" && item.target === "edited"), true);
+  assert.equal(issues.some((item) => item.code === "edited_duration_exceeds_limit"), true);
+
+  assert.deepEqual(imported?.validateTutorialNavigationLinks?.([
+    { reference: "证据索引_Evidence-Index.json", exists: false },
+  ]), []);
+  assert.equal(imported?.validateTutorialNavigationLinks?.([
+    { reference: "missing-report.html", exists: false },
+  ]).some((item) => item.code === "navigation_link_missing"), true);
 });
 
 test("SkillMart live demo script routes eight real Skill calls with visible artifacts", async () => {

@@ -190,6 +190,22 @@ export interface ApiRequestAction extends BaseAction {
   method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
   path: string;
   input_ref?: DataReference;
+  raw_body_ref?: DataReference;
+  header_refs?: Record<string, DataReference>;
+  query_refs?: Record<string, DataReference>;
+  json_body_refs?: Record<string, DataReference>;
+}
+
+export interface ApiConcurrentAction extends BaseAction {
+  type: "api.concurrent";
+  method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
+  path: string;
+  concurrency: number;
+  input_ref?: DataReference;
+  raw_body_ref?: DataReference;
+  header_refs?: Record<string, DataReference>;
+  query_refs?: Record<string, DataReference>;
+  json_body_refs?: Record<string, DataReference>;
 }
 
 export interface ApiExtractAction extends BaseAction {
@@ -201,6 +217,13 @@ export interface ApiExtractAction extends BaseAction {
 export interface ApiAssertAction extends BaseAction {
   type: "api.assert";
   assertion: string;
+  verdict_policy?: "auto" | "pending_only";
+  root_cause_key?: string;
+}
+
+export interface ExecutionBlockedAction extends BaseAction {
+  type: "execution.blocked";
+  reason: string;
 }
 
 export interface DatabaseSelectAction extends BaseAction {
@@ -230,8 +253,10 @@ export type ManifestAction =
   | WebWaitAction
   | WebAssertAction
   | ApiRequestAction
+  | ApiConcurrentAction
   | ApiExtractAction
   | ApiAssertAction
+  | ExecutionBlockedAction
   | DatabaseSelectAction
   | CleanupApiAction
   | CleanupWebAction;

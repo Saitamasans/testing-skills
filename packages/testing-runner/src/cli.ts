@@ -67,7 +67,7 @@ export async function runCli(argv = process.argv): Promise<void> {
   program
     .name("testing-runner")
     .description("Plan and approve locked Web/API test execution manifests")
-    .version("1.0.1");
+    .version("1.0.2");
 
   program.command("plan")
     .requiredOption("--input <file>")
