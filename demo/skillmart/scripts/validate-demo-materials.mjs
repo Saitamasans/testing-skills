@@ -14,6 +14,13 @@ const skillFolders = [
   "08-自动执行与证据_Automated-Execution-Evidence",
 ];
 const formalGeneratorFolders = skillFolders.slice(1, 6);
+const executionSuites = [
+  { name: "requirementWorkbench", caseCount: 18, requiresWebEvidence: true },
+  { name: "singleApiFull", caseCount: 20 },
+  { name: "singleApiConcise", caseCount: 7 },
+  { name: "multiApiFlow", caseCount: 12 },
+  { name: "productionVerification", caseCount: 5 },
+];
 
 function argValue(name, fallback) {
   const index = process.argv.indexOf(name);
@@ -38,6 +45,21 @@ async function filesIn(dirPath) {
 
 function issue(code, target, message) {
   return { code, target, message };
+}
+
+export function validateRecordingInspection(inspection) {
+  const issues = [];
+  const probe = inspection?.video_probe;
+  if (!probe || probe.width !== 1920 || probe.height !== 1080) {
+    issues.push(issue("recording_resolution_invalid", "video_probe", "FFprobe 分辨率必须为 1920x1080。"));
+  }
+  if (!probe || probe.codec_name !== "h264") {
+    issues.push(issue("recording_codec_invalid", "video_probe", "FFprobe 视频编码必须为 H.264。"));
+  }
+  if (!probe || probe.avg_frame_rate !== "60/1" || probe.r_frame_rate !== "60/1") {
+    issues.push(issue("recording_frame_rate_invalid", "video_probe", "FFprobe 平均帧率和标称帧率必须均为 60/1。"));
+  }
+  return issues;
 }
 
 async function validateSkeleton(root) {
@@ -83,23 +105,84 @@ async function validateSkills(root) {
   return issues;
 }
 
-async function validateExecution(root) {
-  const executionDir = path.join(root, skillFolders[7], "04-生成文件");
-  const requiredNames = ["run-result.json", "result.xlsx", "result.html", "evidence-index.json", "event-log.jsonl"];
-  const found = [];
+async function recursiveFiles(dirPath) {
+  const files = [];
   async function walk(currentDir) {
     if (!await exists(currentDir)) return;
     for (const entry of await readdir(currentDir, { withFileTypes: true })) {
       const absolutePath = path.join(currentDir, entry.name);
       if (entry.isDirectory()) await walk(absolutePath);
-      else if (entry.isFile()) found.push(entry.name.toLowerCase());
+      else if (entry.isFile()) files.push(absolutePath);
     }
   }
-  await walk(executionDir);
-  const missing = requiredNames.filter((name) => !found.includes(name));
-  return missing.length === 0
-    ? []
-    : [issue("missing_execution_evidence", skillFolders[7], `缺少执行证据：${missing.join(", ")}`)];
+  await walk(dirPath);
+  return files;
+}
+
+export async function validateExecution(root) {
+  const executionDir = path.join(root, skillFolders[7], "04-生成文件");
+  const requiredNames = [
+    "run-manifest.json",
+    "approval.json",
+    "run-result.json",
+    "projected-report.json",
+    "result.xlsx",
+    "result.html",
+    "evidence-index.json",
+    "event-log.jsonl",
+    "reset-before.json",
+    "reset-after.json",
+  ];
+  const issues = [];
+
+  for (const suite of executionSuites) {
+    const suiteRoot = path.join(executionDir, suite.name);
+    if (!await exists(suiteRoot)) {
+      issues.push(issue("missing_execution_suite", suite.name, `缺少执行套件：${suite.name}`));
+      continue;
+    }
+
+    const resultDir = path.join(suiteRoot, ".testing-run", "result");
+    const topLevelNames = (await filesIn(resultDir)).map((name) => name.toLowerCase());
+    const missing = requiredNames.filter((name) => !topLevelNames.includes(name));
+    if (missing.length > 0) {
+      issues.push(issue(
+        "incomplete_execution_suite",
+        suite.name,
+        `执行套件缺少证据：${missing.join(", ")}`,
+      ));
+    }
+
+    const runResultPath = path.join(resultDir, "run-result.json");
+    if (await exists(runResultPath)) {
+      try {
+        const runResult = JSON.parse(await readFile(runResultPath, "utf8"));
+        if (!Array.isArray(runResult.cases) || runResult.cases.length !== suite.caseCount) {
+          issues.push(issue(
+            "execution_case_count_mismatch",
+            suite.name,
+            `测试用例（Test Cases）数量应为 ${suite.caseCount}。`,
+          ));
+        }
+      } catch {
+        issues.push(issue("invalid_execution_result", suite.name, "run-result.json 不是有效 JSON。"));
+      }
+    }
+
+    const evidenceFiles = await recursiveFiles(path.join(resultDir, "evidence"));
+    if (evidenceFiles.length === 0) {
+      issues.push(issue("missing_execution_evidence", suite.name, "证据目录为空。"));
+    }
+    if (suite.requiresWebEvidence) {
+      if (!evidenceFiles.some((file) => file.toLowerCase().endsWith(".png"))) {
+        issues.push(issue("missing_web_png", suite.name, "Web 执行缺少独立 PNG。"));
+      }
+      if (!evidenceFiles.some((file) => file.toLowerCase().endsWith(".zip"))) {
+        issues.push(issue("missing_playwright_trace", suite.name, "Web 执行缺少 Playwright Trace。"));
+      }
+    }
+  }
+  return issues;
 }
 
 async function validateVideo(root) {
