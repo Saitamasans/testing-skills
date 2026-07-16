@@ -16,6 +16,7 @@ import type {
   WebWaitAction,
 } from "../types.js";
 import { resolveLocator } from "./locator-resolver.js";
+import { VISUAL_PROGRESS_HOST_ID } from "../runtime/visual-progress.js";
 
 type WebExecutableAction =
   | WebGotoAction
@@ -117,7 +118,10 @@ async function withPageScreenshot(
   result: ActionStepResult,
 ): Promise<ActionStepResult> {
   if (!context.page) return result;
-  const content = await context.page.screenshot({ fullPage: true }).catch(() => undefined);
+  const content = await context.page.screenshot({
+    fullPage: true,
+    style: `#${VISUAL_PROGRESS_HOST_ID}{display:none!important}`,
+  }).catch(() => undefined);
   if (!content) return result;
   return {
     ...result,

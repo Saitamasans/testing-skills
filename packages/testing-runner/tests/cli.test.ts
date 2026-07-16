@@ -145,7 +145,33 @@ test("run CLI preserves visible browser settings and custom slow motion", () => 
       mode: "interactive",
       browser: "visible",
       slowMo: 350,
+      progress: "auto",
     },
+  );
+});
+
+test("run CLI accepts progress off and rejects unsupported progress modes", () => {
+  assert.equal(normalizeRunCliOptions({
+    manifest: "run-manifest.json",
+    approval: "approval.json",
+    outputDir: "result",
+    mode: "interactive",
+    browser: "visible",
+    slowMo: "200",
+    progress: "off",
+  }).progress, "off");
+
+  assert.throws(
+    () => normalizeRunCliOptions({
+      manifest: "run-manifest.json",
+      approval: "approval.json",
+      outputDir: "result",
+      mode: "interactive",
+      browser: "visible",
+      slowMo: "200",
+      progress: "verbose",
+    }),
+    /progress_configuration_invalid: progress must be auto or off/,
   );
 });
 
@@ -235,6 +261,7 @@ test("run command returns business-failure exit code while still writing reports
       title: "fail",
       actions: [
         { type: "api.request", action_id: "CLI-002-read", target_alias: "api", method: "GET", path: "/api/items/missing", risk: "R0" },
+        { type: "api.assert", action_id: "CLI-002-assert", target_alias: "api", assertion: "status is 200", risk: "R0" },
       ],
     });
 
