@@ -13,6 +13,7 @@ import {
   type BrowserSessionOptions,
   type BrowserVisibility,
 } from "../runtime/browser-session.js";
+import type { ProgressVisibility } from "../runtime/visual-progress.js";
 import {
   EXIT_BLOCKED_OR_MANUAL,
   EXIT_UNSAFE_OR_INVALID,
@@ -39,6 +40,7 @@ export interface RunCommandOptions {
   mode?: "interactive" | "ci";
   browser?: BrowserVisibility;
   slowMo?: number;
+  progress?: ProgressVisibility;
 }
 
 type RuntimeExecutionProfile = ExecutionProfile & {
@@ -190,6 +192,7 @@ export async function runRunCommand(options: RunCommandOptions): Promise<number>
   };
   if (options.browser !== undefined) browserOptions.visibility = options.browser;
   if (options.slowMo !== undefined) browserOptions.slowMo = options.slowMo;
+  if (options.progress !== undefined) browserOptions.progress = options.progress;
   const browserSession = await openBrowserSession(browserOptions);
   try {
     const contextInput: CreateExecutionContextInput = {
@@ -204,11 +207,13 @@ export async function runRunCommand(options: RunCommandOptions): Promise<number>
     const result = validateDocument<RunResult>("run-result", await runApprovedManifest({
       manifest,
       outputDir: options.outputDir,
+      ...(browserSession?.observer ? { observer: browserSession.observer } : {}),
       executeAction: (action) => executeRegisteredAction(action, context),
     }));
 
     await writeJson(path.join(options.outputDir, "run-result.json"), result);
     await writeReports(options.outputDir, manifest, result);
+    await browserSession?.completionPause();
     return exitCodeForRunResult(result);
   } catch (error) {
     if (error instanceof Error && error.name === "ManualCredentialRequiredError") {

@@ -2,6 +2,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { spawn } from "node:child_process";
 import {
   access,
+  chmod,
   mkdir,
   open,
   readFile,
@@ -13,6 +14,8 @@ import {
 import os from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
+import { promisify } from "node:util";
+import { gunzip } from "node:zlib";
 
 const PACKAGE_NAME = "@saitamasans/testing-runner";
 const RELEASE_HOST = "github.com";
@@ -20,6 +23,7 @@ const RELEASE_PATH_PREFIX = "/Saitamasans/testing-skills/releases/download/testi
 const DEFAULT_LOCK_RETRY_MS = 100;
 const DEFAULT_DOWNLOAD_TIMEOUT_MS = 15 * 60 * 1000;
 const STALE_LOCK_MS = 10 * 60 * 1000;
+const gunzipAsync = promisify(gunzip);
 const RUNTIME_ENV_ALLOWLIST = new Set([
   "ALL_PROXY",
   "APPDATA",
@@ -82,8 +86,8 @@ export function validateReleaseManifest(value) {
   if (runner.name !== PACKAGE_NAME) {
     fail("bootstrap_manifest_invalid", "runner.name must be " + PACKAGE_NAME);
   }
-  if (runner.version !== "1.0.1") {
-    fail("bootstrap_manifest_invalid", "runner.version must be 1.0.1");
+  if (runner.version !== "1.0.2") {
+    fail("bootstrap_manifest_invalid", "runner.version must be 1.0.2");
   }
   if (!/^[a-f0-9]{64}$/.test(String(runner.sha256 ?? ""))) {
     fail("bootstrap_manifest_invalid", "runner.sha256 must be 64 lowercase hexadecimal characters");
@@ -152,13 +156,7 @@ export function resolveRuntimePaths(manifestValue, env = process.env) {
     archivePath,
     readyPath: path.join(runtimeDir, "runtime-ready.json"),
     lockPath: runtimeDir + ".lock",
-    cliPath: path.join(
-      runtimeDir,
-      "node_modules",
-      packageDirectoryName(manifest.runner.name),
-      "dist",
-      "cli.js",
-    ),
+    cliPath: path.join(runtimeDir, "package", "dist", "cli.js"),
   };
 }
 
@@ -171,7 +169,7 @@ export function renderBootstrapNotice(manifestValue, paths) {
   return [
     "第八个 Skill 首次运行需要自动准备执行环境。",
     "- Runner " + manifest.runner.version + " 与锁定依赖：项目 GitHub Release（约 " + formatMegabytes(manifest.runner.size_bytes) + "）",
-    "- 浏览器组件：Playwright Chromium（按 Web 用例需要下载，约 " + formatMegabytes(manifest.browser.estimated_size_bytes) + "）",
+    "- 浏览器组件：Playwright Chromium（按 Web 动作或交互可视执行需要下载，约 " + formatMegabytes(manifest.browser.estimated_size_bytes) + "）",
     "- 缓存位置：" + paths.runtimeDir,
     "- 无需 npm 账号，也不需要手动输入 Runner 安装命令；下载完成后将复用缓存。",
   ].join("\n");
@@ -211,15 +209,6 @@ function sanitizedRuntimeEnv(env) {
       output[key] = value;
     }
   }
-  return output;
-}
-
-function sanitizedInstallEnv(env, npmrcPath) {
-  const output = sanitizedRuntimeEnv(env);
-  output.NPM_CONFIG_USERCONFIG = npmrcPath;
-  output.NPM_CONFIG_AUDIT = "false";
-  output.NPM_CONFIG_FUND = "false";
-  output.NPM_CONFIG_OFFLINE = "true";
   return output;
 }
 
@@ -325,29 +314,131 @@ async function acquireRuntimeLock(paths, isReady, retryMs) {
   }
 }
 
-async function resolveNpmInvocation(env) {
-  const explicit = env.TESTING_SKILLS_NPM_CLI;
-  const npmExecPath = env.npm_execpath || env.NPM_EXECPATH;
-  const candidates = [
-    explicit,
-    typeof npmExecPath === "string" && npmExecPath.endsWith(".js") ? npmExecPath : undefined,
-    path.join(path.dirname(process.execPath), "node_modules", "npm", "bin", "npm-cli.js"),
-    path.resolve(path.dirname(process.execPath), "..", "lib", "node_modules", "npm", "bin", "npm-cli.js"),
-    path.resolve(path.dirname(process.execPath), "..", "node_modules", "npm", "bin", "npm-cli.js"),
-  ].filter(Boolean);
-  for (const candidate of candidates) {
-    const npmCli = path.resolve(candidate);
-    if (await fileExists(npmCli)) {
-      return { command: process.execPath, argsPrefix: [npmCli] };
+function tarString(buffer, start, length) {
+  const raw = buffer.subarray(start, start + length);
+  const end = raw.indexOf(0);
+  return raw.subarray(0, end < 0 ? raw.length : end).toString("utf8");
+}
+
+function tarOctal(buffer, start, length) {
+  const value = tarString(buffer, start, length).trim().replace(/\0/g, "");
+  if (value === "") return 0;
+  const parsed = Number.parseInt(value, 8);
+  if (!Number.isSafeInteger(parsed) || parsed < 0) {
+    fail("bootstrap_integrity_failed", "Runner archive contains an invalid tar header");
+  }
+  return parsed;
+}
+
+function isZeroBlock(block) {
+  for (const byte of block) {
+    if (byte !== 0) return false;
+  }
+  return true;
+}
+
+function parsePax(data) {
+  const text = data.toString("utf8");
+  const output = {};
+  let offset = 0;
+  while (offset < text.length) {
+    const space = text.indexOf(" ", offset);
+    if (space < 0) break;
+    const size = Number.parseInt(text.slice(offset, space), 10);
+    if (!Number.isSafeInteger(size) || size <= 0) break;
+    const record = text.slice(space + 1, offset + size - 1);
+    const equals = record.indexOf("=");
+    if (equals > 0) output[record.slice(0, equals)] = record.slice(equals + 1);
+    offset += size;
+  }
+  return output;
+}
+
+function safePackagePath(entryName) {
+  const normalized = entryName.replaceAll("\\", "/").replace(/^\.\/+/, "");
+  if (
+    normalized === ""
+    || normalized.startsWith("/")
+    || /^[A-Za-z]:/.test(normalized)
+    || normalized.split("/").includes("..")
+    || !normalized.startsWith("package/")
+  ) {
+    fail("bootstrap_integrity_failed", "Runner archive contains an unsafe path: " + entryName);
+  }
+  return normalized;
+}
+
+async function extractRunnerArchive(archivePath, installDir) {
+  let archive;
+  try {
+    archive = await gunzipAsync(await readFile(archivePath));
+  } catch (error) {
+    fail("bootstrap_integrity_failed", "Runner archive is not a valid gzip file");
+  }
+
+  let offset = 0;
+  let pendingPax = {};
+  let pendingLongName;
+  while (offset + 512 <= archive.length) {
+    const header = archive.subarray(offset, offset + 512);
+    offset += 512;
+    if (isZeroBlock(header)) break;
+
+    const size = tarOctal(header, 124, 12);
+    const typeFlag = tarString(header, 156, 1) || "0";
+    const dataStart = offset;
+    const dataEnd = dataStart + size;
+    if (dataEnd > archive.length) {
+      fail("bootstrap_integrity_failed", "Runner archive entry exceeds archive size");
+    }
+    const data = archive.subarray(dataStart, dataEnd);
+    offset += Math.ceil(size / 512) * 512;
+
+    if (typeFlag === "x" || typeFlag === "g") {
+      if (typeFlag === "x") pendingPax = parsePax(data);
+      continue;
+    }
+    if (typeFlag === "L") {
+      pendingLongName = data.toString("utf8").replace(/\0.*$/s, "");
+      continue;
+    }
+
+    const prefix = tarString(header, 345, 155);
+    const name = pendingLongName
+      || pendingPax.path
+      || (prefix ? prefix + "/" + tarString(header, 0, 100) : tarString(header, 0, 100));
+    pendingPax = {};
+    pendingLongName = undefined;
+
+    const relative = safePackagePath(name);
+    const target = path.resolve(installDir, relative);
+    const installRoot = path.resolve(installDir);
+    if (target !== installRoot && !target.startsWith(installRoot + path.sep)) {
+      fail("bootstrap_integrity_failed", "Runner archive writes outside the runtime cache");
+    }
+
+    if (typeFlag === "5") {
+      await mkdir(target, { recursive: true });
+      continue;
+    }
+    if (typeFlag !== "0") {
+      if (typeFlag === "1" || typeFlag === "2") {
+        continue;
+      }
+      fail("bootstrap_integrity_failed", "Runner archive contains an unsupported tar entry type: " + typeFlag);
+    }
+
+    await mkdir(path.dirname(target), { recursive: true });
+    await writeFile(target, data, { flag: "wx" });
+    const mode = tarOctal(header, 100, 8);
+    if (mode) {
+      await chmod(target, mode & 0o777).catch(() => undefined);
     }
   }
-  if (process.platform !== "win32") {
-    return { command: "npm", argsPrefix: [] };
+
+  if (!await fileExists(path.join(installDir, "package", "dist", "cli.js"))) {
+    fail("bootstrap_install_failed", "Runner CLI is missing after archive extraction");
   }
-  fail(
-    "bootstrap_runtime_missing",
-    "npm CLI was not found beside Node.js; reinstall Node.js with npm included",
-  );
 }
 
 export async function ensureRunnerRuntime(options) {
@@ -465,41 +556,7 @@ export async function ensureRunnerRuntime(options) {
 
     await rm(installDir, { recursive: true, force: true });
     await mkdir(installDir, { recursive: true });
-    const npmrcPath = path.join(installDir, ".npmrc");
-    await writeFile(npmrcPath, "", "utf8");
-    const npm = await resolveNpmInvocation(env);
-    const code = await runProcess(
-      npm.command,
-      [
-        ...npm.argsPrefix,
-        "install",
-        "--prefix",
-        installDir,
-        "--offline",
-        "--ignore-scripts",
-        "--no-audit",
-        "--no-fund",
-        paths.archivePath,
-      ],
-      {
-        env: sanitizedInstallEnv(env, npmrcPath),
-        stdio: "inherit",
-      },
-    );
-    if (code !== 0) {
-      fail("bootstrap_install_failed", "npm exited with code " + code);
-    }
-
-    const installedCli = path.join(
-      installDir,
-      "node_modules",
-      packageDirectoryName(manifest.runner.name),
-      "dist",
-      "cli.js",
-    );
-    if (!await fileExists(installedCli)) {
-      fail("bootstrap_install_failed", "Runner CLI is missing after local archive installation");
-    }
+    await extractRunnerArchive(paths.archivePath, installDir);
     const ready = {
       schema_version: 1,
       manifest_sha256: digest,
@@ -526,6 +583,11 @@ function commandOption(args, name) {
     fail("bootstrap_browser_manifest_missing", name + " is required for browser preparation");
   }
   return args[index + 1];
+}
+
+function commandOptionOr(args, name, fallback) {
+  const index = args.indexOf(name);
+  return index >= 0 && args[index + 1] ? args[index + 1] : fallback;
 }
 
 function manifestHasWebActions(value) {
@@ -580,7 +642,15 @@ export async function prepareBrowserForCommand(options) {
       error instanceof Error ? error.message : String(error),
     );
   }
-  if (!manifestHasWebActions(runManifest)) {
+  const hasWebActions = manifestHasWebActions(runManifest);
+  const mode = commandOptionOr(args, "--mode", "interactive");
+  const browser = commandOptionOr(args, "--browser", "auto");
+  const progress = commandOptionOr(args, "--progress", "auto");
+  const needsVisualDashboard = !hasWebActions
+    && mode === "interactive"
+    && browser !== "headless"
+    && progress !== "off";
+  if (!hasWebActions && !needsVisualDashboard) {
     return { required: false, cacheHit: true };
   }
 
@@ -598,7 +668,9 @@ export async function prepareBrowserForCommand(options) {
     return { required: true, cacheHit: true, executablePath };
   }
 
-  log("检测到 Web 用例：首次运行将由 Playwright 自动下载 Chromium；后续运行复用浏览器缓存。");
+  log(hasWebActions
+    ? "检测到 Web 用例：首次运行将由 Playwright 自动下载 Chromium；后续运行复用浏览器缓存。"
+    : "检测到 API-only 交互可视执行：首次运行将自动下载 Chromium 显示全屏执行看板；后续运行复用浏览器缓存。");
   const runProcess = options.runProcess ?? defaultRunProcess;
   const code = await runProcess(
     process.execPath,

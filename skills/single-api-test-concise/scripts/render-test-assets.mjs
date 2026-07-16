@@ -95,6 +95,11 @@ function columnName(index) {
   return name;
 }
 
+function rowHeightForValues(values) {
+  const lineCount = Math.max(1, ...values.map((value) => String(value ?? "").split(/\r?\n/).length));
+  return Math.min(150, Math.max(42, 18 + lineCount * 15));
+}
+
 async function renderPortableXlsx(data, outputPath) {
   const used = new Set();
   const sheets = data.sheets.map((sheet, index) => ({ ...sheet, safeName: excelSafeName(sheet.name, used), index: index + 1 }));
@@ -114,7 +119,8 @@ async function renderPortableXlsx(data, outputPath) {
         const ref = `${columnName(colIndex)}${rowIndex + 1}`;
         return `<c r="${ref}" s="${style}" t="inlineStr"><is><t xml:space="preserve">${xml(value)}</t></is></c>`;
       }).join("");
-      return `<row r="${rowIndex+1}" ht="${rowIndex===0?28:(declared?.divider?25:42)}" customHeight="1">${cells}</row>`;
+      const rowHeight = rowIndex === 0 ? 28 : (declared?.divider ? 25 : rowHeightForValues(values));
+      return `<row r="${rowIndex+1}" ht="${rowHeight}" customHeight="1">${cells}</row>`;
     }).join("");
     const lastCol = columnName(sheet.columns.length - 1), lastRow = matrix.length;
     const validRows = sheet.kind === "test_cases" ? sheet.rows.map((row,i)=>row.divider?null:`I${i+2}`).filter(Boolean).join(" ") : "";
@@ -172,6 +178,7 @@ async function renderArtifactXlsx(data, outputPath, { previewDir } = {}) {
         if (row.divider) {
           full.format = { fill: "#D9EAF7", font: { bold: true, color: "#1F4E78" }, rowHeight: 25 };
         } else {
+          full.format.rowHeight = rowHeightForValues(row.values);
           sheet.getRange(`I${excelRow}`).dataValidation = { rule: { type: "list", values: STATUSES } };
           const priority = row.values[7];
           if (priority === "P0") sheet.getRange(`H${excelRow}`).format.fill = "#FCE4D6";

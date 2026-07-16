@@ -293,11 +293,12 @@ function dataRefNames(manifest?: RunManifest): Array<{ caseId: string; name: str
   return refs;
 }
 
-function hasAssertion(item: RunManifest["cases"][number]): boolean {
+function hasVerdictRoute(item: RunManifest["cases"][number]): boolean {
   return item.steps.some((action) =>
     action.type === "api.assert" ||
     action.type === "web.assert" ||
-    action.type === "db.select"
+    action.type === "db.select" ||
+    action.type === "execution.blocked"
   );
 }
 
@@ -329,7 +330,7 @@ function assessCompilation(cases: readonly NormalizedCase[], input: ReadinessInp
   }
 
   for (const item of input.manifest?.cases ?? []) {
-    if (hasAssertion(item)) continue;
+    if (hasVerdictRoute(item)) continue;
     state.missingAssertion = true;
     state.blockers.push(`${item.case_id}: mandatory assertion is missing.`);
   }

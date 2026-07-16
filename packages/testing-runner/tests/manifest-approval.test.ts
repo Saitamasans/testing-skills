@@ -263,6 +263,18 @@ test("risk classification uses actual effects and cannot be lowered by test-like
   );
   assert.equal(read.level, "R0");
 
+  const readConfig = classifyRisk(
+    { type: "api.request", action_id: "read-config", target_alias: "api", method: "GET", path: "/config/public", risk: "R0" },
+    { target: { kind: "api", origin: "https://api.example.test" }, environment_label: "production" },
+  );
+  assert.equal(readConfig.level, "R0");
+
+  const assertConfig = classifyRisk(
+    { type: "api.assert", action_id: "assert-config", target_alias: "api", assertion: "status is 200", risk: "R0" },
+    { target: { kind: "api", origin: "https://api.example.test" }, environment_label: "production" },
+  );
+  assert.equal(assertConfig.level, "R0");
+
   const testDomainSensitiveDb = classifyRisk(
     {
       type: "db.select",

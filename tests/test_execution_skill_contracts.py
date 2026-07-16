@@ -71,6 +71,18 @@ class ExecutionSkillContractsTest(unittest.TestCase):
         ]:
             self.assertIn(phrase, self.body)
 
+    def test_interactive_execution_is_visually_explained_by_default(self):
+        for phrase in [
+            "交互可见执行默认最大化浏览器并开启实时执行面板",
+            "当前测试用例（Test Case）",
+            "API-only 使用全屏执行看板",
+            "正式 Web 证据 PNG 不包含执行面板",
+            "--progress auto",
+            "--progress off",
+            "--browser headless",
+        ]:
+            self.assertIn(phrase, self.text)
+
     def test_execution_skill_uses_automatic_bootstrap_only(self):
         combined = self.text + self.generated_text + (ROOT / "README.md").read_text(encoding="utf-8")
         for phrase in [

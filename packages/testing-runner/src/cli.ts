@@ -12,6 +12,7 @@ import {
 } from "./commands/run.js";
 import { reportVerificationErrorExitCode, runVerifyReportCommand } from "./commands/verify-report.js";
 import type { BrowserVisibility } from "./runtime/browser-session.js";
+import type { ProgressVisibility } from "./runtime/visual-progress.js";
 
 interface RunCliOptions {
   manifest: string;
@@ -20,6 +21,7 @@ interface RunCliOptions {
   mode: string;
   browser: string;
   slowMo: string;
+  progress?: string;
 }
 
 function browserConfigurationError(message: string): Error {
@@ -30,12 +32,20 @@ function runConfigurationError(message: string): Error {
   return new Error(`run_configuration_invalid: ${message}`);
 }
 
+function progressConfigurationError(message: string): Error {
+  return new Error(`progress_configuration_invalid: ${message}`);
+}
+
 export function normalizeRunCliOptions(options: RunCliOptions): RunCommandOptions {
   if (!["interactive", "ci"].includes(options.mode)) {
     throw runConfigurationError("mode must be interactive or ci");
   }
   if (!["auto", "visible", "headless"].includes(options.browser)) {
     throw browserConfigurationError("browser must be auto, visible, or headless");
+  }
+  const progress = options.progress ?? "auto";
+  if (!["auto", "off"].includes(progress)) {
+    throw progressConfigurationError("progress must be auto or off");
   }
   const slowMo = Number(options.slowMo);
   if (!Number.isSafeInteger(slowMo) || slowMo < 0 || slowMo > 5000) {
@@ -48,6 +58,7 @@ export function normalizeRunCliOptions(options: RunCliOptions): RunCommandOption
     mode: options.mode as "interactive" | "ci",
     browser: options.browser as BrowserVisibility,
     slowMo,
+    progress: progress as ProgressVisibility,
   };
 }
 
@@ -56,7 +67,7 @@ export async function runCli(argv = process.argv): Promise<void> {
   program
     .name("testing-runner")
     .description("Plan and approve locked Web/API test execution manifests")
-    .version("1.0.1");
+    .version("1.0.2");
 
   program.command("plan")
     .requiredOption("--input <file>")
@@ -95,6 +106,7 @@ export async function runCli(argv = process.argv): Promise<void> {
     .option("--mode <mode>", "interactive or ci", "interactive")
     .option("--browser <visibility>", "auto, visible, or headless", "auto")
     .option("--slow-mo <milliseconds>", "visible browser delay from 0 to 5000", "200")
+    .option("--progress <mode>", "auto or off", "auto")
     .action(async (options: RunCliOptions) => {
       try {
         process.exitCode = await runRunCommand(normalizeRunCliOptions(options));

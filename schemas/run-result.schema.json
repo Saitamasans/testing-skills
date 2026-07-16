@@ -12,7 +12,8 @@
     "run_status": { "$ref": "#/$defs/runStatus" },
     "started_at": { "allOf": [{ "$ref": "https://saitamasans.dev/schemas/persisted-value.schema.json#/$defs/persistedString" }, { "type": "string", "minLength": 1 }] },
     "completed_at": { "allOf": [{ "$ref": "https://saitamasans.dev/schemas/persisted-value.schema.json#/$defs/persistedString" }, { "type": "string", "minLength": 1 }] },
-    "cases": { "type": "array", "items": { "$ref": "#/$defs/caseResult" } }
+    "cases": { "type": "array", "items": { "$ref": "#/$defs/caseResult" } },
+    "defects": { "type": "array", "items": { "$ref": "#/$defs/rootDefect" } }
   },
   "$defs": {
     "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
@@ -47,6 +48,21 @@
         "case_status": { "$ref": "#/$defs/caseStatus" },
         "run_status": { "$ref": "#/$defs/runStatus" },
         "assertions": { "type": "array", "items": { "$ref": "#/$defs/assertion" } },
+        "evidence": { "type": "array", "items": { "$ref": "#/$defs/evidence" } }
+      }
+    },
+    "rootDefect": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["defect_id", "root_cause_key", "case_ids", "evidence"],
+      "properties": {
+        "defect_id": { "allOf": [{ "$ref": "https://saitamasans.dev/schemas/persisted-value.schema.json#/$defs/persistedString" }, { "type": "string", "minLength": 1 }] },
+        "root_cause_key": { "allOf": [{ "$ref": "https://saitamasans.dev/schemas/persisted-value.schema.json#/$defs/persistedString" }, { "type": "string", "minLength": 1 }] },
+        "case_ids": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "allOf": [{ "$ref": "https://saitamasans.dev/schemas/persisted-value.schema.json#/$defs/persistedString" }, { "type": "string", "minLength": 1 }] }
+        },
         "evidence": { "type": "array", "items": { "$ref": "#/$defs/evidence" } }
       }
     }

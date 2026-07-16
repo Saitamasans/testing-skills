@@ -22,8 +22,10 @@ const ALLOWED_ACTION_TYPES = new Set([
   "web.wait",
   "web.assert",
   "api.request",
+  "api.concurrent",
   "api.extract",
   "api.assert",
+  "execution.blocked",
   "db.select",
   "cleanup.api",
   "cleanup.web",
@@ -55,6 +57,7 @@ function completed(action: ManifestAction, startedAt: string, result: ActionStep
   if (result.actual !== undefined) {
     outcome.actual = redact(result.actual, { fingerprints: context.redactionFingerprints });
   }
+  if (result.root_cause_key) outcome.root_cause_key = result.root_cause_key;
   if (result.error) outcome.error = result.error;
   return outcome;
 }
@@ -64,6 +67,18 @@ export async function executeAction(action: ManifestAction, context: ExecutionCo
   try {
     if (!ALLOWED_ACTION_TYPES.has(action.type)) {
       return blocked(action, startedAt, "unknown_action", `Action type is not allowlisted: ${action.type}`);
+    }
+    if (action.type === "execution.blocked") {
+      const details = { reason: action.reason };
+      return completed(action, startedAt, {
+        status: "blocked",
+        actual: details,
+        attachments: [{
+          relativePath: `${action.action_id}/execution-blocked.json`,
+          content: `${JSON.stringify(details, null, 2)}\n`,
+        }],
+        error: { type: "execution_input_gap", message: action.reason },
+      }, context);
     }
     targetFor(context, action.target_alias, actionTargetKind(action));
     const result = action.type === "db.select"

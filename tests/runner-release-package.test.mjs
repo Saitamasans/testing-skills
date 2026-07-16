@@ -3,13 +3,20 @@ import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
 
 import {
   buildReleaseTarball,
   listTarEntries,
   normalizeReleaseTextTree,
+  resolveReleaseOutputDir,
   sha256File,
 } from "../packages/testing-runner/scripts/package-release.mjs";
+
+test("release CLI resolves a relative output directory from the repository root", () => {
+  const repoRoot = fileURLToPath(new URL("..", import.meta.url));
+  assert.equal(resolveReleaseOutputDir("build/releases"), path.join(repoRoot, "build", "releases"));
+});
 
 test("release staging normalizes owned text resources to LF", async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), "runner-release-text-"));
@@ -45,7 +52,7 @@ test("release tarball contains runner and bundled production dependencies", asyn
   }
 
   assert.equal(await sha256File(release.archivePath), release.sha256);
-  assert.equal(release.fileName, "saitamasans-testing-runner-1.0.1.tgz");
+  assert.equal(release.fileName, "saitamasans-testing-runner-1.0.2.tgz");
   assert.ok(release.sizeBytes > 100_000);
 
   const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
@@ -53,8 +60,8 @@ test("release tarball contains runner and bundled production dependencies", asyn
     schema_version: 1,
     runner: {
       name: "@saitamasans/testing-runner",
-      version: "1.0.1",
-      download_url: "https://github.com/Saitamasans/testing-skills/releases/download/testing-runner-v1.0.1/saitamasans-testing-runner-1.0.1.tgz",
+      version: "1.0.2",
+      download_url: "https://github.com/Saitamasans/testing-skills/releases/download/testing-runner-v1.0.2/saitamasans-testing-runner-1.0.2.tgz",
       sha256: release.sha256,
       size_bytes: release.sizeBytes,
       minimum_node: 20,

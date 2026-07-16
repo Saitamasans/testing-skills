@@ -1,0 +1,41 @@
+{
+  "schema_version": 1,
+  "recording_id": "skillmart-eight-skill-real-desktop",
+  "capture": {
+    "source": "desktop",
+    "width": 1920,
+    "height": 1080,
+    "fps": 60,
+    "audio": false,
+    "draw_mouse": true
+  },
+  "privacy": {
+    "allowed_origins": [
+      "http://127.0.0.1"
+    ],
+    "allowed_windows": [
+      "ChatGPT",
+      "Codex Computer Use Cursor Overlay"
+    ],
+    "forbidden_patterns": [
+      "C:/Users/Admin",
+      "C:\\Users\\Admin",
+      "file://",
+      "Bearer ",
+      "sk-"
+    ]
+  },
+  "chapters": [
+    { "id": "00", "title": "演示资料与本地隔离环境", "required_events": ["artifact_opened"] },
+    { "id": "01", "title": "需求澄清", "skill": "requirement-clarification-test", "required_events": ["codex_prompt", "codex_response"] },
+    { "id": "02", "title": "需求工作台", "skill": "requirement-test-workbench", "required_events": ["codex_prompt", "codex_response", "artifact_opened"] },
+    { "id": "03", "title": "单接口完整版", "skill": "single-api-test-full", "required_events": ["codex_prompt", "codex_response"] },
+    { "id": "04", "title": "单接口精炼版", "skill": "single-api-test-concise", "required_events": ["codex_prompt", "codex_response"] },
+    { "id": "05", "title": "多接口链路", "skill": "multi-api-flow-test", "required_events": ["codex_prompt", "codex_response"] },
+    { "id": "06", "title": "正式服 L0 验证", "skill": "production-verification-test", "required_events": ["codex_prompt", "codex_response"] },
+    { "id": "07", "title": "测试用例审计", "skill": "test-case-quality-audit", "required_events": ["codex_prompt", "codex_response"] },
+    { "id": "08", "title": "第八个 Skill 执行预览与审批", "skill": "web-api-test-execution-evidence", "required_events": ["codex_prompt", "codex_response", "approval_confirmed"] },
+    { "id": "09", "title": "真实 Web/API 执行与状态回填", "skill": "web-api-test-execution-evidence", "required_events": ["web_click", "api_request", "report_backfill"] },
+    { "id": "10", "title": "证据与最终验收", "required_events": ["artifact_opened", "recording_completed"] }
+  ]
+}

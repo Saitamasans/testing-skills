@@ -31,27 +31,71 @@ test("ci mode is always headless", () => {
   );
 });
 
-test("api-only manifest does not launch a browser", async () => {
+test("interactive api-only auto mode launches a maximized visual progress browser", async () => {
   let launches = 0;
   const outputDir = await mkdtemp(path.join(os.tmpdir(), "api-only-browser-"));
+  let launchOptions;
+  let contextOptions;
+  let neutralPageLoaded = false;
+  const page = {
+    setContent: async () => { neutralPageLoaded = true; },
+    evaluate: async () => undefined,
+  } as unknown as Page;
+  const context = {
+    tracing: { start: async () => undefined, stop: async () => undefined },
+    newPage: async () => page,
+    close: async () => undefined,
+  };
+  const browser = {
+    newContext: async (options) => { contextOptions = options; return context; },
+    close: async () => undefined,
+  };
   const session = await openBrowserSession({
     manifest: manifestWith("api.request"),
     mode: "interactive",
     visibility: "auto",
     outputDir,
-    launchBrowser: async () => {
+    launchBrowser: async (options) => {
       launches += 1;
-      throw new Error("must not launch");
+      launchOptions = options;
+      return browser as unknown as Browser;
     },
   });
-  assert.equal(session, undefined);
-  assert.equal(launches, 0);
+  assert.ok(session);
+  assert.equal(launches, 1);
+  assert.deepEqual(launchOptions, { headless: false, slowMo: 200, args: ["--start-maximized"] });
+  assert.deepEqual(contextOptions, { viewport: null });
+  assert.equal(neutralPageLoaded, true);
+  await session?.close();
 });
+
+for (const [name, settings] of [
+  ["progress off", { mode: "interactive", visibility: "auto", progress: "off" }],
+  ["ci", { mode: "ci", visibility: "visible", progress: "auto" }],
+  ["headless", { mode: "interactive", visibility: "headless", progress: "auto" }],
+] as const) {
+  test(`api-only ${name} mode does not launch a browser`, async () => {
+    let launches = 0;
+    const outputDir = await mkdtemp(path.join(os.tmpdir(), "api-only-no-browser-"));
+    const session = await openBrowserSession({
+      manifest: manifestWith("api.request"),
+      ...settings,
+      outputDir,
+      launchBrowser: async () => {
+        launches += 1;
+        throw new Error("must not launch");
+      },
+    });
+    assert.equal(session, undefined);
+    assert.equal(launches, 0);
+  });
+}
 
 test("visible session launches headed and writes Playwright trace", async () => {
   const outputDir = await mkdtemp(path.join(os.tmpdir(), "visible-browser-"));
   const page = { kind: "page" } as unknown as Page;
   let launchOptions;
+  let contextOptions;
   let browserClosed = false;
   let contextClosed = false;
   let tracingStarted = false;
@@ -66,7 +110,7 @@ test("visible session launches headed and writes Playwright trace", async () => 
     close: async () => { contextClosed = true; },
   };
   const browser = {
-    newContext: async () => context,
+    newContext: async (options) => { contextOptions = options; return context; },
     close: async () => { browserClosed = true; },
   };
 
@@ -81,7 +125,8 @@ test("visible session launches headed and writes Playwright trace", async () => 
     },
   });
 
-  assert.deepEqual(launchOptions, { headless: false, slowMo: 200 });
+  assert.deepEqual(launchOptions, { headless: false, slowMo: 200, args: ["--start-maximized"] });
+  assert.deepEqual(contextOptions, { viewport: null });
   assert.equal(session?.page, page);
   assert.equal(tracingStarted, true);
   await session?.close();

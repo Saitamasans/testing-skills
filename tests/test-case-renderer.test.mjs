@@ -65,3 +65,18 @@ test("portable xlsx fallback has no third-party runtime dependency", async () =>
   assert.match(bytes.toString("utf8"), /不通过/);
   assert.match(bytes.toString("utf8"), /待定/);
 });
+
+test("xlsx rows grow with multiline test steps instead of clipping content", async () => {
+  const out = await fs.mkdtemp(path.join(os.tmpdir(), "testing-skills-row-height-"));
+  const target = path.join(out, "multiline.xlsx");
+  const multiline = structuredClone(fixture);
+  multiline.sheets[1].rows[1].values[5] = "1. 第一步\n2. 第二步\n3. 第三步\n4. 第四步";
+  process.env.TESTING_SKILLS_FORCE_PORTABLE_XLSX = "1";
+  try {
+    await renderXlsx(multiline, target);
+  } finally {
+    delete process.env.TESTING_SKILLS_FORCE_PORTABLE_XLSX;
+  }
+  const archive = (await fs.readFile(target)).toString("utf8");
+  assert.match(archive, /<row r="3" ht="78" customHeight="1">/);
+});
