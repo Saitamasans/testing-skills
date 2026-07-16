@@ -10,6 +10,11 @@ import {
 } from "playwright";
 
 import type { RunManifest } from "../types.js";
+import type { RunObserver } from "./run-orchestrator.js";
+import {
+  VisualProgressController,
+  type ProgressVisibility,
+} from "./visual-progress.js";
 
 export type BrowserVisibility = "auto" | "visible" | "headless";
 
@@ -22,11 +27,14 @@ export interface BrowserSettingsInput {
 export interface BrowserSessionOptions extends BrowserSettingsInput {
   manifest: RunManifest;
   outputDir: string;
+  progress?: ProgressVisibility;
   launchBrowser?: (options: LaunchOptions) => Promise<Browser>;
 }
 
 export interface BrowserSession {
   page: Page;
+  observer?: RunObserver;
+  completionPause(): Promise<void>;
   close(): Promise<void>;
 }
 
@@ -68,13 +76,21 @@ export function hasWebActions(manifest: RunManifest): boolean {
 export async function openBrowserSession(
   options: BrowserSessionOptions,
 ): Promise<BrowserSession | undefined> {
-  if (!hasWebActions(options.manifest)) return undefined;
-
   const settings = resolveBrowserSettings(options);
+  const progress = options.progress ?? "auto";
+  if (!(["auto", "off"] as string[]).includes(progress)) {
+    throw configurationError("progress must be auto or off");
+  }
+  const webActions = hasWebActions(options.manifest);
+  const showProgress = progress === "auto" && options.mode === "interactive" && !settings.headless;
+  if (!webActions && !showProgress) return undefined;
+
   const launchBrowser = options.launchBrowser ?? ((launchOptions) => chromium.launch(launchOptions));
   let browser: Browser;
   try {
-    browser = await launchBrowser(settings);
+    browser = await launchBrowser(settings.headless
+      ? settings
+      : { ...settings, args: ["--start-maximized"] });
   } catch (error) {
     if (!settings.headless) {
       const visibleError = new Error(
@@ -90,9 +106,12 @@ export async function openBrowserSession(
   let context: BrowserContext | undefined;
   let page: Page;
   try {
-    context = await browser.newContext();
+    context = await browser.newContext(settings.headless ? undefined : { viewport: null });
     await context.tracing.start({ screenshots: true, snapshots: true, sources: true });
     page = await context.newPage();
+    if (!webActions) {
+      await page.setContent("<!doctype html><html lang=\"zh-CN\"><head><meta charset=\"utf-8\"><title>Web/API 测试执行</title></head><body></body></html>");
+    }
   } catch (error) {
     const cleanupErrors: unknown[] = [];
     if (context) {
@@ -116,9 +135,13 @@ export async function openBrowserSession(
     throw error;
   }
   let closed = false;
+  const progressController = showProgress ? new VisualProgressController(page, !webActions) : undefined;
 
-  return {
+  const session: BrowserSession = {
     page,
+    completionPause: async () => {
+      if (progressController) await progressController.completionPause();
+    },
     close: async () => {
       if (closed) return;
       closed = true;
@@ -140,4 +163,6 @@ export async function openBrowserSession(
       if (traceError) throw traceError;
     },
   };
+  if (progressController) session.observer = progressController;
+  return session;
 }
