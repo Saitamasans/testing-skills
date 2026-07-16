@@ -279,3 +279,65 @@ test("orchestrator aggregates repeated failed Test Cases by root cause without d
   assert.deepEqual(result.defects?.[0]?.case_ids, ["IDEMP-001", "IDEMP-002"]);
   assert.equal(result.defects?.[0]?.evidence.length, 2);
 });
+
+test("orchestrator keeps explicitly blocked Test Cases as 未执行 instead of executor_error", async () => {
+  const directory = await tempDir("runner-explicit-blocked-");
+  const result = await runApprovedManifest({
+    manifest: manifest(),
+    outputDir: directory,
+    run_id: "run-explicit-blocked",
+    executeAction: async (action) => ({
+      action_id: action.action_id,
+      started_at: new Date().toISOString(),
+      finished_at: new Date().toISOString(),
+      status: "blocked",
+      actual: { reason: "missing observable field" },
+      attachments: [],
+      error: { type: "execution_input_gap", message: "missing observable field" },
+    }),
+  });
+
+  assert.equal(result.run_status, "blocked");
+  assert.equal(result.cases[0]?.run_status, "blocked");
+  assert.equal(result.cases[0]?.case_status, "未执行");
+});
+
+test("orchestrator reports the observable run lifecycle in authoritative execution order", async () => {
+  const directory = await tempDir("runner-observer-");
+  const events: string[] = [];
+
+  await runApprovedManifest({
+    manifest: manifestWithCases(["CASE-001", "CASE-002"]),
+    outputDir: directory,
+    run_id: "run-observer",
+    observer: {
+      runStarted: () => { events.push("run.started"); },
+      caseStarted: ({ item }) => { events.push(`case.started:${item.case_id}`); },
+      actionStarted: ({ action }) => { events.push(`action.started:${action.action_id}`); },
+      actionCompleted: ({ action, outcome }) => { events.push(`action.${outcome.status}:${action.action_id}`); },
+      caseCompleted: ({ result }) => { events.push(`case.completed:${result.case_id}:${result.case_status}`); },
+      runCompleted: () => { events.push("run.completed"); },
+    },
+    executeAction: async (action) => ({
+      action_id: action.action_id,
+      started_at: new Date().toISOString(),
+      finished_at: new Date().toISOString(),
+      status: action.action_id.startsWith("CASE-002") ? "pending" : "passed",
+      actual: { status: 200 },
+      attachments: [],
+    }),
+  });
+
+  assert.deepEqual(events, [
+    "run.started",
+    "case.started:CASE-001",
+    "action.started:CASE-001-request",
+    "action.passed:CASE-001-request",
+    "case.completed:CASE-001:通过",
+    "case.started:CASE-002",
+    "action.started:CASE-002-request",
+    "action.pending:CASE-002-request",
+    "case.completed:CASE-002:待定",
+    "run.completed",
+  ]);
+});

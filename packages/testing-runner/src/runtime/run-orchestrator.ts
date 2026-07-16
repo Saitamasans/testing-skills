@@ -8,10 +8,60 @@ import { EventWriter } from "./event-writer.js";
 import { storeEvidence } from "./evidence-store.js";
 import { retryDecision } from "./retry-policy.js";
 
+type ManifestCase = RunManifest["cases"][number];
+type ManifestAction = ManifestCase["steps"][number];
+type CaseResult = RunResult["cases"][number];
+type ObserverHook<T> = (event: T) => void | Promise<void>;
+
+interface RunLifecycleBase {
+  run_id: string;
+  manifest_hash: string;
+  case_total: number;
+}
+
+export interface RunStartedEvent extends RunLifecycleBase {
+  manifest: RunManifest;
+  action_total: number;
+}
+
+export interface CaseStartedEvent extends RunLifecycleBase {
+  case_index: number;
+  item: ManifestCase;
+  action_total: number;
+}
+
+export interface ActionStartedEvent extends CaseStartedEvent {
+  action_index: number;
+  action: ManifestAction;
+  attempt: number;
+}
+
+export interface ActionCompletedEvent extends ActionStartedEvent {
+  outcome: ActionOutcome;
+}
+
+export interface CaseCompletedEvent extends CaseStartedEvent {
+  result: CaseResult;
+}
+
+export interface RunCompletedEvent extends RunLifecycleBase {
+  result: RunResult;
+}
+
+export interface RunObserver {
+  runStarted?: ObserverHook<RunStartedEvent>;
+  caseStarted?: ObserverHook<CaseStartedEvent>;
+  actionStarted?: ObserverHook<ActionStartedEvent>;
+  actionCompleted?: ObserverHook<ActionCompletedEvent>;
+  caseCompleted?: ObserverHook<CaseCompletedEvent>;
+  runCompleted?: ObserverHook<RunCompletedEvent>;
+}
+
 export interface RunInput {
   manifest: RunManifest;
   outputDir: string;
   run_id?: string;
+  observer?: RunObserver;
   executeAction(action: RunManifest["cases"][number]["steps"][number], attempt: number): Promise<ActionOutcome>;
 }
 
@@ -55,6 +105,8 @@ async function storeOutcomeAttachments(
 export async function runApprovedManifest(input: RunInput): Promise<RunResult> {
   const run_id = input.run_id ?? runId(input.manifest);
   const runDir = path.join(input.outputDir, run_id);
+  const manifest_hash = sha256Canonical(input.manifest);
+  const case_total = input.manifest.cases.length;
   const startedAt = new Date().toISOString();
   await mkdir(runDir, { recursive: true });
   const writer = new EventWriter(path.join(runDir, "run-events.jsonl"));
@@ -62,7 +114,24 @@ export async function runApprovedManifest(input: RunInput): Promise<RunResult> {
   const defects = new Map<string, { case_ids: string[]; evidence: EvidenceReference[] }>();
   let runStatus: RunResult["run_status"] = "completed";
 
-  for (const item of input.manifest.cases) {
+  await input.observer?.runStarted?.({
+    run_id,
+    manifest_hash,
+    case_total,
+    manifest: input.manifest,
+    action_total: input.manifest.cases.reduce((total, item) => total + item.steps.length, 0),
+  });
+
+  for (const [caseOffset, item] of input.manifest.cases.entries()) {
+    const caseEvent = {
+      run_id,
+      manifest_hash,
+      case_total,
+      case_index: caseOffset + 1,
+      item,
+      action_total: item.steps.length,
+    };
+    await input.observer?.caseStarted?.(caseEvent);
     const assertions: AssertionResult[] = [];
     const evidence: EvidenceReference[] = [];
     let caseStatus: RunResult["cases"][number]["case_status"] = PASSED;
@@ -72,17 +141,26 @@ export async function runApprovedManifest(input: RunInput): Promise<RunResult> {
 
     while (!completed && attempt <= 2) {
       let retryCase = false;
-      for (const action of item.steps) {
+      for (const [actionOffset, action] of item.steps.entries()) {
+        const actionEvent = {
+          ...caseEvent,
+          action_index: actionOffset + 1,
+          action,
+          attempt,
+        };
         await writer.appendEvent({ run_id, case_id: item.case_id, action_id: action.action_id, attempt, type: "action.started" });
+        await input.observer?.actionStarted?.(actionEvent);
         const outcome = await input.executeAction(action, attempt);
         evidence.push(...await storeOutcomeAttachments(runDir, item.case_id, attempt, outcome));
         if (outcome.status === "passed") {
           await writer.appendEvent({ run_id, case_id: item.case_id, action_id: action.action_id, attempt, type: "action.passed", data: outcome.actual });
+          await input.observer?.actionCompleted?.({ ...actionEvent, outcome });
           continue;
         }
 
         if (outcome.status === "pending") {
           await writer.appendEvent({ run_id, case_id: item.case_id, action_id: action.action_id, attempt, type: "action.pending", data: outcome.actual });
+          await input.observer?.actionCompleted?.({ ...actionEvent, outcome });
           const entry = await storeEvidence({
             runDir,
             case_id: item.case_id,
@@ -98,6 +176,7 @@ export async function runApprovedManifest(input: RunInput): Promise<RunResult> {
         }
 
         await writer.appendEvent({ run_id, case_id: item.case_id, action_id: action.action_id, attempt, type: "action.failed", data: outcome.error });
+        await input.observer?.actionCompleted?.({ ...actionEvent, outcome });
         const entry = await storeEvidence({
           runDir,
           case_id: item.case_id,
@@ -126,7 +205,11 @@ export async function runApprovedManifest(input: RunInput): Promise<RunResult> {
           }
         } else {
           caseStatus = NOT_EXECUTED;
-          caseRunStatus = outcome.status === "manual_required" ? "manual_required" : "executor_error";
+          caseRunStatus = outcome.status === "manual_required"
+            ? "manual_required"
+            : outcome.status === "blocked"
+              ? "blocked"
+              : "executor_error";
           runStatus = caseRunStatus;
         }
         completed = true;
@@ -141,19 +224,21 @@ export async function runApprovedManifest(input: RunInput): Promise<RunResult> {
     }
 
     if (caseStatus === PASSED) assertions.push({ assertion_id: `${item.case_id}-actions`, passed: true });
-    cases.push({
+    const caseResult: CaseResult = {
       case_id: item.case_id,
       case_status: caseStatus,
       run_status: caseRunStatus,
       assertions,
       evidence,
-    });
+    };
+    cases.push(caseResult);
+    await input.observer?.caseCompleted?.({ ...caseEvent, result: caseResult });
   }
 
   const result: RunResult = {
     protocol_version: "1.0.0",
     run_id,
-    manifest_hash: sha256Canonical(input.manifest),
+    manifest_hash,
     run_status: runStatus,
     started_at: startedAt,
     completed_at: new Date().toISOString(),
@@ -168,5 +253,6 @@ export async function runApprovedManifest(input: RunInput): Promise<RunResult> {
     }));
   }
   await writeFile(path.join(runDir, "run-result.json"), `${JSON.stringify(result, null, 2)}\n`, "utf8");
+  await input.observer?.runCompleted?.({ run_id, manifest_hash, case_total, result });
   return result;
 }
