@@ -250,5 +250,23 @@ class GitHubInstallReadmeTest(unittest.TestCase):
         self.assertNotIn("> Production-ready testing skills", self.readme)
 
 
+class GitHubInstallerReleaseWorkflowTest(unittest.TestCase):
+    def test_main_updates_publish_all_launchers_to_the_fixed_release(self):
+        workflow = (
+            ROOT / ".github" / "workflows" / "publish-installers.yml"
+        ).read_text(encoding="utf-8")
+
+        for phrase in [
+            "push:",
+            "branches: [main]",
+            "installers/*.cmd",
+            "contents: write",
+            "gh release upload skill-installers-v1",
+            "--clobber",
+            "GH_TOKEN: ${{ github.token }}",
+        ]:
+            self.assertIn(phrase, workflow)
+
+
 if __name__ == "__main__":
     unittest.main()
