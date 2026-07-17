@@ -12,10 +12,13 @@ node <ABSOLUTE_SKILL_ROOT>/scripts/testing-runner.mjs run --manifest .testing-ru
 
 ## 可视执行
 
-- `--progress auto`：默认值。interactive 且浏览器可见时最大化窗口并显示实时执行面板；Web/混合场景显示页面浮层，API-only 使用全屏执行看板。
+- `--progress auto`：默认值。interactive 且浏览器可见时最大化窗口，依次展示执行准备、用例预告、实时执行、证据收集和结果中心。
+- 执行准备展示输入范围、测试用例（Test Cases）总数、动作数量、目标地址和交付物；用例预告逐条展示测试用例（Test Case）的验证意图与预期结果。
+- 实时执行中，Web/混合场景显示自动让位的页面浮层与当前目标高亮；API-only 使用全屏执行看板，API 流水展示方法、路径、响应状态、响应摘要和断言。
+- 证据收集展示 PNG、请求响应、Excel/HTML/JSON、日志与 Trace 的整理状态；结果中心展示四状态统计、逐条结果和产物入口。
 - `--progress off`：关闭执行面板。API-only 不再为可视化额外启动或下载浏览器；Web 动作仍按原逻辑使用浏览器。
 - `--browser headless` 或 `--mode ci`：不显示面板、不停留等待，也不为 API-only 可视化准备浏览器。
-- 面板只消费 Runner 的真实执行事件，不参与定位器或点击；正式 Web 证据 PNG 临时隐藏面板，桌面录屏保持显示。
+- 驾驶舱只消费 Runner 的真实执行事件，不参与定位器、点击、断言或结果计算；正式 Web 证据 PNG 临时隐藏驾驶舱和目标高亮，桌面录屏保持显示。
 
 ## CI
 

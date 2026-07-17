@@ -73,7 +73,7 @@ class ExecutionSkillContractsTest(unittest.TestCase):
 
     def test_interactive_execution_is_visually_explained_by_default(self):
         for phrase in [
-            "交互可见执行默认最大化浏览器并开启实时执行面板",
+            "交互可见执行默认最大化浏览器并开启五阶段执行驾驶舱",
             "当前测试用例（Test Case）",
             "API-only 使用全屏执行看板",
             "正式 Web 证据 PNG 不包含执行面板",
@@ -82,6 +82,22 @@ class ExecutionSkillContractsTest(unittest.TestCase):
             "--browser headless",
         ]:
             self.assertIn(phrase, self.text)
+
+    def test_complete_visible_execution_journey_is_packaged(self):
+        command_reference = (
+            ROOT / "skills" / self.item["slug"] / "references" / "runner-commands.md"
+        ).read_text(encoding="utf-8")
+        for document in [self.text, self.generated_text, command_reference]:
+            for phrase in [
+                "执行准备",
+                "用例预告",
+                "实时执行",
+                "证据收集",
+                "结果中心",
+                "测试用例（Test Case）",
+                "API 流水",
+            ]:
+                self.assertIn(phrase, document)
 
     def test_execution_skill_uses_automatic_bootstrap_only(self):
         combined = self.text + self.generated_text + (ROOT / "README.md").read_text(encoding="utf-8")

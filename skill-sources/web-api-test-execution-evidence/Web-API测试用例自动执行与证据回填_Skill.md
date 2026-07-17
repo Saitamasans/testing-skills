@@ -74,7 +74,15 @@ Do not trigger this Skill merely to generate test cases, clarify requirements, o
 
 首次运行时，启动器先告知 Runner 来源、固定版本、下载体积和缓存位置，再从项目 GitHub Release 自动下载并校验 SHA-256。无需 npm 账号，无需用户手工输入 npm 或 Runner 安装命令。交互可见执行需要 Web 动作或 API-only 全屏看板时，自动准备 Playwright Chromium；CI、headless 或显式关闭 API-only 面板时不额外下载浏览器。
 
-交互可见执行默认最大化浏览器并开启实时执行面板：持续展示当前测试用例（Test Case）的序号、ID、中文标题、模块、当前 Web/API 动作、API 方法与路径、响应状态、断言结果、四状态统计、manifest hash 和目标 origin。Web/混合场景使用不参与定位和点击的页面浮层，API-only 使用全屏执行看板。正式 Web 证据 PNG 不包含执行面板，桌面教程录制保留面板；CI 和 `--browser headless` 不显示面板。只有用户显式要求关闭时才传 `--progress off`。
+交互可见执行默认最大化浏览器并开启五阶段执行驾驶舱：
+
+1. 执行准备：展示输入范围、测试用例（Test Cases）总数、动作数量、目标 origin 和预期交付物。
+2. 用例预告：逐条展示即将执行的测试用例（Test Case）序号、ID、中文标题、模块、验证点、前置条件和预期结果。
+3. 实时执行：展示当前测试用例（Test Case）的 Web 点击、输入、查询和断言；API 流水同步展示方法、路径、响应状态、响应摘要与断言结果。页面目标位于驾驶舱一侧时，驾驶舱自动让位并高亮“正在操作”的控件。
+4. 证据收集：明确展示 Web PNG、API 请求响应、Excel/HTML/JSON 一致性、日志和 Trace 的整理状态。
+5. 结果中心：从 `run-result.json` 展示未执行、通过、不通过、待定四状态统计、逐条结果和已生成产物入口。
+
+Web/混合场景的实时执行阶段使用不参与定位、点击或断言的页面浮层，API-only 使用全屏执行看板。正式 Web 证据 PNG 不包含执行面板（包括驾驶舱和目标高亮），桌面教程录制保留完整可视过程；CI 和 `--browser headless` 不显示驾驶舱。只有用户显式要求关闭时才传 `--progress off`。
 
 ```bash
 node <ABSOLUTE_SKILL_ROOT>/scripts/testing-runner.mjs plan --input report.json --profile execution-profile.json --output-dir .testing-run
@@ -101,7 +109,7 @@ CI 证据、报告一致性、上传产物和失败退出码读取 `references/c
 - [ ] 是否对非标准 Excel 做了字段映射确认？
 - [ ] 是否保护密钥，没有把账号密码、token、连接串写入产物？
 - [ ] 是否使用本 Skill 内置启动器、固定 Runner 版本和审批文件？
-- [ ] 交互可见执行是否默认最大化并显示当前测试用例（Test Case）和动作，且正式 PNG 不含执行面板？
+- [ ] 交互可见执行是否完整展示执行准备、用例预告、实时执行、证据收集和结果中心，且正式 PNG 不含驾驶舱？
 - [ ] 是否保留未执行、通过、不通过、待定四状态和七个运行状态的区别？
 - [ ] 是否通过 Excel/HTML/JSON 一致性门禁后再交付？
 
@@ -214,10 +222,13 @@ node <ABSOLUTE_SKILL_ROOT>/scripts/testing-runner.mjs run --manifest .testing-ru
 
 ## 可视执行
 
-- `--progress auto`：默认值。interactive 且浏览器可见时最大化窗口并显示实时执行面板；Web/混合场景显示页面浮层，API-only 使用全屏执行看板。
+- `--progress auto`：默认值。interactive 且浏览器可见时最大化窗口，依次展示执行准备、用例预告、实时执行、证据收集和结果中心。
+- 执行准备展示输入范围、测试用例（Test Cases）总数、动作数量、目标地址和交付物；用例预告逐条展示测试用例（Test Case）的验证意图与预期结果。
+- 实时执行中，Web/混合场景显示自动让位的页面浮层与当前目标高亮；API-only 使用全屏执行看板，API 流水展示方法、路径、响应状态、响应摘要和断言。
+- 证据收集展示 PNG、请求响应、Excel/HTML/JSON、日志与 Trace 的整理状态；结果中心展示四状态统计、逐条结果和产物入口。
 - `--progress off`：关闭执行面板。API-only 不再为可视化额外启动或下载浏览器；Web 动作仍按原逻辑使用浏览器。
 - `--browser headless` 或 `--mode ci`：不显示面板、不停留等待，也不为 API-only 可视化准备浏览器。
-- 面板只消费 Runner 的真实执行事件，不参与定位器或点击；正式 Web 证据 PNG 临时隐藏面板，桌面录屏保持显示。
+- 驾驶舱只消费 Runner 的真实执行事件，不参与定位器、点击、断言或结果计算；正式 Web 证据 PNG 临时隐藏驾驶舱和目标高亮，桌面录屏保持显示。
 
 ## CI
 
