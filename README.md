@@ -98,7 +98,7 @@ npx skills add Saitamasans/testing-skills@web-api-test-execution-evidence -g -y
 
 ## 第 1–7 个 Skill 使用指南
 
-### 1. 单接口完整版（`single-api-test-full`）
+### 1. 单接口用例生成-完整版（`single-api-test-full`）
 
 适合普通单接口测试、契约审查和完整用例设计。
 
@@ -112,7 +112,7 @@ npx skills add Saitamasans/testing-skills@web-api-test-execution-evidence -g -y
 调用 `single-api-test-full`：请按完整版审查这个单接口，分析契约、参数、鉴权、越权、幂等、并发和数据副作用；未明确规则全部标为待确认。
 ```
 
-### 2. 单接口精炼版（`single-api-test-concise`）
+### 2. 单接口用例生成-精炼版（`single-api-test-concise`）
 
 适合明确要求精炼版、快速版、短版或低上下文的单接口任务。
 
@@ -126,7 +126,7 @@ npx skills add Saitamasans/testing-skills@web-api-test-execution-evidence -g -y
 调用 `single-api-test-concise`：请用精炼版快速分析 `POST /orders`，输出准入结论、核心风险、待确认项和 P0/P1 用例速览。
 ```
 
-### 3. 多接口链路测试（`multi-api-flow-test`）
+### 3. 多接口链路用例生成（`multi-api-flow-test`）
 
 适合两个及以上接口、业务调用链、接口增量变更和联合回归任务。
 
@@ -140,7 +140,7 @@ npx skills add Saitamasans/testing-skills@web-api-test-execution-evidence -g -y
 调用 `multi-api-flow-test`：请根据 OpenAPI、PRD 和前端抓包，梳理创建订单、支付、查询详情链路，输出联合用例和最小回归集；环境是预发。
 ```
 
-### 4. 需求测试工作台（`requirement-test-workbench`）
+### 4. 需求澄清与用例生成skill-工作台（`requirement-test-workbench`）
 
 适合根据 PRD、用户故事或需求变更做需求评审、测试设计、正式用例或回归分析。
 
@@ -154,7 +154,7 @@ npx skills add Saitamasans/testing-skills@web-api-test-execution-evidence -g -y
 调用 `requirement-test-workbench`：请根据这份 PRD 生成可执行测试用例，先判断输入等级和 P0 缺口，再输出去冗余后的十列用例。
 ```
 
-### 5. 正式服验证（`production-verification-test`）
+### 5. 正式服用例生成skill（`production-verification-test`）
 
 适合已上线、灰度或生产环境中的低影响验证和上线后检查。
 
@@ -168,7 +168,7 @@ npx skills add Saitamasans/testing-skills@web-api-test-execution-evidence -g -y
 调用 `production-verification-test`：版本 2.3.0 已灰度到 10%，目前没有写入授权，请只设计正式服低影响验证方案和不建议线上执行清单。
 ```
 
-### 6. 用例质量审计（`test-case-quality-audit`）
+### 6. 用例质量审计skill（`test-case-quality-audit`）
 
 适合在人工评审或执行前检查已有用例的可执行性、可判定性、遗漏和冗余。
 
@@ -182,7 +182,7 @@ npx skills add Saitamasans/testing-skills@web-api-test-execution-evidence -g -y
 调用 `test-case-quality-audit`：请对照这份 PRD 审计这批用例，只输出问题清单、准入结论和修订建议，先不要重写。
 ```
 
-### 7. 需求澄清（`requirement-clarification-test`）
+### 7. 测试角度需求澄清skill（`requirement-clarification-test`）
 
 适合在写测试点或用例前找出需求缺口，并判断当前需求能否开测。
 
@@ -198,7 +198,7 @@ npx skills add Saitamasans/testing-skills@web-api-test-execution-evidence -g -y
 
 <a id="execution-guide"></a>
 
-## 第 8 个 Skill 专项指南
+## 自动执行web用例skill 即 第 8 个 Skill 专项指南
 
 对应 Package：`web-api-test-execution-evidence`。
 
