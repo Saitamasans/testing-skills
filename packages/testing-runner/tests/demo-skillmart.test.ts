@@ -6,6 +6,7 @@ import path from "node:path";
 import { spawnSync } from "node:child_process";
 import test from "node:test";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { chromium } from "playwright";
 
 import { startSkillMartApp } from "./fixtures/skillmart-app.js";
 
@@ -94,6 +95,40 @@ test("SkillMart can bind a caller-selected port for locked execution profiles", 
       ok: boolean;
     };
     assert.equal(health.ok, true);
+  } finally {
+    await app.close();
+  }
+});
+
+test("SkillMart is understandable and usable before Runner injection", async () => {
+  const app = await startSkillMartApp();
+  const browser = await chromium.launch({ headless: true });
+  const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
+  try {
+    await page.goto(app.baseUrl);
+    assert.equal(await page.getByText("SkillMart", { exact: true }).isVisible(), true);
+    assert.equal(await page.getByText("商品中心", { exact: true }).isVisible(), true);
+    assert.equal(await page.getByText("订单中心", { exact: true }).isVisible(), true);
+    assert.equal(await page.getByText("运行数据", { exact: true }).isVisible(), true);
+    await page.getByTestId("coupon-code").fill("SKILL20");
+    await page.getByTestId("create-order").click();
+    assert.match(await page.getByTestId("status").innerText(), /订单已创建 ORD-/);
+  } finally {
+    await browser.close();
+    await app.close();
+  }
+});
+
+test("SkillMart assets are local and its read-only operations views expose current state", async () => {
+  const app = await startSkillMartApp();
+  try {
+    const html = await fetch(`${app.baseUrl}/`).then((response) => response.text());
+    assert.doesNotMatch(html, /https?:\/\/(?!127\.0\.0\.1)/);
+    assert.match(html, /\/assets\/skillmart-products\.png/);
+    assert.equal((await fetch(`${app.baseUrl}/api/products`)).status, 200);
+    assert.equal((await fetch(`${app.baseUrl}/api/orders`)).status, 200);
+    assert.equal((await fetch(`${app.baseUrl}/api/runtime-state`)).status, 200);
+    assert.equal((await fetch(`${app.baseUrl}/__test/reset`, { method: "POST" })).status, 200);
   } finally {
     await app.close();
   }

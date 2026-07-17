@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="SkillMart 本地电商订单与 Web/API 测试演示系统">
+  <title>SkillMart · 订单演示系统</title>
+  <link rel="preload" as="image" href="/assets/skillmart-products.png">
+  <link rel="stylesheet" href="/app.css">
+</head>
+<body>
+  <a class="skip-link" href="#main-content">跳到主要内容</a>
+  <header class="topbar">
+    <div class="brand" aria-label="SkillMart">
+      <span class="brand-mark" aria-hidden="true">SM</span>
+      <div><strong>SkillMart</strong><small>本地订单演示系统</small></div>
+    </div>
+    <nav class="view-nav" aria-label="工作区">
+      <button class="nav-button active" type="button" data-view-target="shop">商品中心</button>
+      <button class="nav-button" type="button" data-view-target="orders">订单中心</button>
+      <button class="nav-button" type="button" data-view-target="runtime">运行数据</button>
+    </nav>
+    <div class="environment"><span class="status-dot"></span>LOCAL · 127.0.0.1</div>
+  </header>
+
+  <main id="main-content">
+    <section class="workspace-header">
+      <div>
+        <p class="section-label">SKILLMART / ORDER LAB</p>
+        <h1>本地订单与接口联调工作台</h1>
+      </div>
+      <div class="headline-stats" aria-label="当前运行概况">
+        <div><span>服务</span><strong id="headline-health">连接中</strong></div>
+        <div><span>商品</span><strong id="headline-products">--</strong></div>
+        <div><span>订单</span><strong id="headline-orders">--</strong></div>
+      </div>
+    </section>
+
+    <section class="view active" data-view="shop" aria-label="商品与下单">
+      <div class="shop-layout">
+        <section class="catalog" aria-labelledby="catalog-title">
+          <div class="section-heading">
+            <div><p class="section-label">PRODUCT CATALOG</p><h2 id="catalog-title">可测商品</h2></div>
+            <button class="text-button" id="refresh-products" type="button">刷新库存</button>
+          </div>
+          <div class="product-grid" id="product-grid" aria-live="polite">
+            <div class="product-skeleton"></div><div class="product-skeleton"></div>
+            <div class="product-skeleton"></div><div class="product-skeleton"></div>
+          </div>
+        </section>
+
+        <aside class="checkout" aria-labelledby="checkout-title">
+          <div class="checkout-head">
+            <p class="section-label">CHECKOUT CONSOLE</p>
+            <h2 id="checkout-title">创建订单</h2>
+            <p>请求将写入本地内存数据，页面会同步刷新库存与订单状态。</p>
+          </div>
+          <form id="checkout-form">
+            <label>商品
+              <select id="product-sku" data-testid="product-sku"></select>
+            </label>
+            <div class="form-row">
+              <label>数量
+                <input id="quantity" type="number" min="1" step="1" value="1" inputmode="numeric">
+              </label>
+              <label>用户
+                <select id="user-id"><option value="user-a">user-a</option><option value="user-b">user-b</option></select>
+              </label>
+            </div>
+            <label>优惠券代码
+              <input data-testid="coupon-code" id="coupon-code" value="SKILL20" autocomplete="off">
+            </label>
+            <label>幂等键
+              <input id="idempotency-key" value="web-demo-key" autocomplete="off">
+            </label>
+            <button class="primary-button" data-testid="create-order" type="submit">创建订单</button>
+          </form>
+          <div class="operation-status neutral" data-testid="status" id="operation-status" role="status">
+            <span class="status-symbol" aria-hidden="true">i</span>
+            <div><strong>等待操作</strong><small>选择商品后提交订单</small></div>
+          </div>
+          <div class="last-order" id="last-order" hidden>
+            <span>最近订单</span><strong id="last-order-id">--</strong><small id="last-order-state">--</small>
+          </div>
+        </aside>
+      </div>
+    </section>
+
+    <section class="view" data-view="orders" aria-label="订单列表" hidden>
+      <div class="section-heading orders-heading">
+        <div><p class="section-label">ORDER LEDGER</p><h2>本地订单记录</h2></div>
+        <button class="secondary-button" id="refresh-orders" type="button">刷新订单</button>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>订单号</th><th>用户</th><th>商品 SKU</th><th>数量</th><th>状态</th></tr></thead>
+          <tbody id="orders-body"></tbody>
+        </table>
+        <div class="empty-state" id="orders-empty"><strong>暂无订单</strong><span>从商品中心创建第一笔本地订单。</span></div>
+      </div>
+    </section>
+
+    <section class="view" data-view="runtime" aria-label="运行数据" hidden>
+      <div class="section-heading">
+        <div><p class="section-label">RUNTIME TELEMETRY</p><h2>服务与数据状态</h2></div>
+        <button class="secondary-button" id="reset-data" type="button">重置演示数据</button>
+      </div>
+      <div class="runtime-grid">
+        <section class="runtime-primary"><span>服务状态</span><strong id="runtime-health">--</strong><small>GET /api/health</small></section>
+        <section><span>商品种类</span><strong id="runtime-products">--</strong><small>当前可售 SKU</small></section>
+        <section><span>库存总量</span><strong id="runtime-inventory">--</strong><small>内存库存单位</small></section>
+        <section><span>订单数量</span><strong id="runtime-orders">--</strong><small>当前会话累计</small></section>
+      </div>
+      <div class="runtime-detail">
+        <div><span>最后事件</span><strong id="runtime-event">--</strong><small id="runtime-event-time">--</small></div>
+        <div class="known-defect"><span>已植入缺陷</span><strong id="runtime-defect">--</strong><small>用于验证失败证据与根因聚合</small></div>
+      </div>
+    </section>
+  </main>
+
+  <footer><span>SkillMart local demo</span><span>数据仅保存在当前进程内存中</span></footer>
+  <script type="module" src="/app.js"></script>
+</body>
+</html>

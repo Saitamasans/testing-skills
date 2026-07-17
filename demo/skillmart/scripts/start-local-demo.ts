@@ -1,4 +1,4 @@
-import { startSkillMartApp } from "../../../packages/testing-runner/tests/fixtures/skillmart-app.js";
+import { startSkillMartApp } from "../src/app.js";
 
 const configuredPort = process.env.SKILLMART_PORT === undefined
   ? 0
