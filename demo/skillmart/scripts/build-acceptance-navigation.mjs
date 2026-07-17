@@ -42,7 +42,7 @@ async function findLatestEighthSkillTutorial(root) {
     return undefined;
   }
   const candidates = entries
-    .filter((entry) => entry.isDirectory() && /^final-\d{8}-\d{6}$/.test(entry.name))
+    .filter((entry) => entry.isDirectory() && /^final-(?:v\d+\.\d+\.\d+-)?\d{8}-\d{6}$/.test(entry.name))
     .sort((left, right) => right.name.localeCompare(left.name));
   for (const entry of candidates) {
     const relative = `${folder}/${entry.name}`;

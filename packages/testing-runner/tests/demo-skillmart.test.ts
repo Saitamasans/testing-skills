@@ -482,7 +482,7 @@ test("SkillMart acceptance navigation links all eight Skills, evidence and both 
       unique_bug_count: 1,
     }), "utf8");
 
-    const tutorialDir = path.join(root, "12-第八个Skill专用教程_Eighth-Skill-Tutorial", "final-20260716-200006");
+    const tutorialDir = path.join(root, "12-第八个Skill专用教程_Eighth-Skill-Tutorial", "final-v1.0.4-20260717-125013");
     await mkdir(path.join(tutorialDir, "01-真实执行_Live-Execution"), { recursive: true });
     await mkdir(path.join(tutorialDir, "02-视频关键帧_Key-Frames"), { recursive: true });
     for (const file of [
@@ -507,11 +507,11 @@ test("SkillMart acceptance navigation links all eight Skills, evidence and both 
       "测试用例（Test Cases）",
       "完整未剪辑录屏_Raw-Full-Session.mp4",
       "20分钟精剪版_Edited-Demo.mp4",
-      "final-20260716-200006/完整未剪辑桌面录屏_Raw-Desktop-Session.mp4",
-      "final-20260716-200006/第八个Skill教程_8th-Skill-Tutorial-Edited.mp4",
-      "final-20260716-200006/01-真实执行_Live-Execution/result.html",
-      "final-20260716-200006/证据索引_Evidence-Index.json",
-      "final-20260716-200006/02-视频关键帧_Key-Frames/教程版接触表_Edited-Contact-Sheet.png",
+      "final-v1.0.4-20260717-125013/完整未剪辑桌面录屏_Raw-Desktop-Session.mp4",
+      "final-v1.0.4-20260717-125013/第八个Skill教程_8th-Skill-Tutorial-Edited.mp4",
+      "final-v1.0.4-20260717-125013/01-真实执行_Live-Execution/result.html",
+      "final-v1.0.4-20260717-125013/证据索引_Evidence-Index.json",
+      "final-v1.0.4-20260717-125013/02-视频关键帧_Key-Frames/教程版接触表_Edited-Contact-Sheet.png",
     ]) assert.match(navigation, new RegExp(marker.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
 
     const index = JSON.parse(await readFile(path.join(root, "00-演示导航与视频材料", "证据索引.json"), "utf8")) as {
