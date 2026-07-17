@@ -362,8 +362,8 @@ export class VisualProgressController implements RunObserver {
     await this.render();
   }
 
-  async completionPause(milliseconds = 2500): Promise<void> {
-    await delay(milliseconds);
+  async completionPause(milliseconds = 8000): Promise<void> {
+    await this.pause(milliseconds);
   }
 }
 

@@ -299,6 +299,21 @@ test("visible execution pauses on preflight and each Test Case preview before li
   assert.deepEqual(pauses, [3000, 1500]);
 });
 
+test("result center remains visible long enough for tutorial viewers to inspect delivery", async () => {
+  const pauses: number[] = [];
+  const page = { evaluate: async () => undefined } as unknown as Page;
+  const controller = new VisualProgressController(
+    page,
+    false,
+    0,
+    async (milliseconds) => { pauses.push(milliseconds); },
+  );
+
+  await controller.completionPause();
+
+  assert.deepEqual(pauses, [8000]);
+});
+
 test("Web cockpit moves away from the current target and renders a visible target guide", async () => {
   let rendered = "";
   const locator = {

@@ -16,9 +16,9 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { gunzipSync } from "node:zlib";
 
 const PACKAGE_NAME = "@saitamasans/testing-runner";
-const VERSION = "1.0.3";
-const FILE_NAME = "saitamasans-testing-runner-1.0.3.tgz";
-const RELEASE_TAG = "testing-runner-v1.0.3";
+const VERSION = "1.0.4";
+const FILE_NAME = "saitamasans-testing-runner-1.0.4.tgz";
+const RELEASE_TAG = "testing-runner-v1.0.4";
 const RELEASE_URL = "https://github.com/Saitamasans/testing-skills/releases/download/"
   + RELEASE_TAG + "/" + FILE_NAME;
 const CHROMIUM_ESTIMATED_SIZE_BYTES = 180_000_000;
@@ -195,6 +195,7 @@ export async function buildReleaseTarball(
       "--pack-destination",
       outputDir,
       "--json",
+      "--ignore-scripts",
     ], stageDir);
     const result = JSON.parse(packed.stdout.trim());
     if (!Array.isArray(result) || result.length !== 1 || !result[0]?.filename) {
