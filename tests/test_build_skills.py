@@ -31,6 +31,19 @@ class BuildSkillsTest(unittest.TestCase):
         self.assertFalse(by_slug["web-api-test-execution-evidence"]["case_output"])
         self.assertTrue(by_slug["web-api-test-execution-evidence"]["execution_skill"])
 
+    def test_requirement_workbench_defaults_to_excel_then_markdown_for_case_modes(self):
+        source = (ROOT / ORIGINAL_SEVEN["requirement-test-workbench"]).read_text(encoding="utf-8")
+        required = [
+            "凡实际产出统一十列用例的模式，默认先生成并验证 Excel",
+            "Excel 链接必须先于完整 Markdown 用例表",
+            "用户明确说“不要文件”或“只在聊天中展示”时",
+            "仅做需求评审、微需求澄清或测试设计时，不自动生成用例 Excel",
+            "Excel 未成功生成、无法打开或未通过校验时，不得宣称交付完成",
+        ]
+        for phrase in required:
+            self.assertIn(phrase, source)
+        self.assertNotIn("聊天请求不创建文件。", source)
+
     def test_generated_packages_match_sources(self):
         outputs = build_all(ROOT)
         self.assertGreaterEqual(len(outputs), 14)

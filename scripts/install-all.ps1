@@ -1,15 +1,13 @@
-$ErrorActionPreference = "Stop"
-$skills = @(
-  "single-api-test-full",
-  "single-api-test-concise",
-  "multi-api-flow-test",
-  "requirement-test-workbench",
-  "production-verification-test",
-  "test-case-quality-audit",
-  "requirement-clarification-test",
-  "web-api-test-execution-evidence"
+[CmdletBinding()]
+param(
+    [string]$InstallRoot = (Join-Path ([Environment]::GetFolderPath("UserProfile")) ".agents\skills"),
+    [switch]$Force
 )
-foreach ($skill in $skills) {
-  & npx skills add "Saitamasans/testing-skills@$skill" -g -y
-  if ($LASTEXITCODE -ne 0) { throw "安装失败：$skill" }
+
+$installer = Join-Path $PSScriptRoot "install.ps1"
+$repositoryRoot = Split-Path $PSScriptRoot -Parent
+& $installer -All -SourceDirectory $repositoryRoot -InstallRoot $InstallRoot -Force:$Force
+if (-not $?) {
+    exit 1
 }
+exit 0

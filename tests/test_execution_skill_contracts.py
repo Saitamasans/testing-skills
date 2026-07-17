@@ -51,6 +51,38 @@ class ExecutionSkillContractsTest(unittest.TestCase):
         ]:
             self.assertIn(phrase, self.body)
 
+    def test_new_user_materials_are_classified_and_require_formal_cases(self):
+        input_reference = (
+            ROOT / "skills" / self.item["slug"] / "references" / "input-and-readiness.md"
+        ).read_text(encoding="utf-8")
+        documents = [self.text, self.generated_text, input_reference]
+        required_phrases = [
+            "强制资料",
+            "条件强制资料",
+            "辅助资料",
+            "需求文档、需求截图、原型和流程图不能代替正式测试用例",
+            "已有可访问测试地址时通常不需要前后端源码",
+            "只有需求资料而没有正式测试用例时，不得直接执行",
+            "Node.js 20+",
+        ]
+        for document in documents:
+            for phrase in required_phrases:
+                self.assertIn(phrase, document)
+
+        for phrase in [
+            "正式测试用例",
+            "目标 Web/API 地址",
+            "环境性质和执行授权",
+            "执行前确认",
+            "需要登录时",
+            "接口用例缺少可执行调用细节时",
+            "会新增或修改数据时",
+            "本地应用尚未运行时",
+            "CI 执行时",
+            "requirement-test-workbench",
+        ]:
+            self.assertIn(phrase, input_reference)
+
     def test_runner_commands_statuses_and_report_gate(self):
         for phrase in [
             "scripts/testing-runner.mjs plan",
