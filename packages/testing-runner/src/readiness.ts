@@ -3,6 +3,7 @@ import type {
   Approval,
   CredentialReference,
   DataReference,
+  JsonValue,
   ManifestAction,
   NormalizedCase,
   NormalizedCaseSet,
@@ -29,13 +30,16 @@ export interface TargetDraft {
   host?: string;
   port?: number;
   database?: string;
+  username_credential?: string;
+  password_credential?: string;
+  ssl_ca_credential?: string;
 }
 
 export interface ExecutionProfileDraft {
   profile_id?: string;
   targets?: Record<string, TargetDraft | undefined>;
   credentials?: Record<string, CredentialReference | undefined>;
-  data?: Record<string, DataReference | undefined>;
+  data?: Record<string, JsonValue | undefined>;
   cleanup_strategies?: Record<string, string | undefined>;
   public_targets?: string[];
 }
@@ -172,7 +176,7 @@ function formalCases(caseSet?: NormalizedCaseSet): NormalizedCase[] {
 
 function actionKind(action: ManifestAction): RuntimeKind {
   if (action.type.startsWith("web.") || action.type === "cleanup.web") return "web";
-  if (action.type === "db.select") return "database";
+  if (action.type === "db.select" || action.type === "db.assert") return "database";
   return "api";
 }
 
@@ -214,7 +218,11 @@ function isTargetComplete(target: TargetDraft | undefined): boolean {
     typeof target.host === "string" &&
     target.host.trim() !== "" &&
     typeof target.database === "string" &&
-    target.database.trim() !== ""
+    target.database.trim() !== "" &&
+    typeof target.username_credential === "string" &&
+    target.username_credential.trim() !== "" &&
+    typeof target.password_credential === "string" &&
+    target.password_credential.trim() !== ""
   );
 }
 
@@ -225,6 +233,8 @@ function targetExample(requirement: TargetRequirement | undefined, alias: string
       dialect: requirement?.dialect ?? "postgresql",
       host: requirement?.example_host ?? `${alias}.example.test`,
       database: requirement?.example_database ?? "app_test",
+      username_credential: `${alias}_user`,
+      password_credential: `${alias}_password`,
     };
   }
   return {
@@ -297,7 +307,7 @@ function hasVerdictRoute(item: RunManifest["cases"][number]): boolean {
   return item.steps.some((action) =>
     action.type === "api.assert" ||
     action.type === "web.assert" ||
-    action.type === "db.select" ||
+    action.type === "db.assert" ||
     action.type === "execution.blocked"
   );
 }

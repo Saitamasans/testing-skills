@@ -8,6 +8,7 @@
   "properties": {
     "protocol_version": { "const": "1.0.0" },
     "profile_id": { "type": "string", "minLength": 1 },
+    "manifest_id": { "type": "string", "minLength": 1 },
     "targets": {
       "type": "object",
       "propertyNames": { "pattern": "^[A-Za-z][A-Za-z0-9_-]*$" },
@@ -19,9 +20,47 @@
         "pattern": "^[A-Za-z][A-Za-z0-9_-]*$"
       },
       "additionalProperties": { "$ref": "#/$defs/credentialReference" }
+    },
+    "public_targets": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/alias" }
+    },
+    "data": {
+      "type": "object",
+      "propertyNames": { "pattern": "^[A-Za-z][A-Za-z0-9_.-]*$" },
+      "additionalProperties": {
+        "$ref": "https://saitamasans.dev/schemas/persisted-value.schema.json#/$defs/persistedJsonValue"
+      }
+    },
+    "case_plans": {
+      "type": "object",
+      "minProperties": 1,
+      "propertyNames": { "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]*$" },
+      "additionalProperties": {
+        "type": "array",
+        "minItems": 1,
+        "items": { "$ref": "https://saitamasans.dev/schemas/run-manifest.schema.json#/$defs/action" }
+      }
+    },
+    "risk_contexts": {
+      "type": "object",
+      "propertyNames": { "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]*$" },
+      "additionalProperties": { "$ref": "#/$defs/riskContext" }
+    },
+    "rule_versions": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "cleanup_strategies": {
+      "type": "object",
+      "propertyNames": { "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]*$" },
+      "additionalProperties": { "enum": ["api", "web"] }
     }
   },
   "$defs": {
+    "alias": { "type": "string", "pattern": "^[A-Za-z][A-Za-z0-9_-]*$" },
     "safeHttpUrl": {
       "type": "string",
       "pattern": "^[Hh][Tt][Tt][Pp][Ss]?://[^\\s]+$"
@@ -37,6 +76,27 @@
       "properties": {
         "source": { "const": "env" },
         "name": { "type": "string", "pattern": "^[A-Z][A-Z0-9_]*$" }
+      }
+    },
+    "riskContext": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "environment_label": { "type": "string", "minLength": 1 },
+        "data_sensitivity": { "enum": ["normal", "sensitive"] },
+        "shared_data": { "type": "boolean" },
+        "high_privilege": { "type": "boolean" },
+        "mixed_target": { "type": "boolean" },
+        "effect": {
+          "enum": [
+            "business_write",
+            "asset_deduction",
+            "award_issuance",
+            "configuration_change",
+            "external_notification",
+            "irreversible"
+          ]
+        }
       }
     },
     "target": {
@@ -62,13 +122,16 @@
         {
           "type": "object",
           "additionalProperties": false,
-          "required": ["kind", "dialect", "host", "database"],
+          "required": ["kind", "dialect", "host", "database", "username_credential", "password_credential"],
           "properties": {
             "kind": { "const": "database" },
             "dialect": { "enum": ["mysql", "postgresql"] },
             "host": { "$ref": "#/$defs/databaseHost" },
             "port": { "type": "integer", "minimum": 1, "maximum": 65535 },
-            "database": { "type": "string", "pattern": "^[A-Za-z0-9_.-]+$" }
+            "database": { "type": "string", "pattern": "^[A-Za-z0-9_.-]+$" },
+            "username_credential": { "$ref": "#/$defs/alias" },
+            "password_credential": { "$ref": "#/$defs/alias" },
+            "ssl_ca_credential": { "$ref": "#/$defs/alias" }
           }
         }
       ]

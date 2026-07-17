@@ -103,6 +103,7 @@
         { "$ref": "#/$defs/apiAssert" },
         { "$ref": "#/$defs/executionBlocked" },
         { "$ref": "#/$defs/dbSelect" },
+        { "$ref": "#/$defs/dbAssert" },
         { "$ref": "#/$defs/cleanupApi" },
         { "$ref": "#/$defs/cleanupWeb" }
       ]
@@ -123,7 +124,11 @@
       "allOf": [{ "$ref": "#/$defs/actionBase" }],
       "type": "object", "unevaluatedProperties": false,
       "required": ["locator"],
-      "properties": { "type": { "const": "web.click" }, "locator": { "$ref": "#/$defs/nonSecretText" } }
+      "properties": {
+        "type": { "const": "web.click" },
+        "locator": { "$ref": "#/$defs/nonSecretText" },
+        "click_count": { "const": 2 }
+      }
     },
     "webSelect": {
       "allOf": [{ "$ref": "#/$defs/actionBase" }],
@@ -209,6 +214,15 @@
         "query": { "$ref": "#/$defs/nonSecretText" },
         "params_ref": { "$ref": "#/$defs/dataReference" },
         "limit": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "dbAssert": {
+      "allOf": [{ "$ref": "#/$defs/actionBase" }],
+      "type": "object", "unevaluatedProperties": false,
+      "required": ["assertion"],
+      "properties": {
+        "type": { "const": "db.assert" },
+        "assertion": { "$ref": "#/$defs/nonSecretText" }
       }
     },
     "cleanupApi": {

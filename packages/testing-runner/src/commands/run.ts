@@ -66,12 +66,7 @@ function profilePathForManifest(manifestPath: string): string {
 
 async function readRuntimeProfile(manifestPath: string): Promise<RuntimeExecutionProfile> {
   const raw = await readJson<RuntimeExecutionProfile>(profilePathForManifest(manifestPath));
-  validateDocument<ExecutionProfile>("execution-profile", {
-    protocol_version: raw.protocol_version,
-    profile_id: raw.profile_id,
-    targets: raw.targets,
-    credentials: raw.credentials,
-  });
+  validateDocument<ExecutionProfile>("execution-profile", raw);
   return raw;
 }
 

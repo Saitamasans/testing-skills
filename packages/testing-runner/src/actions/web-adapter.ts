@@ -15,7 +15,7 @@ import type {
   WebSelectAction,
   WebWaitAction,
 } from "../types.js";
-import { resolveLocator } from "./locator-resolver.js";
+import { locatorForSpec, resolveLocator } from "./locator-resolver.js";
 import { VISUAL_PROGRESS_HOST_ID } from "../runtime/visual-progress.js";
 
 type WebExecutableAction =
@@ -76,14 +76,17 @@ async function executeFill(action: WebFillAction, context: ExecutionContext): Pr
 async function executeClick(action: WebClickAction | CleanupWebAction, context: ExecutionContext): Promise<ActionStepResult> {
   const page = requirePage(context);
   const locator = await resolveLocator(page, action.locator);
+  const clickOptions = action.type === "web.click" && action.click_count === 2
+    ? { clickCount: 2 as const }
+    : undefined;
   await Promise.all([
     page.waitForLoadState("domcontentloaded").catch(() => undefined),
-    locator.click(),
+    locator.click(clickOptions),
   ]);
   const manual = await detectManualAuth(context);
   if (manual) return manual;
   assertApprovedUrl(context, page.url());
-  return { status: "passed", actual: { locator: action.locator } };
+  return { status: "passed", actual: { locator: action.locator, click_count: clickOptions?.clickCount ?? 1 } };
 }
 
 async function executeSelect(action: WebSelectAction, context: ExecutionContext): Promise<ActionStepResult> {
@@ -107,16 +110,70 @@ async function executeWait(action: WebWaitAction, context: ExecutionContext): Pr
 
 async function executeAssert(action: WebAssertAction, context: ExecutionContext): Promise<ActionStepResult> {
   const page = requirePage(context);
-  if (action.assertion.startsWith("text=")) {
-    const text = action.assertion.slice("text=".length);
-    const count = await page.getByText(text, { exact: true }).count();
-    return { status: count > 0 ? "passed" : "failed", actual: { text, count } };
+  const assertion = interpolateActionText(action.assertion, context);
+  if (assertion.startsWith("url=")) {
+    const expected = assertion.slice("url=".length);
+    const actual = page.url();
+    return { status: actual === expected ? "passed" : "failed", actual: { assertion, expected, actual } };
   }
-  if (action.assertion.startsWith("visible:")) {
-    const locator = await resolveLocator(page, action.assertion.slice("visible:".length));
-    return { status: await locator.isVisible() ? "passed" : "failed", actual: { assertion: action.assertion } };
+  if (assertion.startsWith("url-contains=")) {
+    const expected = assertion.slice("url-contains=".length);
+    const actual = page.url();
+    return { status: actual.includes(expected) ? "passed" : "failed", actual: { assertion, expected, actual } };
   }
-  throw new ActionExecutionError("blocked", "unsupported_assertion", `Unsupported Web assertion: ${action.assertion}`);
+  const valueMatch = assertion.match(/^value\((.+)\)=(.*)$/s);
+  if (valueMatch) {
+    const locator = await resolveLocator(page, valueMatch[1]!);
+    const actual = await locator.inputValue();
+    const expected = valueMatch[2]!;
+    return { status: actual === expected ? "passed" : "failed", actual: { assertion, expected, actual } };
+  }
+  const countMatch = assertion.match(/^count\((.+)\)>=(\d+)$/);
+  if (countMatch) {
+    const locator = locatorForSpec(page, countMatch[1]!);
+    const visible = await visibleLocatorCount(locator);
+    const expected = Number(countMatch[2]);
+    return { status: visible >= expected ? "passed" : "failed", actual: { assertion, expected_minimum: expected, visible_count: visible } };
+  }
+  if (assertion.startsWith("text=")) {
+    const text = assertion.slice("text=".length);
+    const locator = page.getByText(text, { exact: true });
+    const visible = await visibleLocatorCount(locator);
+    return { status: visible > 0 ? "passed" : "failed", actual: { assertion, text, visible_count: visible } };
+  }
+  if (assertion.startsWith("text-contains=")) {
+    const text = assertion.slice("text-contains=".length);
+    const locator = page.getByText(text, { exact: false });
+    const visible = await visibleLocatorCount(locator);
+    return { status: visible > 0 ? "passed" : "failed", actual: { assertion, text, visible_count: visible } };
+  }
+  if (assertion.startsWith("visible:")) {
+    const spec = assertion.slice("visible:".length);
+    const visible = await visibleLocatorCount(locatorForSpec(page, spec));
+    return { status: visible === 1 ? "passed" : "failed", actual: { assertion, visible_count: visible } };
+  }
+  if (assertion.startsWith("hidden:")) {
+    const spec = assertion.slice("hidden:".length);
+    const locator = locatorForSpec(page, spec);
+    const count = await locator.count();
+    const visible = await visibleLocatorCount(locator);
+    return { status: count > 0 && visible === 0 ? "passed" : "failed", actual: { assertion, count, visible_count: visible } };
+  }
+  if (assertion.startsWith("not-exists:")) {
+    const spec = assertion.slice("not-exists:".length);
+    const count = await locatorForSpec(page, spec).count();
+    return { status: count === 0 ? "passed" : "failed", actual: { assertion, count } };
+  }
+  throw new ActionExecutionError("blocked", "unsupported_assertion", `Unsupported Web assertion: ${assertion}`);
+}
+
+async function visibleLocatorCount(locator: ReturnType<typeof locatorForSpec>): Promise<number> {
+  const count = await locator.count();
+  let visible = 0;
+  for (let index = 0; index < count; index += 1) {
+    if (await locator.nth(index).isVisible()) visible += 1;
+  }
+  return visible;
 }
 
 async function withPageScreenshot(

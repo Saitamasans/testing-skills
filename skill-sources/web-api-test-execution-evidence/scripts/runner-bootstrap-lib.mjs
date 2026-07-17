@@ -86,8 +86,8 @@ export function validateReleaseManifest(value) {
   if (runner.name !== PACKAGE_NAME) {
     fail("bootstrap_manifest_invalid", "runner.name must be " + PACKAGE_NAME);
   }
-  if (runner.version !== "1.0.4") {
-    fail("bootstrap_manifest_invalid", "runner.version must be 1.0.4");
+  if (runner.version !== "1.1.0") {
+    fail("bootstrap_manifest_invalid", "runner.version must be 1.1.0");
   }
   if (!/^[a-f0-9]{64}$/.test(String(runner.sha256 ?? ""))) {
     fail("bootstrap_manifest_invalid", "runner.sha256 must be 64 lowercase hexadecimal characters");
@@ -628,21 +628,25 @@ async function defaultBrowserExecutablePath(packageRoot) {
 
 export async function prepareBrowserForCommand(options) {
   const args = options.args ?? [];
-  if (args[0] !== "run") {
+  const discovery = args[0] === "discover-web";
+  if (args[0] !== "run" && !discovery) {
     return { required: false, cacheHit: true };
   }
 
-  const manifestPath = path.resolve(commandOption(args, "--manifest"));
-  let runManifest;
-  try {
-    runManifest = JSON.parse(await readFile(manifestPath, "utf8"));
-  } catch (error) {
-    fail(
-      "bootstrap_browser_manifest_invalid",
-      error instanceof Error ? error.message : String(error),
-    );
+  let hasWebActions = discovery;
+  if (!discovery) {
+    const manifestPath = path.resolve(commandOption(args, "--manifest"));
+    let runManifest;
+    try {
+      runManifest = JSON.parse(await readFile(manifestPath, "utf8"));
+    } catch (error) {
+      fail(
+        "bootstrap_browser_manifest_invalid",
+        error instanceof Error ? error.message : String(error),
+      );
+    }
+    hasWebActions = manifestHasWebActions(runManifest);
   }
-  const hasWebActions = manifestHasWebActions(runManifest);
   const mode = commandOptionOr(args, "--mode", "interactive");
   const browser = commandOptionOr(args, "--browser", "auto");
   const progress = commandOptionOr(args, "--progress", "auto");
@@ -668,8 +672,10 @@ export async function prepareBrowserForCommand(options) {
     return { required: true, cacheHit: true, executablePath };
   }
 
-  log(hasWebActions
-    ? "检测到 Web 用例：首次运行将由 Playwright 自动下载 Chromium；后续运行复用浏览器缓存。"
+  log(discovery
+    ? "检测到黑盒 Web 只读探测：首次运行将由 Playwright 自动下载 Chromium；探测不会点击或输入。"
+    : hasWebActions
+      ? "检测到 Web 用例：首次运行将由 Playwright 自动下载 Chromium；后续运行复用浏览器缓存。"
     : "检测到 API-only 交互可视执行：首次运行将自动下载 Chromium 显示全屏执行看板；后续运行复用浏览器缓存。");
   const runProcess = options.runProcess ?? defaultRunProcess;
   const code = await runProcess(

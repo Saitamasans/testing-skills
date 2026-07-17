@@ -16,9 +16,9 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { gunzipSync } from "node:zlib";
 
 const PACKAGE_NAME = "@saitamasans/testing-runner";
-const VERSION = "1.0.4";
-const FILE_NAME = "saitamasans-testing-runner-1.0.4.tgz";
-const RELEASE_TAG = "testing-runner-v1.0.4";
+const VERSION = "1.1.0";
+const FILE_NAME = "saitamasans-testing-runner-1.1.0.tgz";
+const RELEASE_TAG = "testing-runner-v1.1.0";
 const RELEASE_URL = "https://github.com/Saitamasans/testing-skills/releases/download/"
   + RELEASE_TAG + "/" + FILE_NAME;
 const CHROMIUM_ESTIMATED_SIZE_BYTES = 180_000_000;
@@ -26,7 +26,9 @@ const BUNDLED_DEPENDENCIES = [
   "ajv",
   "commander",
   "exceljs",
+  "mysql2",
   "node-sql-parser",
+  "pg",
   "playwright",
 ];
 const OWNED_TEXT_EXTENSIONS = new Set([
@@ -54,26 +56,44 @@ export function resolveReleaseOutputDir(outputDir = path.join(REPO_ROOT, "build"
   return path.resolve(REPO_ROOT, outputDir);
 }
 
-async function npmCliPath() {
-  if (process.env.npm_execpath) return process.env.npm_execpath;
-  const candidate = path.join(
-    path.dirname(process.execPath),
-    "node_modules",
-    "npm",
-    "bin",
-    "npm-cli.js",
-  );
-  await access(candidate);
-  return candidate;
+async function packageManager() {
+  if (process.env.npm_execpath) {
+    return {
+      kind: /pnpm/i.test(process.env.npm_execpath) ? "pnpm" : "npm",
+      cli: process.env.npm_execpath,
+    };
+  }
+  const candidates = [
+    {
+      kind: "npm",
+      cli: path.join(path.dirname(process.execPath), "node_modules", "npm", "bin", "npm-cli.js"),
+    },
+    {
+      kind: "pnpm",
+      cli: path.resolve(path.dirname(process.execPath), "..", "node_modules", "pnpm", "bin", "pnpm.mjs"),
+    },
+    {
+      kind: "pnpm",
+      cli: path.resolve(path.dirname(process.execPath), "..", "node_modules", "pnpm", "bin", "pnpm.cjs"),
+    },
+  ];
+  for (const candidate of candidates) {
+    try {
+      await access(candidate.cli);
+      return candidate;
+    } catch {
+      // Try the next package manager distributed with the current Node runtime.
+    }
+  }
+  throw new Error("release packaging requires npm or pnpm, but neither CLI is available");
 }
 
-async function runNpm(args, cwd = REPO_ROOT) {
-  const cli = await npmCliPath();
+async function runPackageManager(manager, args, cwd = REPO_ROOT) {
   const env = { ...process.env };
   const pathKey = Object.keys(env).find((key) => key.toLowerCase() === "path") || "PATH";
   env[pathKey] = path.dirname(process.execPath) + path.delimiter + (env[pathKey] || "");
   return await new Promise((resolve, reject) => {
-    const child = spawn(process.execPath, [cli, ...args], {
+    const child = spawn(process.execPath, [manager.cli, ...args], {
       cwd,
       env,
       stdio: ["ignore", "pipe", "pipe"],
@@ -87,9 +107,9 @@ async function runNpm(args, cwd = REPO_ROOT) {
     child.once("error", reject);
     child.once("exit", (code, signal) => {
       if (signal) {
-        reject(new Error("npm terminated by " + signal));
+        reject(new Error(manager.kind + " terminated by " + signal));
       } else if (code !== 0) {
-        reject(new Error("npm exited with " + code + "\n" + stdout + "\n" + stderr));
+        reject(new Error(manager.kind + " exited with " + code + "\n" + stdout + "\n" + stderr));
       } else {
         resolve({ stdout, stderr });
       }
@@ -157,7 +177,8 @@ export async function buildReleaseTarball(
   await rm(archivePath, { force: true });
   await rm(checksumPath, { force: true });
 
-  await runNpm(["run", "build", "--workspace", PACKAGE_NAME]);
+  const manager = await packageManager();
+  await runPackageManager(manager, ["run", "build"], PACKAGE_ROOT);
   const stageDir = path.join(outputDir, ".stage-" + randomUUID());
   try {
     await mkdir(stageDir, { recursive: true });
@@ -176,32 +197,36 @@ export async function buildReleaseTarball(
       JSON.stringify(packageJson, null, 2) + "\n",
       "utf8",
     );
-    await runNpm([
-      "install",
-      "--package-lock-only",
-      "--ignore-scripts",
-      "--no-audit",
-      "--no-fund",
-    ], stageDir);
-    await runNpm([
-      "ci",
-      "--omit=dev",
-      "--ignore-scripts",
-      "--no-audit",
-      "--no-fund",
-    ], stageDir);
-    const packed = await runNpm([
-      "pack",
-      "--pack-destination",
-      outputDir,
-      "--json",
-      "--ignore-scripts",
-    ], stageDir);
-    const result = JSON.parse(packed.stdout.trim());
-    if (!Array.isArray(result) || result.length !== 1 || !result[0]?.filename) {
-      throw new Error("npm pack did not return exactly one archive");
+    if (manager.kind === "npm") {
+      await runPackageManager(manager, [
+        "install", "--package-lock-only", "--ignore-scripts", "--no-audit", "--no-fund",
+      ], stageDir);
+      await runPackageManager(manager, [
+        "ci", "--omit=dev", "--ignore-scripts", "--no-audit", "--no-fund",
+      ], stageDir);
+    } else {
+      await runPackageManager(manager, [
+        "--config.node-linker=hoisted", "install", "--lockfile-only", "--ignore-scripts",
+      ], stageDir);
+      await runPackageManager(manager, [
+        "--config.node-linker=hoisted", "install", "--prod", "--frozen-lockfile", "--ignore-scripts",
+      ], stageDir);
     }
-    const producedPath = path.join(outputDir, result[0].filename);
+    const packArgs = manager.kind === "npm"
+      ? ["pack", "--pack-destination", outputDir, "--json", "--ignore-scripts"]
+      : [
+        "--config.ignore-scripts=true", "--config.node-linker=hoisted",
+        "pack", "--pack-destination", outputDir, "--json",
+      ];
+    const packed = await runPackageManager(manager, packArgs, stageDir);
+    const parsed = JSON.parse(packed.stdout.trim());
+    const result = Array.isArray(parsed) ? parsed[0] : parsed;
+    if (!result?.filename) {
+      throw new Error(manager.kind + " pack did not return an archive filename");
+    }
+    const producedPath = path.isAbsolute(result.filename)
+      ? result.filename
+      : path.join(outputDir, result.filename);
     if (path.resolve(producedPath) !== path.resolve(archivePath)) {
       await rename(producedPath, archivePath);
     }

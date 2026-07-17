@@ -61,6 +61,7 @@ function isReadAction(action: ManifestAction): boolean {
     action.type === "api.assert" ||
     action.type === "api.extract" ||
     action.type === "db.select" ||
+    action.type === "db.assert" ||
     action.type === "web.assert" ||
     action.type === "web.goto" ||
     action.type === "web.wait" ||

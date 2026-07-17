@@ -478,8 +478,13 @@ test("formal Web evidence screenshots hide the visual progress host", async () =
     style: "#testing-runner-visual-progress{display:none!important}",
   });
   let screenshotOptions: Parameters<Page["screenshot"]>[0];
+  const textLocator = {
+    count: async () => 1,
+    nth: () => textLocator,
+    isVisible: async () => true,
+  };
   const page = {
-    getByText: () => ({ count: async () => 1 }),
+    getByText: () => textLocator,
     screenshot: async (options: Parameters<Page["screenshot"]>[0]) => {
       screenshotOptions = options;
       return Buffer.from("png");
@@ -503,4 +508,108 @@ test("formal Web evidence screenshots hide the visual progress host", async () =
 
   assert.equal(outcome.status, "passed");
   assert.match(String(screenshotOptions?.style), /testing-runner-visual-progress/);
+});
+
+test("Web assertions cover URL, input value, visible text, counts, hidden and absence without false positives", async () => {
+  const app = await startDemoApp();
+  const browser = await chromium.launch({ headless: true });
+  const page = await browser.newPage();
+  try {
+    await page.goto(`${app.baseUrl}/login`);
+    await page.getByLabel("Username").fill("数码宝贝");
+    await page.evaluate(() => {
+      const hidden = document.createElement("div");
+      hidden.textContent = "仅隐藏文本";
+      hidden.id = "hidden-message";
+      hidden.hidden = true;
+      document.body.append(hidden);
+      const first = document.createElement("span");
+      first.className = "result-item";
+      first.textContent = "数码宝贝结果 A";
+      const second = document.createElement("span");
+      second.className = "result-item";
+      second.textContent = "数码宝贝结果 B";
+      document.body.append(first, second);
+    });
+    const context = createExecutionContext({
+      targets: { web: { kind: "web", origin: app.baseUrl } },
+      approvedOrigins: [new URL(app.baseUrl).origin],
+      data: {},
+      page,
+      secrets: resolveCredentials([], {}),
+    });
+    const assertions = [
+      `url=${app.baseUrl}/login`,
+      "url-contains=/login",
+      "value(label=Username)=数码宝贝",
+      "text-contains=数码宝贝结果",
+      "visible:label=Username",
+      "count(css=.result-item)>=2",
+      "hidden:css=#hidden-message",
+      "not-exists:css=.missing-element",
+    ];
+
+    for (const [index, assertion] of assertions.entries()) {
+      const outcome = await executeAction({
+        type: "web.assert",
+        action_id: `web-assert-${index}`,
+        target_alias: "web",
+        assertion,
+        risk: "R0",
+      }, context);
+      assert.equal(outcome.status, "passed", assertion);
+    }
+
+    const hiddenText = await executeAction({
+      type: "web.assert",
+      action_id: "hidden-exact-text",
+      target_alias: "web",
+      assertion: "text=仅隐藏文本",
+      risk: "R0",
+    }, context);
+    assert.equal(hiddenText.status, "failed");
+  } finally {
+    await browser.close();
+    await app.close();
+  }
+});
+
+test("web.click forwards the locked double-click count to Playwright", async () => {
+  let clickOptions: Parameters<ReturnType<Page["getByTestId"]>["click"]>[0];
+  const locator = {
+    count: async () => 1,
+    nth: () => locator,
+    isVisible: async () => true,
+    click: async (options: typeof clickOptions) => {
+      clickOptions = options;
+    },
+  };
+  const page = {
+    getByTestId: () => locator,
+    locator: (selector: string) => selector === "body"
+      ? { innerText: async () => "" }
+      : locator,
+    waitForLoadState: async () => undefined,
+    url: () => "http://127.0.0.1:64214/shop",
+    screenshot: async () => Buffer.from("png"),
+  } as unknown as Page;
+  const context = createExecutionContext({
+    targets: { web: { kind: "web", origin: "http://127.0.0.1:64214" } },
+    approvedOrigins: ["http://127.0.0.1:64214"],
+    data: {},
+    page,
+    secrets: resolveCredentials([], {}),
+  });
+
+  const outcome = await executeAction({
+    type: "web.click",
+    action_id: "WEB-001-double-click",
+    target_alias: "web",
+    locator: "data-testid=create-order",
+    click_count: 2,
+    risk: "R1",
+  } as unknown as ManifestAction, context);
+
+  assert.equal(outcome.status, "passed");
+  assert.deepEqual(clickOptions, { clickCount: 2 });
 });

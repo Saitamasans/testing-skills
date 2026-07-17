@@ -133,6 +133,9 @@ export interface DatabaseTarget {
   host: string;
   port?: number;
   database: string;
+  username_credential?: string;
+  password_credential?: string;
+  ssl_ca_credential?: string;
 }
 
 export type ExecutionTarget = WebTarget | ApiTarget | DatabaseTarget;
@@ -142,6 +145,20 @@ export interface ExecutionProfile {
   profile_id: string;
   targets: Record<string, ExecutionTarget>;
   credentials: Record<string, CredentialReference>;
+  manifest_id?: string;
+  public_targets?: string[];
+  data?: Record<string, JsonValue>;
+  case_plans?: Record<string, ManifestAction[]>;
+  risk_contexts?: Record<string, {
+    environment_label?: string;
+    data_sensitivity?: "normal" | "sensitive";
+    shared_data?: boolean;
+    high_privilege?: boolean;
+    mixed_target?: boolean;
+    effect?: "business_write" | "asset_deduction" | "award_issuance" | "configuration_change" | "external_notification" | "irreversible";
+  }>;
+  rule_versions?: string[];
+  cleanup_strategies?: Record<string, "api" | "web">;
 }
 
 interface BaseAction {
@@ -167,6 +184,7 @@ export interface WebFillAction extends BaseAction {
 export interface WebClickAction extends BaseAction {
   type: "web.click";
   locator: string;
+  click_count?: 2;
 }
 
 export interface WebSelectAction extends BaseAction {
@@ -233,6 +251,11 @@ export interface DatabaseSelectAction extends BaseAction {
   limit?: number;
 }
 
+export interface DatabaseAssertAction extends BaseAction {
+  type: "db.assert";
+  assertion: string;
+}
+
 export interface CleanupApiAction extends BaseAction {
   type: "cleanup.api";
   method: "POST" | "PUT" | "PATCH" | "DELETE";
@@ -258,6 +281,7 @@ export type ManifestAction =
   | ApiAssertAction
   | ExecutionBlockedAction
   | DatabaseSelectAction
+  | DatabaseAssertAction
   | CleanupApiAction
   | CleanupWebAction;
 
