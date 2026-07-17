@@ -2,7 +2,7 @@ import { setTimeout as delay } from "node:timers/promises";
 
 import type { Page } from "playwright";
 
-import type { CaseStatus, ManifestAction, RunResult } from "../types.js";
+import type { ManifestAction } from "../types.js";
 import type {
   ActionCompletedEvent,
   ActionStartedEvent,
@@ -12,6 +12,21 @@ import type {
   RunObserver,
   RunStartedEvent,
 } from "./run-orchestrator.js";
+import {
+  countsFromResult,
+  createInitialVisualProgressState,
+  type VisualActionStatus,
+  type VisualProgressState,
+} from "./visual-progress-model.js";
+
+export {
+  createInitialVisualProgressState,
+  type PanelSide,
+  type PresentationPhase,
+  type PresentationView,
+  type VisualActionStatus,
+  type VisualProgressState,
+} from "./visual-progress-model.js";
 
 interface ProgressHostElement {
   id: string;
@@ -29,50 +44,6 @@ declare const document: {
 
 export type ProgressVisibility = "auto" | "off";
 export const VISUAL_PROGRESS_HOST_ID = "testing-runner-visual-progress";
-
-type VisualActionStatus = "准备" | "执行中" | "通过" | "不通过" | "待定" | "未执行";
-
-export interface VisualProgressState {
-  phase: "preparing" | "running" | "completed";
-  manifestHash: string;
-  origins: string[];
-  caseIndex: number;
-  caseTotal: number;
-  caseId: string;
-  caseTitle: string;
-  module: string;
-  actionIndex: number;
-  actionTotal: number;
-  actionType: string;
-  actionSummary: string;
-  actionStatus: VisualActionStatus;
-  counts: Record<CaseStatus, number>;
-  elapsedMs: number;
-}
-
-export function createInitialVisualProgressState(input: {
-  manifestHash: string;
-  origins: string[];
-  caseTotal: number;
-}): VisualProgressState {
-  return {
-    phase: "preparing",
-    manifestHash: input.manifestHash,
-    origins: [...input.origins],
-    caseIndex: 0,
-    caseTotal: input.caseTotal,
-    caseId: "等待开始",
-    caseTitle: "正在准备执行材料",
-    module: "-",
-    actionIndex: 0,
-    actionTotal: 0,
-    actionType: "preflight",
-    actionSummary: "锁定执行清单与目标范围",
-    actionStatus: "准备",
-    counts: { "通过": 0, "不通过": 0, "待定": 0, "未执行": input.caseTotal },
-    elapsedMs: 0,
-  };
-}
 
 function escapeHtml(value: string): string {
   return value
@@ -106,14 +77,16 @@ export function summarizeProgressAction(action: ManifestAction): string {
 }
 
 function phaseLabel(phase: VisualProgressState["phase"]): string {
-  if (phase === "preparing") return "准备执行";
-  if (phase === "completed") return "执行完成";
+  if (phase === "preflight") return "执行准备";
+  if (phase === "case-preview") return "用例预告";
+  if (phase === "collecting") return "证据收集";
+  if (phase === "results") return "结果中心";
   return "正在执行";
 }
 
 export function renderVisualProgressHtml(state: VisualProgressState): string {
   const actionFinished = ["通过", "不通过", "待定", "未执行"].includes(state.actionStatus);
-  const completedCases = state.phase === "completed"
+  const completedCases = state.phase === "results"
     ? state.caseTotal
     : Math.max(0, state.caseIndex - (actionFinished ? 0 : 1));
   const progress = state.caseTotal === 0
@@ -121,52 +94,152 @@ export function renderVisualProgressHtml(state: VisualProgressState): string {
     : Math.min(100, Math.round((completedCases / state.caseTotal) * 100));
   const origins = state.origins.length > 0 ? state.origins.join(" · ") : "未声明浏览器目标";
   const safe = (value: string) => escapeHtml(value);
+  const phaseContent = state.phase === "preflight"
+    ? renderPreflight(state, safe)
+    : state.phase === "case-preview"
+      ? renderCasePreview(state, safe)
+      : state.phase === "collecting"
+        ? renderCollecting(state)
+        : state.phase === "results"
+          ? renderResults(state, safe)
+          : renderLiveExecution(state, safe);
   return `
     <style>
       :host { all: initial; color-scheme: light; }
       * { box-sizing: border-box; }
-      .panel { width: min(440px, calc(100vw - 32px)); padding: 18px; border: 1px solid #c9ced6; border-radius: 8px; background: #ffffff; color: #18202b; box-shadow: 0 14px 36px rgba(16, 24, 40, .20); font-family: "Microsoft YaHei UI", "Segoe UI", sans-serif; font-size: 14px; line-height: 1.45; letter-spacing: 0; }
-      :host([data-layout="fullscreen"]) .panel { width: min(920px, calc(100vw - 64px)); margin: 7vh auto 0; padding: 28px; box-shadow: 0 18px 48px rgba(16, 24, 40, .24); }
-      .top { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding-bottom: 12px; border-bottom: 1px solid #e4e7ec; }
-      .skill { font-size: 13px; font-weight: 700; color: #344054; }
-      .phase { padding: 4px 8px; border-radius: 4px; background: #e8f1ff; color: #184f90; font-size: 12px; font-weight: 700; }
-      .eyebrow { margin-top: 14px; color: #667085; font-size: 12px; font-weight: 700; }
-      .title { margin-top: 3px; font-size: 18px; font-weight: 700; overflow-wrap: anywhere; }
-      .meta { margin-top: 4px; color: #475467; overflow-wrap: anywhere; }
-      .action { margin-top: 14px; padding: 12px; border-left: 4px solid #2563a9; background: #f6f8fb; }
+      .shell { width: min(440px, calc(100vw - 32px)); border: 1px solid #35423a; border-radius: 8px; overflow: hidden; background: #1e2721; color: #eef3ef; box-shadow: 0 18px 50px rgba(22, 35, 26, .28); font-family: "Microsoft YaHei UI", "Segoe UI", sans-serif; font-size: 14px; line-height: 1.5; letter-spacing: 0; }
+      :host([data-layout="fullscreen"]) .shell, .shell.preflight, .shell.results { width: min(1040px, calc(100vw - 64px)); margin: 5vh auto 0; }
+      .header { display: flex; align-items: center; justify-content: space-between; gap: 16px; min-height: 54px; padding: 0 18px; border-bottom: 1px solid #35423a; background: #18201b; }
+      .skill { font-size: 13px; font-weight: 700; }
+      .phase { padding: 4px 8px; border-radius: 4px; background: #304137; color: #9fd1ad; font-size: 12px; font-weight: 700; }
+      .stage-nav { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 1px; background: #35423a; }
+      .stage { padding: 8px 5px; background: #242f28; color: #89958d; text-align: center; font-size: 11px; }
+      .stage.active { color: #eef3ef; background: #314238; box-shadow: inset 0 -3px #82bc91; }
+      .body { padding: 18px; }
+      .eyebrow { color: #9aa69e; font-size: 12px; font-weight: 700; }
+      .title { margin-top: 4px; font-size: 20px; font-weight: 700; overflow-wrap: anywhere; }
+      .subtitle { margin-top: 5px; color: #b6c0b9; overflow-wrap: anywhere; }
+      .scope-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1px; margin-top: 18px; background: #3a463e; }
+      .scope-item { min-height: 84px; padding: 12px; background: #263129; }
+      .scope-item span { display: block; color: #9aa69e; font-size: 11px; }
+      .scope-item strong { display: block; margin-top: 5px; font-size: 16px; overflow-wrap: anywhere; }
+      .deliverables { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 15px; }
+      .deliverable { padding: 6px 9px; border: 1px solid #46544a; border-radius: 4px; color: #dce4de; background: #263129; font-size: 12px; }
+      .intent { display: grid; gap: 10px; margin-top: 16px; }
+      .intent-row { display: grid; grid-template-columns: 96px 1fr; gap: 12px; padding-top: 10px; border-top: 1px solid #35423a; }
+      .intent-row span { color: #9aa69e; }
+      .action { margin-top: 14px; padding: 13px; border-left: 3px solid #82bc91; background: #28352d; }
       .action-line { display: flex; justify-content: space-between; gap: 12px; font-weight: 700; }
-      .summary { margin-top: 6px; color: #344054; overflow-wrap: anywhere; }
+      .summary { margin-top: 6px; color: #dce4de; overflow-wrap: anywhere; }
+      .api-detail { display: grid; grid-template-columns: auto 1fr auto; gap: 8px; align-items: center; margin-top: 10px; }
+      .api-detail code, .actual { overflow-wrap: anywhere; color: #eef3ef; }
+      .actual { max-height: 112px; margin-top: 10px; overflow: auto; padding: 9px; background: #18201b; font-family: Consolas, monospace; font-size: 11px; }
       .counts { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; margin-top: 14px; }
-      .count { padding: 8px 4px; border: 1px solid #e4e7ec; border-radius: 4px; text-align: center; }
-      .count strong { display: block; font-size: 17px; }
-      .passed strong { color: #137a4a; }
-      .failed strong { color: #b42318; }
-      .pending strong { color: #8a4b08; }
-      .idle strong { color: #667085; }
-      .bar { height: 8px; margin-top: 14px; overflow: hidden; border-radius: 4px; background: #e4e7ec; }
-      .bar > span { display: block; width: ${progress}%; height: 100%; background: #2563a9; transition: width .2s ease; }
-      .foot { display: flex; justify-content: space-between; gap: 12px; margin-top: 8px; color: #667085; font-size: 12px; }
-      .scope { margin-top: 10px; padding-top: 10px; border-top: 1px solid #e4e7ec; color: #667085; font-size: 11px; overflow-wrap: anywhere; }
+      .count { padding: 8px 4px; border: 1px solid #3a463e; border-radius: 4px; text-align: center; }
+      .count strong { display: block; font-size: 17px; font-variant-numeric: tabular-nums; }
+      .passed strong { color: #92cda2; }
+      .failed strong { color: #ee9b93; }
+      .pending strong { color: #d8c9a4; }
+      .idle strong { color: #9aa69e; }
+      .bar { height: 7px; margin-top: 14px; overflow: hidden; border-radius: 4px; background: #3a463e; }
+      .bar > span { display: block; width: ${progress}%; height: 100%; background: #82bc91; transition: width .2s ease; }
+      .foot { display: flex; justify-content: space-between; gap: 12px; margin-top: 8px; color: #9aa69e; font-size: 12px; }
+      .scope { margin-top: 10px; padding-top: 10px; border-top: 1px solid #35423a; color: #89958d; font-size: 11px; overflow-wrap: anywhere; }
+      .collection-list { display: grid; gap: 8px; margin-top: 16px; }
+      .collection-row { display: grid; grid-template-columns: 22px 1fr auto; gap: 9px; align-items: center; padding: 9px 0; border-bottom: 1px solid #35423a; }
+      .collection-row b { color: #92cda2; }
+      .result-grid { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(300px, .85fr); gap: 18px; margin-top: 16px; }
+      .status-list, .artifact-list { display: grid; gap: 7px; }
+      .status-row { display: grid; grid-template-columns: 1fr auto; gap: 10px; padding: 9px 11px; border-radius: 4px; background: #28332c; }
+      .status-failed { color: #ffd8d4; background: #56312f; }
+      .status-pending { color: #e2e4e1; background: #424743; }
+      .status-idle { color: #adb5af; background: #303630; }
+      .artifact { display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: center; padding: 10px 0; border-bottom: 1px solid #35423a; color: #dce4de; text-decoration: none; }
+      .artifact strong { color: #9fd1ad; }
+      @media (max-width: 720px) { .scope-grid, .result-grid { grid-template-columns: 1fr; } .stage { font-size: 10px; } .intent-row { grid-template-columns: 1fr; gap: 3px; } }
     </style>
-    <section class="panel" aria-label="Web/API 测试执行进度">
-      <div class="top"><span class="skill">web-api-test-execution-evidence</span><span class="phase">${phaseLabel(state.phase)}</span></div>
-      <div class="eyebrow">测试用例（Test Case） ${state.caseIndex} / ${state.caseTotal}</div>
-      <div class="title">${safe(state.caseId)} · ${safe(state.caseTitle)}</div>
-      <div class="meta">模块：${safe(state.module)}</div>
-      <div class="action">
-        <div class="action-line"><span>动作 ${state.actionIndex} / ${state.actionTotal} · ${safe(state.actionType)}</span><span>${safe(state.actionStatus)}</span></div>
-        <div class="summary">${safe(state.actionSummary)}</div>
+    <section class="shell ${state.phase}" data-phase="${state.phase}" data-view="${state.view}" data-panel-side="${state.panelSide}" aria-label="Web/API 测试执行驾驶舱">
+      <div class="header"><span class="skill">web-api-test-execution-evidence</span><span class="phase">${phaseLabel(state.phase)}</span></div>
+      ${renderStageNavigation(state.phase)}
+      <div class="body">${phaseContent}
+        <div class="bar"><span></span></div>
+        <div class="foot"><span>总体进度 ${progress}%</span><span>已用时 ${elapsedLabel(state.elapsedMs)}</span></div>
+        <div class="scope">manifest ${safe(state.manifestHash.slice(0, 12))} · ${safe(origins)}</div>
       </div>
-      <div class="counts">
-        <div class="count passed"><strong>${state.counts["通过"]}</strong>通过</div>
-        <div class="count failed"><strong>${state.counts["不通过"]}</strong>不通过</div>
-        <div class="count pending"><strong>${state.counts["待定"]}</strong>待定</div>
-        <div class="count idle"><strong>${state.counts["未执行"]}</strong>未执行</div>
-      </div>
-      <div class="bar"><span></span></div>
-      <div class="foot"><span>总体进度 ${progress}%</span><span>已用时 ${elapsedLabel(state.elapsedMs)}</span></div>
-      <div class="scope">manifest ${safe(state.manifestHash.slice(0, 12))} · ${safe(origins)}</div>
     </section>`;
+}
+
+function renderStageNavigation(active: VisualProgressState["phase"]): string {
+  const stages: Array<[VisualProgressState["phase"], string]> = [
+    ["preflight", "执行准备"],
+    ["case-preview", "用例预告"],
+    ["running", "实时执行"],
+    ["collecting", "证据收集"],
+    ["results", "结果中心"],
+  ];
+  return `<nav class="stage-nav" aria-label="执行阶段">${stages.map(([phase, label]) =>
+    `<span class="stage${phase === active ? " active" : ""}">${label}</span>`).join("")}</nav>`;
+}
+
+function renderPreflight(state: VisualProgressState, safe: (value: string) => string): string {
+  return `<div class="eyebrow">即将开始真实 Web/API 自动执行</div>
+    <div class="title">执行范围和交付物已准备</div>
+    <div class="subtitle">确认本次输入后自动开始，不需要再次点击。</div>
+    <div class="scope-grid">
+      <div class="scope-item"><span>执行输入</span><strong>${safe(state.caseLabel)}</strong></div>
+      <div class="scope-item"><span>动作规模</span><strong>${state.actionTotalOverall} 个执行动作</strong></div>
+      <div class="scope-item"><span>目标地址</span><strong>${safe(state.origins[0] ?? "未声明")}</strong></div>
+    </div>
+    <div class="deliverables" aria-label="交付物"><span class="deliverable">Excel</span><span class="deliverable">HTML</span><span class="deliverable">JSON</span><span class="deliverable">截图</span><span class="deliverable">日志</span><span class="deliverable">Trace</span></div>`;
+}
+
+function renderCasePreview(state: VisualProgressState, safe: (value: string) => string): string {
+  return `<div class="eyebrow">${safe(state.caseLabel)}</div>
+    <div class="title">${safe(state.caseId)} · ${safe(state.caseTitle)}</div>
+    <div class="subtitle">模块：${safe(state.module)}</div>
+    <div class="intent">
+      <div class="intent-row"><span>验证什么</span><strong>${safe(state.verificationPoint)}</strong></div>
+      <div class="intent-row"><span>执行前提</span><strong>${safe(state.precondition)}</strong></div>
+      <div class="intent-row"><span>预期结果</span><strong>${safe(state.expectedResult)}</strong></div>
+    </div>`;
+}
+
+function renderLiveExecution(state: VisualProgressState, safe: (value: string) => string): string {
+  const detail = state.actionPresentation;
+  const api = detail && state.view === "api"
+    ? `<div class="api-detail"><strong>${safe(detail.method ?? "API")}</strong><code>${safe(detail.path ?? detail.summary)}</code><span>${detail.responseStatus === undefined ? "等待响应" : `HTTP ${detail.responseStatus}`}</span></div>
+       ${detail.expected ? `<div class="intent-row"><span>预期 / 断言</span><strong>${safe(detail.expected)}</strong></div>` : ""}
+       ${detail.actual ? `<div class="actual">${safe(detail.actual)}</div>` : ""}`
+    : "";
+  return `<div class="eyebrow">${safe(state.caseLabel)}</div>
+    <div class="title">${safe(state.caseId)} · ${safe(state.caseTitle)}</div>
+    <div class="subtitle">${safe(state.verificationPoint)}</div>
+    <div class="action"><div class="action-line"><span>动作 ${state.actionIndex} / ${state.actionTotal} · ${safe(state.actionType)}</span><span>${safe(state.actionStatus)}</span></div><div class="summary">${safe(state.actionSummary)}</div>${api}</div>
+    ${renderCounts(state)}`;
+}
+
+function renderCollecting(state: VisualProgressState): string {
+  return `<div class="eyebrow">业务动作已经执行完成</div><div class="title">正在整理可核验的交付证据</div><div class="subtitle">执行完成不等于交付完成，全部产物通过一致性校验后才进入结果中心。</div>
+    <div class="collection-list"><div class="collection-row"><b>✓</b><span>测试用例（Test Cases）状态已锁定</span><strong>完成</strong></div><div class="collection-row"><b>✓</b><span>Web 截图与 API 请求响应</span><strong>整理中</strong></div><div class="collection-row"><b>✓</b><span>Excel / HTML / JSON 一致性</span><strong>校验中</strong></div><div class="collection-row"><b>✓</b><span>日志与 Playwright Trace</span><strong>写入中</strong></div></div>${renderCounts(state)}`;
+}
+
+function renderResults(state: VisualProgressState, safe: (value: string) => string): string {
+  const statusClass: Record<string, string> = {
+    "通过": "status-passed",
+    "不通过": "status-failed",
+    "待定": "status-pending",
+    "未执行": "status-idle",
+  };
+  const rows = state.resultCases.map((item) => `<div data-case-status="${item.case_status}" class="status-row ${statusClass[item.case_status]}"><strong>${safe(item.case_id)}</strong><span>${item.case_status}</span></div>`).join("");
+  const artifacts = state.artifacts.map((artifact) => artifact.exists
+    ? `<a class="artifact" href="${safe(artifact.href)}"><span>${safe(artifact.label)}</span><strong>${safe(artifact.fileName)}</strong></a>`
+    : `<div class="artifact"><span>${safe(artifact.label)}</span><strong>未生成</strong></div>`).join("");
+  return `<div class="eyebrow">真实执行与证据整理已结束</div><div class="title">结果中心</div><div class="subtitle">四状态、缺陷根因与报告产物均来自同一份 run-result.json。</div>${renderCounts(state)}
+    <div class="result-grid"><div><div class="eyebrow">测试用例（Test Cases）</div><div class="status-list">${rows}</div></div><div><div class="eyebrow">可验收产物</div><div class="artifact-list">${artifacts}</div></div></div>`;
+}
+
+function renderCounts(state: VisualProgressState): string {
+  return `<div class="counts"><div class="count passed"><strong>${state.counts["通过"]}</strong>通过</div><div class="count failed"><strong>${state.counts["不通过"]}</strong>不通过</div><div class="count pending"><strong>${state.counts["待定"]}</strong>待定</div><div class="count idle"><strong>${state.counts["未执行"]}</strong>未执行</div></div>`;
 }
 
 function visualStatus(status: string): VisualActionStatus {
@@ -215,13 +288,16 @@ export class VisualProgressController implements RunObserver {
       manifestHash: event.manifest_hash,
       origins: event.manifest.targets ?? [],
       caseTotal: event.case_total,
+      actionTotal: event.action_total,
     });
     this.state.phase = "running";
     await this.render();
   }
 
   async caseStarted(event: CaseStartedEvent): Promise<void> {
+    this.state.phase = "case-preview";
     this.state.caseIndex = event.case_index;
+    this.state.caseLabel = `第 ${event.case_index} / ${event.case_total} 条测试用例（Test Case）`;
     this.state.caseId = event.item.case_id;
     this.state.caseTitle = event.item.original["用例标题"];
     this.state.module = event.item.original["所属模块"];
@@ -234,6 +310,7 @@ export class VisualProgressController implements RunObserver {
   }
 
   async actionStarted(event: ActionStartedEvent): Promise<void> {
+    this.state.phase = "running";
     this.state.actionIndex = event.action_index;
     this.state.actionTotal = event.action_total;
     this.state.actionType = event.action.type;
@@ -260,7 +337,7 @@ export class VisualProgressController implements RunObserver {
   }
 
   async runCompleted(event: RunCompletedEvent): Promise<void> {
-    this.state.phase = "completed";
+    this.state.phase = "results";
     this.state.caseIndex = event.case_total;
     this.state.counts = countsFromResult(event.result);
     this.state.actionStatus = event.result.run_status === "completed" ? "通过" : "未执行";
@@ -270,10 +347,4 @@ export class VisualProgressController implements RunObserver {
   async completionPause(milliseconds = 2500): Promise<void> {
     await delay(milliseconds);
   }
-}
-
-function countsFromResult(result: RunResult): Record<CaseStatus, number> {
-  const counts: Record<CaseStatus, number> = { "通过": 0, "不通过": 0, "待定": 0, "未执行": 0 };
-  for (const item of result.cases) counts[item.case_status] += 1;
-  return counts;
 }
