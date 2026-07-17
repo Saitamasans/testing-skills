@@ -135,6 +135,18 @@ class NoNodeInstallerRuntimeTest(unittest.TestCase):
 
 
 class NoNodeInstallerStaticTest(unittest.TestCase):
+    def test_remote_entries_trim_bom_while_file_keeps_ps51_utf8_marker(self):
+        self.assertTrue(
+            INSTALLER.read_bytes().startswith(b"\xef\xbb\xbf"),
+            "Windows PowerShell 5.1 needs the UTF-8 BOM when executing the installer with -File",
+        )
+        trim_bom = ".TrimStart([char]0xFEFF)"
+        readme = (ROOT / "README.md").read_text(encoding="utf-8")
+        self.assertGreaterEqual(readme.count(trim_bom), 3)
+        for launcher in (ROOT / "installers").glob("*.cmd"):
+            with self.subTest(launcher=launcher.name):
+                self.assertIn(trim_bom, launcher.read_text(encoding="utf-8"))
+
     def test_recommended_installer_does_not_invoke_node_npm_npx_or_git(self):
         source = INSTALLER.read_text(encoding="utf-8")
         for command in ("node", "npm", "npx", "git"):
