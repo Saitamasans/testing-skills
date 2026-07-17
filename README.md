@@ -198,7 +198,7 @@ npx skills add Saitamasans/testing-skills@web-api-test-execution-evidence -g -y
 
 <a id="execution-guide"></a>
 
-## 自动执行web用例skill 即 第 8 个 Skill 专项指南
+## 8. 自动执行web用例skill 即 第 8 个 Skill 专项指南
 
 对应 Package：`web-api-test-execution-evidence`。
 
