@@ -102,7 +102,16 @@ class GitHubInstallReadmeTest(unittest.TestCase):
         self.assertIn("-All", self.readme)
         self.assertIn("-Skill 'requirement-test-workbench'", self.readme)
 
-    def test_readme_classifies_eighth_skill_new_user_materials(self):
+    def test_readme_eighth_skill_guide_contains_required_materials(self):
+        start_marker = '<a id="execution-guide"></a>'
+        end_marker = '<a id="outputs"></a>'
+        self.assertIn(start_marker, self.readme)
+        self.assertIn(end_marker, self.readme)
+        execution_guide = self.readme.split(start_marker, 1)[1].split(
+            end_marker,
+            1,
+        )[0]
+
         for phrase in [
             "第 8 个 Skill 专项指南",
             "什么时候使用",
@@ -122,24 +131,93 @@ class GitHubInstallReadmeTest(unittest.TestCase):
             "需求文档、需求截图、原型和流程图不能代替正式测试用例",
             "requirement-test-workbench",
         ]:
-            self.assertIn(phrase, self.readme)
+            with self.subTest(phrase=phrase):
+                self.assertIn(phrase, execution_guide)
         self.assertNotIn("条件强制资料", self.readme)
         self.assertNotIn("Runner 仍需要 Node.js 20+ 和 npm", self.readme)
 
     def test_readme_has_stable_navigation_anchors(self):
-        for anchor in [
+        anchors = [
             "skills",
             "install",
             "usage-guides",
             "execution-guide",
             "outputs",
-        ]:
+        ]
+        skills_marker = '<a id="skills"></a>'
+        self.assertEqual(1, self.readme.count(skills_marker))
+        skills_position = self.readme.index(skills_marker)
+        top_navigation = self.readme[:skills_position]
+        link_positions = []
+        anchor_positions = []
+
+        for anchor in anchors:
             with self.subTest(anchor=anchor):
-                self.assertIn(f'<a id="{anchor}"></a>', self.readme)
-                self.assertIn(f"](#{anchor})", self.readme)
+                marker = f'<a id="{anchor}"></a>'
+                link = f"](#{anchor})"
+                self.assertEqual(1, self.readme.count(marker))
+                self.assertEqual(1, self.readme.count(link))
+                self.assertIn(link, top_navigation)
+                link_positions.append(top_navigation.index(link))
+                anchor_positions.append(self.readme.index(marker))
+
+        self.assertEqual(sorted(link_positions), link_positions)
+        self.assertEqual(sorted(anchor_positions), anchor_positions)
 
     def test_readme_uses_concise_three_column_skill_overview(self):
-        self.assertIn("| Skill | 适合任务 | Windows 安装 |", self.readme)
+        start_marker = '<a id="skills"></a>'
+        end_marker = '<a id="install"></a>'
+        self.assertIn(start_marker, self.readme)
+        self.assertIn(end_marker, self.readme)
+        skill_overview = self.readme.split(start_marker, 1)[1].split(
+            end_marker,
+            1,
+        )[0]
+
+        header = "| Skill | 适合任务 | Windows 安装 |"
+        self.assertEqual(1, skill_overview.count(header))
+        lines = skill_overview.splitlines()
+        header_index = lines.index(header)
+        self.assertEqual("|---|---|---|", lines[header_index + 1])
+        rows = []
+        for line in lines[header_index + 2 :]:
+            if not line.startswith("|"):
+                break
+            rows.append(line)
+
+        skill_specs = [
+            ("单接口完整版", "single-api-test-full"),
+            ("单接口精炼版", "single-api-test-concise"),
+            ("多接口链路测试", "multi-api-flow-test"),
+            ("需求测试工作台", "requirement-test-workbench"),
+            ("正式服验证", "production-verification-test"),
+            ("用例质量审计", "test-case-quality-audit"),
+            ("需求澄清", "requirement-clarification-test"),
+            ("自动执行与证据回填", "web-api-test-execution-evidence"),
+        ]
+        self.assertEqual(len(skill_specs), len(rows))
+        release_urls = []
+        for row, (short_name, slug) in zip(rows, skill_specs):
+            with self.subTest(slug=slug):
+                cells = [cell.strip() for cell in row.strip("|").split("|")]
+                self.assertEqual(3, len(cells))
+                self.assertIn(short_name, cells[0])
+                self.assertIn("<br>", cells[0])
+                self.assertIn(f"`{slug}`", cells[0])
+                self.assertIsNotNone(
+                    re.fullmatch(r"[^。！？]+[。！？]", cells[1]),
+                    cells[1],
+                )
+                asset_url = RELEASE_BASE + f"install-{slug}.cmd"
+                self.assertEqual(1, self.readme.count(asset_url))
+                self.assertEqual(1, cells[2].count(asset_url))
+                self.assertRegex(
+                    cells[2],
+                    rf"^\[!\[Install\]\([^)]+\)\]\({re.escape(asset_url)}\)$",
+                )
+                release_urls.append(asset_url)
+
+        self.assertEqual(len(skill_specs), len(set(release_urls)))
         self.assertNotIn(
             "| 中文名称 | Package | 类型 | 适用场景 | 安装 |",
             self.readme,

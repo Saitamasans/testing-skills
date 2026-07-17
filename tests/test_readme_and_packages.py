@@ -64,21 +64,39 @@ class ReadmeAndPackagesTest(unittest.TestCase):
         self.assertIn(end_marker, readme)
         usage_guides = readme.split(start_marker, 1)[1].split(end_marker, 1)[0]
 
-        for slug in [
-            "single-api-test-full",
-            "single-api-test-concise",
-            "multi-api-flow-test",
-            "requirement-test-workbench",
-            "production-verification-test",
-            "test-case-quality-audit",
-            "requirement-clarification-test",
-        ]:
-            with self.subTest(slug=slug):
-                self.assertIn(slug, usage_guides)
+        guide_specs = [
+            (1, "single-api-test-full"),
+            (2, "single-api-test-concise"),
+            (3, "multi-api-flow-test"),
+            (4, "requirement-test-workbench"),
+            (5, "production-verification-test"),
+            (6, "test-case-quality-audit"),
+            (7, "requirement-clarification-test"),
+        ]
+        headings = list(re.finditer(r"(?m)^### ([1-7])\. .+$", usage_guides))
+        self.assertEqual(
+            [str(number) for number, _ in guide_specs],
+            [match.group(1) for match in headings],
+        )
 
-        for label in ["**最少准备：**", "**按场景补充：**", "**调用示例：**"]:
-            with self.subTest(label=label):
-                self.assertEqual(7, usage_guides.count(label))
+        for index, (number, slug) in enumerate(guide_specs):
+            section_start = headings[index].start()
+            section_end = (
+                headings[index + 1].start()
+                if index + 1 < len(headings)
+                else len(usage_guides)
+            )
+            section = usage_guides[section_start:section_end]
+            with self.subTest(number=number, slug=slug):
+                self.assertIn(f"`{slug}`", section)
+                for label in [
+                    "**最少准备：**",
+                    "**按场景补充：**",
+                    "**调用示例：**",
+                ]:
+                    self.assertEqual(1, section.count(label), label)
+                example = section.split("**调用示例：**", 1)[1]
+                self.assertIn(f"`{slug}`", example)
 
 
 if __name__ == "__main__":
