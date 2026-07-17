@@ -104,10 +104,12 @@ class GitHubInstallReadmeTest(unittest.TestCase):
 
     def test_readme_classifies_eighth_skill_new_user_materials(self):
         for phrase in [
-            "第 8 个 Skill 使用前要准备什么",
-            "强制资料",
-            "条件强制资料",
-            "辅助资料",
+            "第 8 个 Skill 专项指南",
+            "什么时候使用",
+            "什么时候不应使用",
+            "每次执行都要准备",
+            "按场景补充",
+            "可选参考",
             "正式测试用例",
             "目标 Web/API 地址",
             "环境性质和执行授权",
@@ -121,7 +123,28 @@ class GitHubInstallReadmeTest(unittest.TestCase):
             "requirement-test-workbench",
         ]:
             self.assertIn(phrase, self.readme)
+        self.assertNotIn("条件强制资料", self.readme)
         self.assertNotIn("Runner 仍需要 Node.js 20+ 和 npm", self.readme)
+
+    def test_readme_has_stable_navigation_anchors(self):
+        for anchor in [
+            "skills",
+            "install",
+            "usage-guides",
+            "execution-guide",
+            "outputs",
+        ]:
+            with self.subTest(anchor=anchor):
+                self.assertIn(f'<a id="{anchor}"></a>', self.readme)
+                self.assertIn(f"](#{anchor})", self.readme)
+
+    def test_readme_uses_concise_three_column_skill_overview(self):
+        self.assertIn("| Skill | 适合任务 | Windows 安装 |", self.readme)
+        self.assertNotIn(
+            "| 中文名称 | Package | 类型 | 适用场景 | 安装 |",
+            self.readme,
+        )
+        self.assertNotIn("> Production-ready testing skills", self.readme)
 
 
 if __name__ == "__main__":

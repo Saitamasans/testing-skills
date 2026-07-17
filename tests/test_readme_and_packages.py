@@ -56,6 +56,30 @@ class ReadmeAndPackagesTest(unittest.TestCase):
         self.assertNotIn("npm install --save-dev @saitamasans/testing-runner", combined)
         self.assertNotIn("npx @saitamasans/testing-runner", combined)
 
+    def test_first_seven_skill_usage_guides_are_complete(self):
+        readme = (ROOT / "README.md").read_text(encoding="utf-8")
+        start_marker = '<a id="usage-guides"></a>'
+        end_marker = '<a id="execution-guide"></a>'
+        self.assertIn(start_marker, readme)
+        self.assertIn(end_marker, readme)
+        usage_guides = readme.split(start_marker, 1)[1].split(end_marker, 1)[0]
+
+        for slug in [
+            "single-api-test-full",
+            "single-api-test-concise",
+            "multi-api-flow-test",
+            "requirement-test-workbench",
+            "production-verification-test",
+            "test-case-quality-audit",
+            "requirement-clarification-test",
+        ]:
+            with self.subTest(slug=slug):
+                self.assertIn(slug, usage_guides)
+
+        for label in ["**最少准备：**", "**按场景补充：**", "**调用示例：**"]:
+            with self.subTest(label=label):
+                self.assertEqual(7, usage_guides.count(label))
+
 
 if __name__ == "__main__":
     unittest.main()
