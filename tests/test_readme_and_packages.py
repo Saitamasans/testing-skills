@@ -98,6 +98,57 @@ class ReadmeAndPackagesTest(unittest.TestCase):
                 example = section.split("**调用示例：**", 1)[1]
                 self.assertIn(f"`{slug}`", example)
 
+    def test_multi_api_guide_separates_starting_input_from_formal_admission(self):
+        readme = (ROOT / "README.md").read_text(encoding="utf-8")
+        start_heading = "### 3. 多接口链路测试（`multi-api-flow-test`）"
+        end_heading = "### 4. 需求测试工作台（`requirement-test-workbench`）"
+        self.assertIn(start_heading, readme)
+        self.assertIn(end_heading, readme)
+        multi_api_guide = readme.split(start_heading, 1)[1].split(
+            end_heading,
+            1,
+        )[0]
+
+        for phrase in [
+            "多个接口资料、业务流程/PRD、增量变更或相关源码中的任一种",
+            "测试目标和期望交付",
+            "资料不足时可以启动",
+            "降级输出缺口与方向",
+            "生成正式链路用例还需",
+            "业务对象",
+            "调用顺序",
+            "传递字段",
+            "可观测结果",
+            "测试数据准备方式",
+            "可判定预期",
+            "可控数据影响",
+            "正式服写操作另叠加生产门禁",
+        ]:
+            with self.subTest(phrase=phrase):
+                self.assertIn(phrase, multi_api_guide)
+
+    def test_output_files_use_skill_specific_trigger_rules(self):
+        readme = (ROOT / "README.md").read_text(encoding="utf-8")
+        start_marker = '<a id="outputs"></a>'
+        end_heading = "## 本地开发"
+        self.assertIn(start_marker, readme)
+        self.assertIn(end_heading, readme)
+        outputs = readme.split(start_marker, 1)[1].split(end_heading, 1)[0]
+
+        for phrase in [
+            "单接口完整版、单接口精炼版、多接口链路和正式服验证这 4 个 Skill "
+            "在用户明确请求文件时",
+            "`requirement-test-workbench` 在实际产出统一十列用例时，"
+            "默认生成并验证 `.xlsx` 和 `.html`",
+            "只有用户明确要求“不要文件”或“只在聊天中展示”时才跳过",
+        ]:
+            with self.subTest(phrase=phrase):
+                self.assertIn(phrase, outputs)
+        self.assertNotIn(
+            "5 个正式用例生成 Skill 在用户明确要求文件时",
+            outputs,
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

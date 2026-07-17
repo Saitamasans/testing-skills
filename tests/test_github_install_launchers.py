@@ -102,6 +102,27 @@ class GitHubInstallReadmeTest(unittest.TestCase):
         self.assertIn("-All", self.readme)
         self.assertIn("-Skill 'requirement-test-workbench'", self.readme)
 
+    def test_readme_distinguishes_node_requirements_by_workflow(self):
+        start_marker = '<a id="install"></a>'
+        end_marker = '<a id="usage-guides"></a>'
+        self.assertIn(start_marker, self.readme)
+        self.assertIn(end_marker, self.readme)
+        install_guide = self.readme.split(start_marker, 1)[1].split(
+            end_marker,
+            1,
+        )[0]
+
+        for phrase in [
+            "安装 8 个 Skill 无需安装 Node.js、npm、npx 或 Git",
+            "前 5 个用例生成 Skill 实际生成 `.xlsx` 和 `.html` 文件时，"
+            "需要可用的 Node.js 运行环境",
+            "第 8 个 `web-api-test-execution-evidence` 的 Runner 真正执行 "
+            "Web/API 用例时，需要 Node.js 20+",
+        ]:
+            with self.subTest(phrase=phrase):
+                self.assertIn(phrase, install_guide)
+        self.assertNotIn("只有第 8 个", install_guide)
+
     def test_readme_eighth_skill_guide_contains_required_materials(self):
         start_marker = '<a id="execution-guide"></a>'
         end_marker = '<a id="outputs"></a>'

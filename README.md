@@ -27,7 +27,11 @@
 
 ### 推荐方式：Windows 安装按钮
 
-适合普通功能测试人员。Windows 10/11 自带的 Windows PowerShell 即可，**无需管理员权限，也无需安装 Node.js、npm、npx 或 Git**。安装 8 个 Skill 不需要这些工具；只有第 8 个 `web-api-test-execution-evidence` 真正执行 Web/API 用例时需要 Node.js 20+。
+适合普通功能测试人员。Windows 10/11 自带的 Windows PowerShell 即可，**无需管理员权限**。依赖边界如下：
+
+- 安装 8 个 Skill 无需安装 Node.js、npm、npx 或 Git。
+- 前 5 个用例生成 Skill 实际生成 `.xlsx` 和 `.html` 文件时，需要可用的 Node.js 运行环境。
+- 第 8 个 `web-api-test-execution-evidence` 的 Runner 真正执行 Web/API 用例时，需要 Node.js 20+。
 
 [![Install All 8 Skills](https://img.shields.io/badge/Install-All_8_Skills-2ea44f?style=for-the-badge&logo=github)](https://github.com/Saitamasans/testing-skills/releases/download/skill-installers-v1/install-all.cmd)
 
@@ -126,9 +130,9 @@ npx skills add Saitamasans/testing-skills@web-api-test-execution-evidence -g -y
 
 适合两个及以上接口、业务调用链、接口增量变更和联合回归任务。
 
-**最少准备：** 多个接口资料、测试目标和环境，以及业务对象、调用顺序和关键传递字段。
+**最少准备：** 多个接口资料、业务流程/PRD、增量变更或相关源码中的任一种，并说明测试目标和期望交付；资料不足时可以启动，但降级输出缺口与方向。
 
-**按场景补充：** 可观测结果、数据准备与清理、增量变更清单、抓包或 curl、日志入口、源码和正式服授权。
+**按场景补充：** 生成正式链路用例还需业务对象、调用顺序、传递字段、可观测结果、测试数据准备方式、可判定预期和可控数据影响；正式服写操作另叠加生产门禁。
 
 **调用示例：**
 
@@ -254,7 +258,11 @@ npx skills add Saitamasans/testing-skills@web-api-test-execution-evidence -g -y
 
 ## 输出文件
 
-5 个正式用例生成 Skill 在用户明确要求文件时，默认基于同一份报告数据同时交付：
+单接口完整版、单接口精炼版、多接口链路和正式服验证这 4 个 Skill 在用户明确请求文件时，基于同一份报告数据交付 `.xlsx` 和 `.html`。
+
+`requirement-test-workbench` 在实际产出统一十列用例时，默认生成并验证 `.xlsx` 和 `.html`；只有用户明确要求“不要文件”或“只在聊天中展示”时才跳过。
+
+两类路径生成的文件使用相同格式：
 
 - `.xlsx`：兼容 Excel 2016+ 和主流 WPS 的可编辑执行版。
 - `.html`：单文件、离线、可交互执行版。
