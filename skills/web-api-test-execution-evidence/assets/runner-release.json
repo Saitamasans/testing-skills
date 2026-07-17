@@ -2,10 +2,10 @@
   "schema_version": 1,
   "runner": {
     "name": "@saitamasans/testing-runner",
-    "version": "1.0.2",
-    "download_url": "https://github.com/Saitamasans/testing-skills/releases/download/testing-runner-v1.0.2/saitamasans-testing-runner-1.0.2.tgz",
-    "sha256": "c3dc9f3a691cff9dd703980165636c66a7b2d0f30238f8243ecacb8f16eaabaa",
-    "size_bytes": 22010058,
+    "version": "1.0.3",
+    "download_url": "https://github.com/Saitamasans/testing-skills/releases/download/testing-runner-v1.0.3/saitamasans-testing-runner-1.0.3.tgz",
+    "sha256": "53989a11afab24ce1b5ed78b9912fe30323dd913654820d5f91b562c9ed1b17b",
+    "size_bytes": 22019335,
     "minimum_node": 20
   },
   "browser": {

@@ -16,9 +16,9 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { gunzipSync } from "node:zlib";
 
 const PACKAGE_NAME = "@saitamasans/testing-runner";
-const VERSION = "1.0.2";
-const FILE_NAME = "saitamasans-testing-runner-1.0.2.tgz";
-const RELEASE_TAG = "testing-runner-v1.0.2";
+const VERSION = "1.0.3";
+const FILE_NAME = "saitamasans-testing-runner-1.0.3.tgz";
+const RELEASE_TAG = "testing-runner-v1.0.3";
 const RELEASE_URL = "https://github.com/Saitamasans/testing-skills/releases/download/"
   + RELEASE_TAG + "/" + FILE_NAME;
 const CHROMIUM_ESTIMATED_SIZE_BYTES = 180_000_000;

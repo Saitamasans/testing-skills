@@ -86,8 +86,8 @@ export function validateReleaseManifest(value) {
   if (runner.name !== PACKAGE_NAME) {
     fail("bootstrap_manifest_invalid", "runner.name must be " + PACKAGE_NAME);
   }
-  if (runner.version !== "1.0.2") {
-    fail("bootstrap_manifest_invalid", "runner.version must be 1.0.2");
+  if (runner.version !== "1.0.3") {
+    fail("bootstrap_manifest_invalid", "runner.version must be 1.0.3");
   }
   if (!/^[a-f0-9]{64}$/.test(String(runner.sha256 ?? ""))) {
     fail("bootstrap_manifest_invalid", "runner.sha256 must be 64 lowercase hexadecimal characters");
