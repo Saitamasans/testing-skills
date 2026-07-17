@@ -78,12 +78,7 @@ export async function runPlanCommand(options: PlanCommandOptions): Promise<PlanC
 
 async function readProfile(file: string): Promise<ExecutionProfileWithPlans> {
   const raw = JSON.parse(await readFile(file, "utf8")) as ExecutionProfileWithPlans;
-  validateDocument<ExecutionProfile>("execution-profile", {
-    protocol_version: raw.protocol_version,
-    profile_id: raw.profile_id,
-    targets: raw.targets,
-    credentials: raw.credentials,
-  });
+  validateDocument<ExecutionProfile>("execution-profile", raw);
   if (!raw.case_plans || Object.keys(raw.case_plans).length === 0) {
     throw new Error("Execution profile must include case_plans for planning");
   }

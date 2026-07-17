@@ -1,6 +1,6 @@
 {
   "name": "@saitamasans/testing-runner",
-  "version": "1.0.4",
+  "version": "1.1.0",
   "type": "module",
   "bin": {
     "testing-runner": "dist/cli.js"
@@ -9,20 +9,23 @@
     "node": ">=20"
   },
   "scripts": {
-    "build": "tsc -p tsconfig.json && node scripts/copy-schemas.mjs && node scripts/copy-knowledge.mjs && node scripts/copy-renderer.mjs",
+    "build": "node scripts/build-runner.mjs",
     "test": "tsx --test tests/*.test.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "prepack": "npm run build"
+    "prepack": "node scripts/build-runner.mjs"
   },
   "dependencies": {
     "ajv": "^8.17.1",
     "commander": "^14.0.0",
     "exceljs": "^4.4.0",
+    "mysql2": "^3.14.1",
     "node-sql-parser": "^5.4.0",
+    "pg": "^8.16.0",
     "playwright": "^1.52.0"
   },
   "devDependencies": {
     "@types/node": "^22.15.3",
+    "@types/pg": "^8.15.2",
     "tsx": "^4.19.4",
     "typescript": "^5.8.3"
   },

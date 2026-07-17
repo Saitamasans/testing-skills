@@ -4,6 +4,7 @@ import { pathToFileURL } from "node:url";
 import { Command } from "commander";
 
 import { runApproveCommand } from "./commands/approve.js";
+import { runDiscoverWebCommand } from "./commands/discover-web.js";
 import { runPlanCommand } from "./commands/plan.js";
 import {
   runRunCommand,
@@ -67,7 +68,7 @@ export async function runCli(argv = process.argv): Promise<void> {
   program
     .name("testing-runner")
     .description("Plan and approve locked Web/API test execution manifests")
-    .version("1.0.4");
+    .version("1.1.0");
 
   program.command("plan")
     .requiredOption("--input <file>")
@@ -81,6 +82,21 @@ export async function runCli(argv = process.argv): Promise<void> {
       mappingApproval?: string;
     }) => {
       await runPlanCommand(options);
+    });
+
+  program.command("discover-web")
+    .requiredOption("--url <url>")
+    .requiredOption("--output-dir <dir>")
+    .option("--browser <visibility>", "visible or headless", "headless")
+    .action(async (options: { url: string; outputDir: string; browser: string }) => {
+      if (options.browser !== "visible" && options.browser !== "headless") {
+        throw browserConfigurationError("discover-web browser must be visible or headless");
+      }
+      await runDiscoverWebCommand({
+        url: options.url,
+        outputDir: options.outputDir,
+        browser: options.browser,
+      });
     });
 
   program.command("approve")

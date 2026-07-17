@@ -349,6 +349,45 @@ test("E3 exposes all available preparation categories before approval", () => {
   );
 });
 
+test("db.select alone is evidence collection, not a business assertion", () => {
+  const manifest = apiManifest();
+  manifest.cases[0]!.steps = [
+    {
+      type: "db.select",
+      action_id: "DB-001-select",
+      target_alias: "database",
+      query: "SELECT status FROM orders WHERE id = $1",
+      params_ref: { source: "fixture", name: "order_payload" },
+      risk: "R0",
+    },
+  ];
+  const result = assessReadiness({
+    case_set: readyCaseSet,
+    manifest,
+    profile: completeProfile({
+      targets: {
+        database: {
+          kind: "database",
+          dialect: "postgresql",
+          host: "db.example.test",
+          database: "orders",
+          username_credential: "database_user",
+          password_credential: "database_password",
+        },
+      },
+      credentials: {
+        database_user: { source: "env", name: "TEST_DATABASE_USER" },
+        database_password: { source: "env", name: "TEST_DATABASE_PASSWORD" },
+      },
+    }),
+    runtime_probe: healthyRuntimeProbe(),
+  });
+
+  assert.equal(result.level, "E2");
+  assert.equal(result.runner_allowed, false);
+  assert.ok(result.blocking.includes("API-001: mandatory assertion is missing."));
+});
+
 test("explicit execution.blocked is a locked verdict route instead of a missing assertion", () => {
   const manifest: RunManifest = {
     ...apiManifest(),

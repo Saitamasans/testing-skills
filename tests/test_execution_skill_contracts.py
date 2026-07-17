@@ -51,35 +51,26 @@ class ExecutionSkillContractsTest(unittest.TestCase):
         ]:
             self.assertIn(phrase, self.body)
 
-    def test_new_user_materials_are_classified_and_require_formal_cases(self):
+    def test_black_box_inputs_are_classified_and_require_confirmation(self):
         input_reference = (
             ROOT / "skills" / self.item["slug"] / "references" / "input-and-readiness.md"
         ).read_text(encoding="utf-8")
-        documents = [self.text, self.generated_text, input_reference]
-        required_phrases = [
-            "强制资料",
-            "条件强制资料",
-            "辅助资料",
-            "需求文档、需求截图、原型和流程图不能代替正式测试用例",
-            "已有可访问测试地址时通常不需要前后端源码",
-            "只有需求资料而没有正式测试用例时，不得直接执行",
-            "Node.js 20+",
-        ]
-        for document in documents:
-            for phrase in required_phrases:
+        for document in [self.text, self.generated_text]:
+            for phrase in [
+                "普通十列测试用例（Test Cases）只描述测试意图，不等于机器执行清单",
+                "只读页面探测",
+                "用户确认后",
+                "不能真实执行",
+            ]:
                 self.assertIn(phrase, document)
 
         for phrase in [
-            "正式测试用例",
-            "目标 Web/API 地址",
-            "环境性质和执行授权",
-            "执行前确认",
-            "需要登录时",
-            "接口用例缺少可执行调用细节时",
-            "会新增或修改数据时",
-            "本地应用尚未运行时",
-            "CI 执行时",
-            "requirement-test-workbench",
+            "正式输入",
+            "非正式输入",
+            "标准十列测试用例（Test Cases）是正式测试意图输入",
+            "缺少已确认定位器",
+            "显式业务断言",
+            "非标准 Excel 每次都展示字段映射预览",
         ]:
             self.assertIn(phrase, input_reference)
 

@@ -72,9 +72,16 @@ const validators = new Map<SchemaId, ValidateFunction>();
 
 ajv.addSchema(loadSchema("persisted-value.schema.json"));
 
+const loadedSchemas = new Map<SchemaId, JsonSchema>();
 for (const schemaId of Object.keys(schemaFiles) as SchemaId[]) {
   const schema = loadSchema(schemaFiles[schemaId]);
-  validators.set(schemaId, ajv.compile(schema));
+  loadedSchemas.set(schemaId, schema);
+  ajv.addSchema(schema);
+}
+
+for (const [schemaId, schema] of loadedSchemas) {
+  const validator = schema.$id ? ajv.getSchema(schema.$id) : undefined;
+  validators.set(schemaId, validator ?? ajv.compile(schema));
 }
 
 export class ProtocolValidationError extends Error {

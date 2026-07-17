@@ -100,8 +100,8 @@ class ReadmeAndPackagesTest(unittest.TestCase):
 
     def test_multi_api_guide_separates_starting_input_from_formal_admission(self):
         readme = (ROOT / "README.md").read_text(encoding="utf-8")
-        start_heading = "### 3. 多接口链路测试（`multi-api-flow-test`）"
-        end_heading = "### 4. 需求测试工作台（`requirement-test-workbench`）"
+        start_heading = "### 3. 多接口链路用例生成（`multi-api-flow-test`）"
+        end_heading = "### 4. 需求澄清与用例生成skill-工作台（`requirement-test-workbench`）"
         self.assertIn(start_heading, readme)
         self.assertIn(end_heading, readme)
         multi_api_guide = readme.split(start_heading, 1)[1].split(

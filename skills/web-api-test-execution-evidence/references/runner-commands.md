@@ -3,12 +3,15 @@
 ## 本地
 
 ```bash
+node <ABSOLUTE_SKILL_ROOT>/scripts/testing-runner.mjs discover-web --url https://example.test --output-dir .testing-run/discovery --browser visible
 node <ABSOLUTE_SKILL_ROOT>/scripts/testing-runner.mjs plan --input report.json --profile execution-profile.json --output-dir .testing-run
 node <ABSOLUTE_SKILL_ROOT>/scripts/testing-runner.mjs approve --manifest .testing-run/run-manifest.json --out .testing-run/approval.json --expires-at <ISO_EXPIRES_AT> --confirmed-by reviewer-name
 node <ABSOLUTE_SKILL_ROOT>/scripts/testing-runner.mjs run --manifest .testing-run/run-manifest.json --approval .testing-run/approval.json --output-dir .testing-run/result --mode interactive --browser auto --slow-mo 200 --progress auto
 ```
 
 `<ABSOLUTE_SKILL_ROOT>` 必须替换为已安装 Skill 的绝对目录，路径含空格时正确加引号。首次运行会自动下载并校验固定 Runner；无需 npm 账号或手工安装。Web 用例和 API-only 交互可视执行按需自动准备 Chromium。`<ISO_EXPIRES_AT>` 使用本次执行窗口内的短期过期时间，不使用长期或永久审批。
+
+`discover-web` 是执行前的黑盒只读探测，不会生成审批、点击或输入。先查看 `web-discovery.json`、`web-discovery.md` 和 `web-discovery.png`，确认定位器与断言方案后，再生成 `execution-profile.json`。
 
 ## 可视执行
 

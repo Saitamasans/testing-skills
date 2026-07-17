@@ -165,6 +165,59 @@ test("manifest rejects arbitrary executable actions", () => {
   assert.throws(() => validateDocument("run-manifest", value), /shell\.exec/);
 });
 
+test("execution profile validates every field consumed by planning and runtime", () => {
+  const value = structuredClone(validExecutionProfile) as Record<string, unknown>;
+  value.manifest_id = "manifest-profile-001";
+  value.public_targets = ["api"];
+  value.data = {
+    keyword: "数码宝贝",
+    expected_count: 1,
+  };
+  value.cleanup_strategies = { "API-001": "api" };
+  value.rule_versions = ["1.1.0"];
+  value.risk_contexts = {
+    "API-001-request": { environment_label: "isolated-test", shared_data: false },
+  };
+  value.case_plans = {
+    "API-001": [
+      {
+        type: "api.request",
+        action_id: "API-001-request",
+        target_alias: "api",
+        method: "GET",
+        path: "/orders/1",
+        risk: "R0",
+      },
+      {
+        type: "api.assert",
+        action_id: "API-001-assert",
+        target_alias: "api",
+        assertion: "status is 200",
+        risk: "R0",
+      },
+    ],
+  };
+
+  assert.equal(validateDocument("execution-profile", value), value);
+});
+
+test("manifest accepts an explicit double click and rejects unsupported click counts", () => {
+  const value = structuredClone(validManifest);
+  value.cases[0].steps[0] = {
+    type: "web.click",
+    action_id: "WEB-001-double-click",
+    target_alias: "web",
+    locator: "data-testid=create-order",
+    click_count: 2,
+    risk: "R1",
+  } as never;
+  assert.equal(validateDocument("run-manifest", value), value);
+
+  const unsupported = structuredClone(value);
+  (unsupported.cases[0].steps[0] as { click_count: number }).click_count = 3;
+  assert.throws(() => validateDocument("run-manifest", unsupported), /click_count/);
+});
+
 test("manifest accepts reference-only request controls and explicit execution verdict metadata", () => {
   const value = structuredClone(validManifest);
   value.cases[0].steps = [

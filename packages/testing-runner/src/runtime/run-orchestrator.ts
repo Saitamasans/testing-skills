@@ -82,6 +82,18 @@ function jsonValue(value: unknown): JsonValue {
   return JSON.parse(JSON.stringify(value ?? null)) as JsonValue;
 }
 
+function isBusinessAssertion(action: ManifestAction): boolean {
+  return action.type === "api.assert" || action.type === "web.assert" || action.type === "db.assert";
+}
+
+function hasVerdictRoute(item: ManifestCase): boolean {
+  return item.steps.some((action) => isBusinessAssertion(action) || action.type === "execution.blocked");
+}
+
+function isCleanupAction(action: ManifestAction): boolean {
+  return action.type === "cleanup.api" || action.type === "cleanup.web";
+}
+
 async function storeOutcomeAttachments(
   runDir: string,
   caseId: string,
@@ -134,17 +146,48 @@ export async function runApprovedManifest(input: RunInput): Promise<RunResult> {
     await input.observer?.caseStarted?.(caseEvent);
     const assertions: AssertionResult[] = [];
     const evidence: EvidenceReference[] = [];
+    if (!hasVerdictRoute(item)) {
+      const reason = "Case has no explicit business assertion; execution is blocked to prevent a false passing verdict.";
+      const entry = await storeEvidence({
+        runDir,
+        case_id: item.case_id,
+        attempt: 1,
+        relativePath: "missing-business-assertion.json",
+        content: `${JSON.stringify({ case_id: item.case_id, reason }, null, 2)}\n`,
+      });
+      const caseResult: CaseResult = {
+        case_id: item.case_id,
+        case_status: NOT_EXECUTED,
+        run_status: "blocked",
+        assertions: [{ assertion_id: `${item.case_id}-business-assertion`, passed: false, actual: reason }],
+        evidence: [evidenceReference(entry)],
+      };
+      cases.push(caseResult);
+      runStatus = "blocked";
+      await writer.appendEvent({
+        run_id,
+        case_id: item.case_id,
+        action_id: `${item.case_id}-preflight`,
+        attempt: 1,
+        type: "case.blocked",
+        data: { reason },
+      });
+      await input.observer?.caseCompleted?.({ ...caseEvent, result: caseResult });
+      continue;
+    }
     let caseStatus: RunResult["cases"][number]["case_status"] = PASSED;
     let caseRunStatus: RunResult["cases"][number]["run_status"] = "completed";
     let attempt = 1;
     let completed = false;
+    const executionSteps = item.steps.filter((action) => !isCleanupAction(action));
+    const cleanupSteps = item.steps.filter(isCleanupAction);
 
     while (!completed && attempt <= 2) {
       let retryCase = false;
-      for (const [actionOffset, action] of item.steps.entries()) {
+      for (const action of executionSteps) {
         const actionEvent = {
           ...caseEvent,
-          action_index: actionOffset + 1,
+          action_index: item.steps.indexOf(action) + 1,
           action,
           attempt,
         };
@@ -155,6 +198,9 @@ export async function runApprovedManifest(input: RunInput): Promise<RunResult> {
         if (outcome.status === "passed") {
           await writer.appendEvent({ run_id, case_id: item.case_id, action_id: action.action_id, attempt, type: "action.passed", data: outcome.actual });
           await input.observer?.actionCompleted?.({ ...actionEvent, outcome });
+          if (isBusinessAssertion(action)) {
+            assertions.push({ assertion_id: action.action_id, passed: true, actual: jsonValue(outcome.actual) });
+          }
           continue;
         }
 
@@ -223,7 +269,36 @@ export async function runApprovedManifest(input: RunInput): Promise<RunResult> {
       completed = true;
     }
 
-    if (caseStatus === PASSED) assertions.push({ assertion_id: `${item.case_id}-actions`, passed: true });
+    for (const action of cleanupSteps) {
+      const actionEvent = {
+        ...caseEvent,
+        action_index: item.steps.indexOf(action) + 1,
+        action,
+        attempt,
+      };
+      await writer.appendEvent({ run_id, case_id: item.case_id, action_id: action.action_id, attempt, type: "cleanup.started" });
+      await input.observer?.actionStarted?.(actionEvent);
+      const outcome = await input.executeAction(action, attempt);
+      evidence.push(...await storeOutcomeAttachments(runDir, item.case_id, attempt, outcome));
+      await input.observer?.actionCompleted?.({ ...actionEvent, outcome });
+      if (outcome.status === "passed") {
+        await writer.appendEvent({ run_id, case_id: item.case_id, action_id: action.action_id, attempt, type: "cleanup.passed", data: outcome.actual });
+        continue;
+      }
+      await writer.appendEvent({ run_id, case_id: item.case_id, action_id: action.action_id, attempt, type: "cleanup.manual_required", data: outcome.error });
+      const entry = await storeEvidence({
+        runDir,
+        case_id: item.case_id,
+        attempt,
+        relativePath: `${action.action_id}/manual-cleanup.json`,
+        content: `${JSON.stringify(outcome, null, 2)}\n`,
+      });
+      evidence.push(evidenceReference(entry));
+      caseRunStatus = "manual_required";
+      runStatus = "manual_required";
+      if (caseStatus === PASSED) caseStatus = NOT_EXECUTED;
+    }
+
     const caseResult: CaseResult = {
       case_id: item.case_id,
       case_status: caseStatus,

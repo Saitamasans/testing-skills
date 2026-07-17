@@ -54,6 +54,13 @@ function manifest(): RunManifest {
             risk: "R0",
             retry_eligible: true,
           },
+          {
+            type: "api.assert",
+            action_id: "CASE-001-assert",
+            target_alias: "api",
+            assertion: "status is 200",
+            risk: "R0",
+          },
         ],
       },
     ],
@@ -75,6 +82,10 @@ function manifestWithCases(caseIds: string[]): RunManifest {
         {
           ...base.cases[0]!.steps[0]!,
           action_id: `${caseId}-request`,
+        },
+        {
+          ...base.cases[0]!.steps[1]!,
+          action_id: `${caseId}-assert`,
         },
       ],
     })),
@@ -158,13 +169,41 @@ test("orchestrator preserves first-attempt evidence when retry succeeds", async 
     },
   });
 
-  assert.equal(calls, 2);
+  assert.equal(calls, 3);
   assert.equal(result.run_status, "completed");
   assert.equal(result.cases[0]?.case_status, "通过");
   const events = await readJsonLines(path.join(directory, "run-retry", "run-events.jsonl"));
   assert.equal(events.filter((event) => event.attempt === 1 && event.type === "action.failed").length, 1);
   assert.equal(events.filter((event) => event.type === "retry.scheduled").length, 1);
   assert.ok(await readFile(path.join(directory, "run-retry", "evidence", "CASE-001", "attempt-1", "failure.json"), "utf8"));
+});
+
+test("orchestrator blocks action-only cases instead of synthesizing a passing verdict", async () => {
+  const directory = await tempDir("runner-missing-assertion-");
+  let executed = false;
+  const actionOnlyManifest = manifest();
+  actionOnlyManifest.cases[0]!.steps = [actionOnlyManifest.cases[0]!.steps[0]!];
+  const result = await runApprovedManifest({
+    manifest: actionOnlyManifest,
+    outputDir: directory,
+    run_id: "run-missing-assertion",
+    executeAction: async (action) => {
+      executed = true;
+      return {
+        action_id: action.action_id,
+        started_at: new Date().toISOString(),
+        finished_at: new Date().toISOString(),
+        status: "passed",
+        attachments: [],
+      };
+    },
+  });
+
+  assert.equal(executed, false);
+  assert.equal(result.run_status, "blocked");
+  assert.equal(result.cases[0]?.case_status, "未执行");
+  assert.equal(result.cases[0]?.run_status, "blocked");
+  assert.match(JSON.stringify(result.cases[0]?.assertions), /business assertion/i);
 });
 
 test("orchestrator stores passed action attachments and records the real run window", async () => {
@@ -202,7 +241,7 @@ test("orchestrator stores passed action attachments and records the real run win
   assert.ok(runStartedAt <= actionStartedAt, `${result.started_at} should be captured before the action starts`);
   assert.ok(Date.parse(result.completed_at ?? "") >= actionStartedAt);
   assert.equal(result.cases[0]?.case_status, "通过");
-  assert.equal(result.cases[0]?.evidence.length, 2);
+  assert.equal(result.cases[0]?.evidence.length, 4);
 
   const runDir = path.join(directory, "run-success-evidence");
   assert.equal(
@@ -333,6 +372,8 @@ test("orchestrator reports the observable run lifecycle in authoritative executi
     "case.started:CASE-001",
     "action.started:CASE-001-request",
     "action.passed:CASE-001-request",
+    "action.started:CASE-001-assert",
+    "action.passed:CASE-001-assert",
     "case.completed:CASE-001:通过",
     "case.started:CASE-002",
     "action.started:CASE-002-request",
