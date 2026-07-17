@@ -1,5 +1,6 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 
 import { executeAction as executeRegisteredAction } from "../actions/action-registry.js";
 import { sha256Canonical } from "../compiler/canonical-json.js";
@@ -14,6 +15,7 @@ import {
   type BrowserVisibility,
 } from "../runtime/browser-session.js";
 import type { ProgressVisibility } from "../runtime/visual-progress.js";
+import type { DeliveryArtifact } from "../runtime/visual-progress-model.js";
 import {
   EXIT_BLOCKED_OR_MANUAL,
   EXIT_UNSAFE_OR_INVALID,
@@ -137,7 +139,27 @@ function blockedResult(manifest: RunManifest, runStatus: RunStatus, reason: stri
   };
 }
 
-async function writeReports(outputDir: string, manifest: RunManifest, result: RunResult): Promise<void> {
+async function deliveryArtifact(
+  outputDir: string,
+  kind: DeliveryArtifact["kind"],
+  label: string,
+  file: string,
+): Promise<DeliveryArtifact> {
+  const exists = await stat(file).then(() => true).catch(() => false);
+  return {
+    kind,
+    label,
+    fileName: path.relative(outputDir, file).replaceAll("\\", "/"),
+    href: pathToFileURL(file).href,
+    exists,
+  };
+}
+
+export async function writeReports(
+  outputDir: string,
+  manifest: RunManifest,
+  result: RunResult,
+): Promise<DeliveryArtifact[]> {
   const report = await sourceReport(manifest);
   const projected = projectExecutionReport({ report, result });
   const consistency = verifyReportConsistency({ report: projected, result });
@@ -146,6 +168,14 @@ async function writeReports(outputDir: string, manifest: RunManifest, result: Ru
   }
   await writeJson(path.join(outputDir, "projected-report.json"), projected);
   await renderExecutionReports(projected, outputDir, "result");
+  return Promise.all([
+    deliveryArtifact(outputDir, "excel", "Excel 执行报告", path.join(outputDir, "result.xlsx")),
+    deliveryArtifact(outputDir, "html", "HTML 交互报告", path.join(outputDir, "result.html")),
+    deliveryArtifact(outputDir, "json", "运行结果 JSON", path.join(outputDir, "run-result.json")),
+    deliveryArtifact(outputDir, "json", "报告投影 JSON", path.join(outputDir, "projected-report.json")),
+    deliveryArtifact(outputDir, "screenshots", "执行证据目录", path.join(outputDir, result.run_id, "evidence")),
+    deliveryArtifact(outputDir, "logs", "执行事件日志", path.join(outputDir, result.run_id, "run-events.jsonl")),
+  ]);
 }
 
 async function persistBlockedResult(
@@ -212,7 +242,17 @@ export async function runRunCommand(options: RunCommandOptions): Promise<number>
     }));
 
     await writeJson(path.join(options.outputDir, "run-result.json"), result);
-    await writeReports(options.outputDir, manifest, result);
+    const artifacts = await writeReports(options.outputDir, manifest, result);
+    const tracePath = await browserSession?.finalizeTrace();
+    if (tracePath) {
+      artifacts.push(await deliveryArtifact(
+        options.outputDir,
+        "trace",
+        "Playwright Trace",
+        tracePath,
+      ));
+    }
+    await browserSession?.showDeliveryResult({ result, artifacts });
     await browserSession?.completionPause();
     return exitCodeForRunResult(result);
   } catch (error) {

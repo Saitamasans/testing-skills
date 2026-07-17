@@ -2,6 +2,7 @@ import { setTimeout as delay } from "node:timers/promises";
 
 import type { Page } from "playwright";
 
+import { resolveLocator } from "../actions/locator-resolver.js";
 import type { ManifestAction } from "../types.js";
 import type {
   ActionCompletedEvent,
@@ -13,9 +14,14 @@ import type {
   RunStartedEvent,
 } from "./run-orchestrator.js";
 import {
-  countsFromResult,
+  actionCompletedState,
+  actionPresentation,
+  actionStartedState,
+  casePreviewState,
+  collectingState,
   createInitialVisualProgressState,
-  type VisualActionStatus,
+  resultsState,
+  type DeliverySummary,
   type VisualProgressState,
 } from "./visual-progress-model.js";
 
@@ -40,6 +46,11 @@ declare const document: {
   getElementById(id: string): ProgressHostElement | null;
   createElement(tag: "div"): ProgressHostElement;
   documentElement: { append(element: ProgressHostElement): void };
+};
+
+declare const window: {
+  innerWidth: number;
+  innerHeight: number;
 };
 
 export type ProgressVisibility = "auto" | "off";
@@ -156,8 +167,11 @@ export function renderVisualProgressHtml(state: VisualProgressState): string {
       .status-idle { color: #adb5af; background: #303630; }
       .artifact { display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: center; padding: 10px 0; border-bottom: 1px solid #35423a; color: #dce4de; text-decoration: none; }
       .artifact strong { color: #9fd1ad; }
+      .target-guide { position: fixed; z-index: 2; border: 3px solid #d6b45f; border-radius: 6px; box-shadow: 0 0 0 4px rgba(214, 180, 95, .22), 0 10px 28px rgba(34, 42, 36, .22); pointer-events: none; }
+      .target-guide span { position: absolute; left: 0; bottom: calc(100% + 7px); padding: 5px 8px; border-radius: 4px; background: #18201b; color: #fff4cf; font: 700 12px/1.4 "Microsoft YaHei UI", "Segoe UI", sans-serif; white-space: nowrap; }
       @media (max-width: 720px) { .scope-grid, .result-grid { grid-template-columns: 1fr; } .stage { font-size: 10px; } .intent-row { grid-template-columns: 1fr; gap: 3px; } }
     </style>
+    ${renderTargetGuide(state, safe)}
     <section class="shell ${state.phase}" data-phase="${state.phase}" data-view="${state.view}" data-panel-side="${state.panelSide}" aria-label="Web/API 测试执行驾驶舱">
       <div class="header"><span class="skill">web-api-test-execution-evidence</span><span class="phase">${phaseLabel(state.phase)}</span></div>
       ${renderStageNavigation(state.phase)}
@@ -167,6 +181,12 @@ export function renderVisualProgressHtml(state: VisualProgressState): string {
         <div class="scope">manifest ${safe(state.manifestHash.slice(0, 12))} · ${safe(origins)}</div>
       </div>
     </section>`;
+}
+
+function renderTargetGuide(state: VisualProgressState, safe: (value: string) => string): string {
+  if (!state.targetBox) return "";
+  const box = state.targetBox;
+  return `<div class="target-guide" data-target-highlight="true" style="left:${box.x}px;top:${box.y}px;width:${box.width}px;height:${box.height}px"><span>正在操作 · ${safe(box.label)}</span></div>`;
 }
 
 function renderStageNavigation(active: VisualProgressState["phase"]): string {
@@ -242,20 +262,6 @@ function renderCounts(state: VisualProgressState): string {
   return `<div class="counts"><div class="count passed"><strong>${state.counts["通过"]}</strong>通过</div><div class="count failed"><strong>${state.counts["不通过"]}</strong>不通过</div><div class="count pending"><strong>${state.counts["待定"]}</strong>待定</div><div class="count idle"><strong>${state.counts["未执行"]}</strong>未执行</div></div>`;
 }
 
-function visualStatus(status: string): VisualActionStatus {
-  if (status === "passed") return "通过";
-  if (status === "pending") return "待定";
-  if (status === "failed") return "不通过";
-  return "未执行";
-}
-
-function outcomeStatus(outcome: ActionCompletedEvent["outcome"]): string | undefined {
-  const actual = outcome.actual;
-  if (!actual || typeof actual !== "object" || Array.isArray(actual)) return undefined;
-  const status = (actual as Record<string, unknown>).status;
-  return typeof status === "number" ? String(status) : undefined;
-}
-
 export class VisualProgressController implements RunObserver {
   private readonly startedAt = Date.now();
   private state = createInitialVisualProgressState({ manifestHash: "", origins: [], caseTotal: 0 });
@@ -269,18 +275,45 @@ export class VisualProgressController implements RunObserver {
 
   private async render(): Promise<void> {
     this.state.elapsedMs = Date.now() - this.startedAt;
-    await this.page.evaluate(({ hostId, html, fullscreen }) => {
+    const expanded = this.fullscreen || ["preflight", "collecting", "results"].includes(this.state.phase);
+    const interactive = this.state.phase === "results";
+    await this.page.evaluate(({ hostId, html, expanded, interactive, panelSide }) => {
       document.getElementById(hostId)?.remove();
       const host = document.createElement("div");
       host.id = hostId;
-      host.dataset.layout = fullscreen ? "fullscreen" : "overlay";
-      host.style.cssText = fullscreen
-        ? "position:fixed;inset:0;z-index:2147483647;pointer-events:none;background:#f2f4f7"
-        : "position:fixed;top:18px;right:18px;z-index:2147483647;pointer-events:none";
+      host.dataset.layout = expanded ? "fullscreen" : "overlay";
+      host.dataset.panelSide = panelSide;
+      host.style.cssText = expanded
+        ? `position:fixed;inset:0;z-index:2147483647;pointer-events:${interactive ? "auto" : "none"};background:rgba(242,244,247,.94)`
+        : `position:fixed;top:18px;${panelSide}:18px;z-index:2147483647;pointer-events:none`;
       const root = host.attachShadow({ mode: "closed" });
       root.innerHTML = html;
       document.documentElement.append(host);
-    }, { hostId: VISUAL_PROGRESS_HOST_ID, html: renderVisualProgressHtml(this.state), fullscreen: this.fullscreen });
+    }, {
+      hostId: VISUAL_PROGRESS_HOST_ID,
+      html: renderVisualProgressHtml(this.state),
+      expanded,
+      interactive,
+      panelSide: this.state.panelSide,
+    });
+  }
+
+  private async updateTargetGuidance(action: ManifestAction): Promise<void> {
+    this.state.panelSide = "right";
+    this.state.targetBox = undefined;
+    const locatorSpec = visualLocatorSpec(action);
+    if (!locatorSpec) return;
+    try {
+      const locator = await resolveLocator(this.page, locatorSpec);
+      const box = await locator.boundingBox();
+      if (!box) return;
+      const viewport = await this.page.evaluate(() => ({ width: window.innerWidth, height: window.innerHeight }));
+      this.state.panelSide = box.x + box.width / 2 > viewport.width * 0.58 ? "left" : "right";
+      this.state.targetBox = { ...box, label: actionPresentation(action).title };
+    } catch {
+      this.state.panelSide = "right";
+      this.state.targetBox = undefined;
+    }
   }
 
   async runStarted(event: RunStartedEvent): Promise<void> {
@@ -290,41 +323,24 @@ export class VisualProgressController implements RunObserver {
       caseTotal: event.case_total,
       actionTotal: event.action_total,
     });
-    this.state.phase = "running";
     await this.render();
+    await this.pause(3000);
   }
 
   async caseStarted(event: CaseStartedEvent): Promise<void> {
-    this.state.phase = "case-preview";
-    this.state.caseIndex = event.case_index;
-    this.state.caseLabel = `第 ${event.case_index} / ${event.case_total} 条测试用例（Test Case）`;
-    this.state.caseId = event.item.case_id;
-    this.state.caseTitle = event.item.original["用例标题"];
-    this.state.module = event.item.original["所属模块"];
-    this.state.actionIndex = 0;
-    this.state.actionTotal = event.action_total;
-    this.state.actionType = "准备用例";
-    this.state.actionSummary = event.item.original["验证功能点"];
-    this.state.actionStatus = "准备";
+    this.state = casePreviewState(this.state, event.item, event.case_index);
     await this.render();
+    await this.pause(1500);
   }
 
   async actionStarted(event: ActionStartedEvent): Promise<void> {
-    this.state.phase = "running";
-    this.state.actionIndex = event.action_index;
-    this.state.actionTotal = event.action_total;
-    this.state.actionType = event.action.type;
-    this.state.actionSummary = summarizeProgressAction(event.action);
-    this.state.actionStatus = "执行中";
+    this.state = actionStartedState(this.state, event.action, event.action_index);
+    await this.updateTargetGuidance(event.action);
     await this.render();
   }
 
   async actionCompleted(event: ActionCompletedEvent): Promise<void> {
-    this.state.actionStatus = visualStatus(event.outcome.status);
-    const responseStatus = outcomeStatus(event.outcome);
-    if (responseStatus && (event.action.type === "api.request" || event.action.type === "api.concurrent")) {
-      this.state.actionSummary = `${summarizeProgressAction(event.action)} · HTTP ${responseStatus}`;
-    }
+    this.state = actionCompletedState(this.state, event.action, event.outcome);
     await this.render();
     if (this.actionResultPauseMs > 0) await this.pause(this.actionResultPauseMs);
   }
@@ -337,14 +353,24 @@ export class VisualProgressController implements RunObserver {
   }
 
   async runCompleted(event: RunCompletedEvent): Promise<void> {
-    this.state.phase = "results";
-    this.state.caseIndex = event.case_total;
-    this.state.counts = countsFromResult(event.result);
-    this.state.actionStatus = event.result.run_status === "completed" ? "通过" : "未执行";
+    this.state = collectingState(this.state, event.result);
+    await this.render();
+  }
+
+  async showDeliveryResult(summary: DeliverySummary): Promise<void> {
+    this.state = resultsState(this.state, summary);
     await this.render();
   }
 
   async completionPause(milliseconds = 2500): Promise<void> {
     await delay(milliseconds);
   }
+}
+
+function visualLocatorSpec(action: ManifestAction): string | undefined {
+  if ("locator" in action && typeof action.locator === "string") return action.locator;
+  if ((action.type === "web.assert") && action.assertion.startsWith("visible:")) {
+    return action.assertion.slice("visible:".length);
+  }
+  return undefined;
 }

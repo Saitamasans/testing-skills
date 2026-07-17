@@ -246,3 +246,90 @@ test("visual progress keeps each completed action visible for the configured slo
 
   assert.deepEqual(pauses, [350]);
 });
+
+test("visible execution pauses on preflight and each Test Case preview before live actions", async () => {
+  const phases: string[] = [];
+  const pauses: number[] = [];
+  const page = {
+    evaluate: async (_callback: unknown, payload: { html: string }) => {
+      const phase = payload.html.match(/data-phase="([^"]+)"/)?.[1];
+      if (phase) phases.push(phase);
+    },
+  } as unknown as Page;
+  const controller = new VisualProgressController(
+    page,
+    false,
+    200,
+    async (milliseconds) => { pauses.push(milliseconds); },
+  );
+  const item = {
+    case_id: "WEB-001",
+    original: {
+      "用例 ID": "WEB-001",
+      "所属模块": "订单创建",
+      "用例标题": "创建订单并核对库存",
+      "验证功能点": "订单创建",
+      "前置条件": "库存充足",
+      "测试步骤": "提交订单",
+      "预期结果": "订单创建成功",
+      "优先级": "P0",
+      "执行结果": "",
+      "备注": "",
+    },
+    steps: [],
+  };
+
+  await controller.runStarted({
+    run_id: "run-visible",
+    manifest_hash: "a".repeat(64),
+    case_total: 1,
+    action_total: 1,
+    manifest: { targets: ["http://127.0.0.1:64214"], cases: [item] },
+  } as never);
+  await controller.caseStarted({
+    run_id: "run-visible",
+    manifest_hash: "a".repeat(64),
+    case_total: 1,
+    case_index: 1,
+    action_total: 1,
+    item,
+  } as never);
+
+  assert.deepEqual(phases, ["preflight", "case-preview"]);
+  assert.deepEqual(pauses, [3000, 1500]);
+});
+
+test("Web cockpit moves away from the current target and renders a visible target guide", async () => {
+  let rendered = "";
+  const locator = {
+    count: async () => 1,
+    nth: () => locator,
+    isVisible: async () => true,
+    boundingBox: async () => ({ x: 1580, y: 420, width: 220, height: 48 }),
+  };
+  const page = {
+    getByTestId: () => locator,
+    evaluate: async (_callback: unknown, payload?: { html: string }) => {
+      if (!payload) return { width: 1920, height: 1080 };
+      rendered = payload.html;
+      return undefined;
+    },
+  } as unknown as Page;
+  const controller = new VisualProgressController(page, false);
+
+  await controller.actionStarted({
+    action_index: 1,
+    action_total: 1,
+    action: {
+      type: "web.click",
+      action_id: "WEB-001-click",
+      target_alias: "web",
+      locator: "data-testid=create-order",
+      risk: "R1",
+    },
+  } as never);
+
+  assert.match(rendered, /data-panel-side="left"/);
+  assert.match(rendered, /data-target-highlight="true"/);
+  assert.match(rendered, /正在操作/);
+});

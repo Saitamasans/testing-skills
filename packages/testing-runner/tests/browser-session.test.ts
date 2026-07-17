@@ -138,6 +138,69 @@ test("visible session launches headed and writes Playwright trace", async () => 
   );
 });
 
+test("visible session finalizes Trace before showing delivery results and closes idempotently", async () => {
+  const events: string[] = [];
+  const outputDir = await mkdtemp(path.join(os.tmpdir(), "delivery-browser-"));
+  const page = {
+    evaluate: async () => { events.push("results.render"); },
+  } as unknown as Page;
+  const context = {
+    tracing: {
+      start: async () => { events.push("trace.start"); },
+      stop: async ({ path: tracePath }: { path: string }) => {
+        events.push("trace.stop");
+        await writeFile(tracePath, "trace", "utf8");
+      },
+    },
+    newPage: async () => page,
+    close: async () => { events.push("context.close"); },
+  };
+  const browser = {
+    newContext: async () => context,
+    close: async () => { events.push("browser.close"); },
+  };
+  const session = await openBrowserSession({
+    manifest: manifestWith("web.goto"),
+    mode: "interactive",
+    visibility: "visible",
+    outputDir,
+    launchBrowser: async () => browser as unknown as Browser,
+  });
+
+  const firstTracePath = await session?.finalizeTrace();
+  const secondTracePath = await session?.finalizeTrace();
+  await session?.showDeliveryResult({
+    result: {
+      protocol_version: "1.0.0",
+      run_id: "run-delivery",
+      manifest_hash: "a".repeat(64),
+      run_status: "completed",
+      started_at: "2026-07-17T00:00:00.000Z",
+      completed_at: "2026-07-17T00:01:00.000Z",
+      cases: [],
+    },
+    artifacts: [{
+      kind: "html",
+      label: "HTML 执行报告",
+      fileName: "result.html",
+      href: "file:///result.html",
+      exists: true,
+    }],
+  });
+  await session?.close();
+  await session?.close();
+
+  assert.equal(firstTracePath, secondTracePath);
+  assert.match(firstTracePath ?? "", /playwright-trace\.zip$/);
+  assert.deepEqual(events, [
+    "trace.start",
+    "trace.stop",
+    "results.render",
+    "context.close",
+    "browser.close",
+  ]);
+});
+
 test("browser setup failure closes the partial context and browser", async () => {
   const outputDir = await mkdtemp(path.join(os.tmpdir(), "failed-browser-setup-"));
   let contextClosed = false;

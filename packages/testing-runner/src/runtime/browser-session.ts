@@ -11,6 +11,7 @@ import {
 
 import type { RunManifest } from "../types.js";
 import type { RunObserver } from "./run-orchestrator.js";
+import type { DeliverySummary } from "./visual-progress-model.js";
 import {
   VisualProgressController,
   type ProgressVisibility,
@@ -34,6 +35,8 @@ export interface BrowserSessionOptions extends BrowserSettingsInput {
 export interface BrowserSession {
   page: Page;
   observer?: RunObserver;
+  finalizeTrace(): Promise<string | undefined>;
+  showDeliveryResult(summary: DeliverySummary): Promise<void>;
   completionPause(): Promise<void>;
   close(): Promise<void>;
 }
@@ -135,25 +138,38 @@ export async function openBrowserSession(
     throw error;
   }
   let closed = false;
+  let tracePromise: Promise<string | undefined> | undefined;
   const progressController = showProgress
     ? new VisualProgressController(page, !webActions, settings.slowMo)
     : undefined;
 
+  const finalizeTrace = (): Promise<string | undefined> => {
+    if (tracePromise) return tracePromise;
+    tracePromise = (async () => {
+      const evidenceDir = path.join(options.outputDir, "evidence");
+      await mkdir(evidenceDir, { recursive: true });
+      const tracePath = path.join(evidenceDir, "playwright-trace.zip");
+      await context.tracing.stop({ path: tracePath });
+      return tracePath;
+    })();
+    return tracePromise;
+  };
+
   const session: BrowserSession = {
     page,
+    finalizeTrace,
+    showDeliveryResult: async (summary) => {
+      if (progressController) await progressController.showDeliveryResult(summary);
+    },
     completionPause: async () => {
       if (progressController) await progressController.completionPause();
     },
     close: async () => {
       if (closed) return;
       closed = true;
-      const evidenceDir = path.join(options.outputDir, "evidence");
-      await mkdir(evidenceDir, { recursive: true });
       let traceError;
       try {
-        await context.tracing.stop({
-          path: path.join(evidenceDir, "playwright-trace.zip"),
-        });
+        await finalizeTrace();
       } catch (error) {
         traceError = error;
       }

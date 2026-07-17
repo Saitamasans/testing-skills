@@ -4,6 +4,7 @@ import test from "node:test";
 import { chromium, type Page } from "playwright";
 
 import { executeAction } from "../src/actions/action-registry.js";
+import { formalEvidenceScreenshotOptions } from "../src/actions/web-adapter.js";
 import { createExecutionContext } from "../src/runtime/execution-context.js";
 import { resolveCredentials } from "../src/security/credential-resolver.js";
 import type { ManifestAction } from "../src/types.js";
@@ -472,6 +473,10 @@ test("concurrent API actions preserve every response for batch assertions and ro
 });
 
 test("formal Web evidence screenshots hide the visual progress host", async () => {
+  assert.deepEqual(formalEvidenceScreenshotOptions(), {
+    fullPage: true,
+    style: "#testing-runner-visual-progress{display:none!important}",
+  });
   let screenshotOptions: Parameters<Page["screenshot"]>[0];
   const page = {
     getByText: () => ({ count: async () => 1 }),

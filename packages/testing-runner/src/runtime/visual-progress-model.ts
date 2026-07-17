@@ -38,6 +38,14 @@ export interface VisualActionPresentation {
   assertionSource?: string;
 }
 
+export interface VisualTargetBox {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  label: string;
+}
+
 export interface VisualProgressState {
   phase: PresentationPhase;
   view: PresentationView;
@@ -60,6 +68,7 @@ export interface VisualProgressState {
   actionSummary: string;
   actionStatus: VisualActionStatus;
   actionPresentation: VisualActionPresentation | undefined;
+  targetBox: VisualTargetBox | undefined;
   counts: Record<CaseStatus, number>;
   artifacts: DeliveryArtifact[];
   resultCases: RunResult["cases"];
@@ -94,6 +103,7 @@ export function createInitialVisualProgressState(input: {
     actionSummary: "锁定执行清单与目标范围",
     actionStatus: "准备",
     actionPresentation: undefined,
+    targetBox: undefined,
     counts: { "通过": 0, "不通过": 0, "待定": 0, "未执行": input.caseTotal },
     artifacts: [],
     resultCases: [],
@@ -123,6 +133,7 @@ export function casePreviewState(
     actionSummary: item.original["验证功能点"],
     actionStatus: "准备",
     actionPresentation: undefined,
+    targetBox: undefined,
   };
 }
 
@@ -140,6 +151,7 @@ export function actionStartedState(
     actionSummary: actionPresentation(action).summary,
     actionStatus: "执行中",
     actionPresentation: actionPresentation(action),
+    targetBox: undefined,
   };
 }
 
@@ -164,6 +176,7 @@ export function collectingState(state: VisualProgressState, result: RunResult): 
     actionType: "evidence.collect",
     actionSummary: "正在保存截图、请求响应、日志、Trace 与回填报告",
     actionStatus: "执行中",
+    targetBox: undefined,
   };
 }
 
@@ -178,6 +191,7 @@ export function resultsState(state: VisualProgressState, summary: DeliverySummar
     actionType: "delivery.complete",
     actionSummary: "执行证据和报告已完成一致性校验",
     actionStatus: summary.result.run_status === "completed" ? "通过" : "未执行",
+    targetBox: undefined,
   };
 }
 

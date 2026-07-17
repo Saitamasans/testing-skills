@@ -27,6 +27,13 @@ type WebExecutableAction =
   | WebAssertAction
   | CleanupWebAction;
 
+export function formalEvidenceScreenshotOptions(): { fullPage: true; style: string } {
+  return {
+    fullPage: true,
+    style: `#${VISUAL_PROGRESS_HOST_ID}{display:none!important}`,
+  };
+}
+
 function requirePage(context: ExecutionContext) {
   if (!context.page) throw new ActionExecutionError("blocked", "missing_page", "A Playwright Page is required");
   return context.page;
@@ -118,10 +125,7 @@ async function withPageScreenshot(
   result: ActionStepResult,
 ): Promise<ActionStepResult> {
   if (!context.page) return result;
-  const content = await context.page.screenshot({
-    fullPage: true,
-    style: `#${VISUAL_PROGRESS_HOST_ID}{display:none!important}`,
-  }).catch(() => undefined);
+  const content = await context.page.screenshot(formalEvidenceScreenshotOptions()).catch(() => undefined);
   if (!content) return result;
   return {
     ...result,
