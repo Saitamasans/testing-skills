@@ -7,23 +7,132 @@ on:
       - "installers/*.cmd"
       - ".github/workflows/publish-installers.yml"
   workflow_dispatch:
+  workflow_run:
+    workflows: ["Publish verified eighth Skill runtime"]
+    types: [completed]
 
 permissions:
-  contents: write
+  contents: read
+
+concurrency:
+  group: skill-installers-v1-${{ github.repository }}
+  cancel-in-progress: false
 
 jobs:
   publish:
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - name: Check out the release source
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
+          fetch-depth: 0
+          clean: true
 
-      - name: Validate and publish all Windows launchers
+      - name: Validate and publish ordinary and verified all-Skills launchers
         env:
           GH_TOKEN: ${{ github.token }}
+          RUNTIME_TAG: web-api-test-execution-evidence-v1.0.0
         shell: bash
         run: |
           set -euo pipefail
-          test "$(find installers -maxdepth 1 -type f -name 'install-*.cmd' | wc -l)" -eq 9
-          sha256sum installers/*.cmd
-          gh release upload skill-installers-v1 installers/*.cmd --clobber
+          git fetch --no-tags origin main
+          source_commit="$(git rev-parse HEAD)"
+          git merge-base --is-ancestor "$source_commit" "refs/remotes/origin/main"
+          test "$source_commit" = "${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}"
+
+          mapfile -t ordinary < <(find installers -maxdepth 1 -type f -name 'install-*.cmd' \
+            ! -name 'install-all.cmd' \
+            ! -name 'install-web-api-test-execution-evidence.cmd' | sort)
+          test "${#ordinary[@]}" -eq 7
+
+          mkdir -p build
+          runtime_release_ready=false
+          git fetch --force origin "refs/tags/$RUNTIME_TAG:refs/tags/$RUNTIME_TAG"
+          runtime_tag_commit="$(git rev-parse "refs/tags/$RUNTIME_TAG^{commit}")"
+          git merge-base --is-ancestor "$runtime_tag_commit" "refs/remotes/origin/main"
+          if gh api "repos/$GITHUB_REPOSITORY/releases/tags/$RUNTIME_TAG" \
+            > build/runtime-release-metadata.json 2>/dev/null; then
+            if node - "$RUNTIME_TAG" "$runtime_tag_commit" build/runtime-release-metadata.json <<'NODE'
+          const fs = require("node:fs");
+          const [tag, commit, file] = process.argv.slice(2);
+          const value = JSON.parse(fs.readFileSync(file, "utf8"));
+          const expected = [
+            "SHA256SUMS.txt", "install-all.cmd", "install-web-api-test-execution-evidence.cmd",
+            "install-web-api-test-execution-evidence.ps1", "install.ps1",
+            "web-api-test-execution-evidence-1.0.0-windows-arm64.manifest.json",
+            "web-api-test-execution-evidence-1.0.0-windows-arm64.zip",
+            "web-api-test-execution-evidence-1.0.0-windows-x64.manifest.json",
+            "web-api-test-execution-evidence-1.0.0-windows-x64.zip",
+          ];
+          const actual = value.assets.map(({ name }) => name).sort();
+          if (value.tag_name !== tag || value.target_commitish !== commit || value.draft !== false || value.immutable !== true) {
+            process.exit(1);
+          }
+          if (JSON.stringify(actual) !== JSON.stringify(expected)) {
+            console.error("exact runtime asset allowlist does not match");
+            process.exit(1);
+          }
+          NODE
+            then
+              runtime_release_ready=true
+            fi
+          fi
+          if [[ "$runtime_release_ready" != "true" ]]; then
+            if [[ "$GITHUB_EVENT_NAME" == "workflow_run" ]]; then
+              echo "successful runtime workflow did not publish the required immutable release" >&2
+              exit 1
+            fi
+            echo "runtime release is missing or not immutable; mutable installers are unchanged"
+            exit 0
+          fi
+          mkdir -p build/immutable-all build/mutable-installers
+          gh release download "$RUNTIME_TAG" --dir build/immutable-all
+          for artifact in build/immutable-all/*; do
+            gh attestation verify "$artifact" --repo "$GITHUB_REPOSITORY" \
+              --signer-workflow "https://github.com/$GITHUB_REPOSITORY/.github/workflows/publish-eighth-skill-runtime.yml"
+          done
+          test "$(grep -c '  install-all.cmd$' build/immutable-all/SHA256SUMS.txt)" -eq 1
+          grep '  install-all.cmd$' build/immutable-all/SHA256SUMS.txt |
+            (cd build/immutable-all && sha256sum -c -)
+
+          cp "${ordinary[@]}" build/mutable-installers/
+          cp build/immutable-all/install-all.cmd build/mutable-installers/
+          sha256sum build/mutable-installers/install-*.cmd |
+            sed 's#  build/mutable-installers/#  #' |
+            LC_ALL=C sort -k2 > build/mutable-installers/SHA256SUMS.txt
+
+          mapfile -t expected < <(find build/mutable-installers -maxdepth 1 -type f -printf '%f\n' | LC_ALL=C sort)
+          mapfile -t before < <(gh release view skill-installers-v1 --json assets --jq '.assets[].name' | LC_ALL=C sort)
+          for asset in "${before[@]}"; do
+            if ! printf '%s\n' "${expected[@]}" | grep -Fxq "$asset"; then
+              gh release delete-asset skill-installers-v1 "$asset" --yes
+            fi
+          done
+          gh release upload skill-installers-v1 \
+            build/mutable-installers/* --clobber
+
+          mapfile -t actual < <(
+            gh release view skill-installers-v1 --json assets --jq '.assets[].name' | LC_ALL=C sort
+          )
+          if printf '%s\n' "${actual[@]}" |
+            grep -Fxq 'install-web-api-test-execution-evidence.cmd'; then
+            echo "mutable eighth launcher still exists" >&2
+            exit 1
+          fi
+          if [[ "${actual[*]}" != "${expected[*]}" ]]; then
+            echo "mutable installer release assets do not match the exact allowlist" >&2
+            printf 'expected: %s\nactual: %s\n' "${expected[*]}" "${actual[*]}" >&2
+            exit 1
+          fi
+          rm -rf build/public-mutable
+          mkdir build/public-mutable
+          gh release download skill-installers-v1 --dir build/public-mutable
+          (cd build/public-mutable && sha256sum -c SHA256SUMS.txt)
+          if ! diff --no-dereference --recursive build/mutable-installers build/public-mutable; then
+            echo "public mutable installer assets differ from trusted current-main bytes" >&2
+            exit 1
+          fi

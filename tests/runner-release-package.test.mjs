@@ -52,7 +52,7 @@ test("release tarball contains runner and bundled production dependencies", asyn
   }
 
   assert.equal(await sha256File(release.archivePath), release.sha256);
-  assert.equal(release.fileName, "saitamasans-testing-runner-1.1.0.tgz");
+  assert.equal(release.fileName, "saitamasans-testing-runner-1.1.1.tgz");
   assert.ok(release.sizeBytes > 100_000);
 
   const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
@@ -60,8 +60,8 @@ test("release tarball contains runner and bundled production dependencies", asyn
     schema_version: 1,
     runner: {
       name: "@saitamasans/testing-runner",
-      version: "1.1.0",
-      download_url: "https://github.com/Saitamasans/testing-skills/releases/download/testing-runner-v1.1.0/saitamasans-testing-runner-1.1.0.tgz",
+      version: "1.1.1",
+      download_url: "https://github.com/Saitamasans/testing-skills/releases/download/testing-runner-v1.1.1/saitamasans-testing-runner-1.1.1.tgz",
       sha256: release.sha256,
       size_bytes: release.sizeBytes,
       minimum_node: 20,

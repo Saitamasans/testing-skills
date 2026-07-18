@@ -39,7 +39,12 @@ class ReadmeAndPackagesTest(unittest.TestCase):
             "npx skills add Saitamasans/testing-skills@web-api-test-execution-evidence -g -y",
             readme,
         )
-        self.assertIn("-Skill 'web-api-test-execution-evidence'", readme)
+        self.assertNotIn("-Skill 'web-api-test-execution-evidence'", readme)
+        self.assertIn(
+            "web-api-test-execution-evidence-v1.0.0/"
+            "install-web-api-test-execution-evidence.cmd",
+            readme,
+        )
 
     def test_only_five_packages_contain_renderer(self):
         manifest = load_manifest(ROOT)["skills"]
@@ -51,10 +56,27 @@ class ReadmeAndPackagesTest(unittest.TestCase):
         readme = (ROOT / "README.md").read_text(encoding="utf-8")
         source = (ROOT / "skill-sources/web-api-test-execution-evidence/Web-API测试用例自动执行与证据回填_Skill.md").read_text(encoding="utf-8")
         combined = readme + source
-        self.assertIn("自动下载", combined)
+        self.assertIn("GitHub Release 完整安装器", combined)
+        self.assertIn("不会下载、安装或修改运行时", combined)
         self.assertIn("无需 npm 账号", combined)
         self.assertNotIn("npm install --save-dev @saitamasans/testing-runner", combined)
         self.assertNotIn("npx @saitamasans/testing-runner", combined)
+
+    def test_readme_distinguishes_complete_release_from_source_zip(self):
+        readme = (ROOT / "README.md").read_text(encoding="utf-8")
+        install_section = readme.split('<a id="install"></a>', 1)[1].split(
+            '<a id="usage-guides"></a>', 1
+        )[0]
+        for phrase in [
+            "GitHub Release 完整安装器",
+            "Source ZIP",
+            "仅供开发者",
+            "不能执行 Web/API 自动化测试",
+            "安装完成，可以执行 Web/API 自动化测试",
+            "无需系统安装 Node.js、npm、Git、Chrome、Excel 或 Python",
+        ]:
+            self.assertIn(phrase, install_section)
+        self.assertNotIn("首次运行下载", install_section)
 
     def test_first_seven_skill_usage_guides_are_complete(self):
         readme = (ROOT / "README.md").read_text(encoding="utf-8")

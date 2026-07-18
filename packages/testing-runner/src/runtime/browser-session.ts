@@ -29,6 +29,7 @@ export interface BrowserSessionOptions extends BrowserSettingsInput {
   manifest: RunManifest;
   outputDir: string;
   progress?: ProgressVisibility;
+  allowedNetworkOrigin?: string;
   launchBrowser?: (options: LaunchOptions) => Promise<Browser>;
 }
 
@@ -37,6 +38,7 @@ export interface BrowserSession {
   observer?: RunObserver;
   prepareCase(caseId: string): Promise<Page>;
   finalizeTrace(): Promise<string | undefined>;
+  finalizeTraces(): Promise<string[]>;
   showDeliveryResult(summary: DeliverySummary): Promise<void>;
   completionPause(): Promise<void>;
   close(): Promise<void>;
@@ -46,6 +48,25 @@ function configurationError(message: string): Error {
   const error = new Error("browser_configuration_invalid: " + message);
   error.name = "BrowserConfigurationError";
   return error;
+}
+
+function smokeNetworkOrigin(value: string | undefined): string | undefined {
+  if (value === undefined) return undefined;
+  let parsed: URL;
+  try {
+    parsed = new URL(value);
+  } catch {
+    throw configurationError("smoke network origin must be a valid URL");
+  }
+  if (
+    parsed.protocol !== "http:"
+    || parsed.hostname !== "127.0.0.1"
+    || parsed.port === ""
+    || parsed.origin !== value
+  ) {
+    throw configurationError("smoke network origin must be an exact http://127.0.0.1:<port> origin");
+  }
+  return parsed.origin;
 }
 
 export function resolveBrowserSettings(input: BrowserSettingsInput): {
@@ -81,6 +102,7 @@ export async function openBrowserSession(
   options: BrowserSessionOptions,
 ): Promise<BrowserSession | undefined> {
   const settings = resolveBrowserSettings(options);
+  const allowedNetworkOrigin = smokeNetworkOrigin(options.allowedNetworkOrigin);
   const progress = options.progress ?? "auto";
   if (!(["auto", "off"] as string[]).includes(progress)) {
     throw configurationError("progress must be auto or off");
@@ -109,11 +131,33 @@ export async function openBrowserSession(
 
   let context: BrowserContext | undefined;
   let page: Page;
+  const blockedRequests = new Set<string>();
+  const tracePaths: string[] = [];
   const contextOptions = settings.headless ? undefined : { viewport: null };
+  const initializeContext = async (browserContext: BrowserContext): Promise<Page> => {
+    if (allowedNetworkOrigin) {
+      await browserContext.route("**/*", async (route) => {
+        const requestUrl = route.request().url();
+        let origin = "";
+        try {
+          origin = new URL(requestUrl).origin;
+        } catch {
+          // Non-URL requests are outside the locked smoke origin.
+        }
+        if (origin === allowedNetworkOrigin) {
+          await route.continue();
+          return;
+        }
+        blockedRequests.add(requestUrl);
+        await route.abort("blockedbyclient");
+      });
+    }
+    await browserContext.tracing.start({ screenshots: true, snapshots: true, sources: true });
+    return browserContext.newPage();
+  };
   try {
     context = await browser.newContext(contextOptions);
-    await context.tracing.start({ screenshots: true, snapshots: true, sources: true });
-    page = await context.newPage();
+    page = await initializeContext(context);
     if (!webActions) {
       await page.setContent("<!doctype html><html lang=\"zh-CN\"><head><meta charset=\"utf-8\"><title>Web/API 测试执行</title></head><body></body></html>");
     }
@@ -157,6 +201,12 @@ export async function openBrowserSession(
       await mkdir(evidenceDir, { recursive: true });
       const tracePath = path.join(evidenceDir, "playwright-trace.zip");
       await activeContext.tracing.stop({ path: tracePath });
+      if (!tracePaths.includes(tracePath)) tracePaths.push(tracePath);
+      if (blockedRequests.size > 0) {
+        const error = new Error(`smoke_external_request: ${[...blockedRequests].sort().join(", ")}`);
+        error.name = "SmokeExternalRequestError";
+        throw error;
+      }
       return tracePath;
     })();
     return tracePromise;
@@ -174,14 +224,17 @@ export async function openBrowserSession(
       await finalizeTrace();
       await activeContext.close();
       activeContext = await browser.newContext(contextOptions);
-      await activeContext.tracing.start({ screenshots: true, snapshots: true, sources: true });
-      page = await activeContext.newPage();
+      page = await initializeContext(activeContext);
       currentCaseId = caseId;
       tracePromise = undefined;
       session.page = page;
       return page;
     },
     finalizeTrace,
+    finalizeTraces: async () => {
+      await finalizeTrace();
+      return [...tracePaths];
+    },
     showDeliveryResult: async (summary) => {
       if (progressController) await progressController.showDeliveryResult(summary);
     },

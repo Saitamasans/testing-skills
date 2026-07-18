@@ -74,8 +74,18 @@ class BuildSkillsTest(unittest.TestCase):
                 ]
                 self.assertTrue(all(reference.exists() for reference in references))
                 combined = generated_body + "".join(reference.read_text(encoding="utf-8") for reference in references)
-                for phrase in ["run-result.json 是唯一判定来源", "非标准 Excel 必须确认字段映射", "scripts/testing-runner.mjs run"]:
+                for phrase in [
+                    "run-result.json 是唯一判定来源",
+                    "非标准 Excel 必须确认字段映射",
+                    r"scripts\testing-runner.ps1",
+                    "installation_incomplete",
+                    "installation_corrupt",
+                    "-Repair",
+                ]:
                     self.assertIn(phrase, combined)
+                self.assertNotIn("scripts/testing-runner.mjs run", combined)
+                self.assertNotIn("playwright install", combined)
+                self.assertNotIn("npm install", combined)
                 self.assertLessEqual(len(generated.read_text(encoding="utf-8").splitlines()), 500)
             else:
                 self.assertIn(source_body.strip(), generated_body)

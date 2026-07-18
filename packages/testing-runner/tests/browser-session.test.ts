@@ -141,6 +141,7 @@ test("visible session launches headed and writes Playwright trace", async () => 
 test("prepares every Web case in a fresh browser context", async () => {
   const outputDir = await mkdtemp(path.join(os.tmpdir(), "isolated-browser-cases-"));
   const contexts: Array<{ id: number; closed: boolean }> = [];
+  const guardedContexts: number[] = [];
   const browser = {
     newContext: async () => {
       const state = { id: contexts.length + 1, closed: false };
@@ -150,6 +151,7 @@ test("prepares every Web case in a fresh browser context", async () => {
           start: async () => undefined,
           stop: async ({ path: tracePath }: { path: string }) => writeFile(tracePath, `trace-${state.id}`, "utf8"),
         },
+        route: async () => { guardedContexts.push(state.id); },
         newPage: async () => ({ contextId: state.id } as unknown as Page),
         close: async () => { state.closed = true; },
       };
@@ -160,6 +162,7 @@ test("prepares every Web case in a fresh browser context", async () => {
     manifest: manifestWith("web.goto"),
     mode: "ci",
     outputDir,
+    allowedNetworkOrigin: "http://127.0.0.1:43123",
     launchBrowser: async () => browser as unknown as Browser,
   });
 
@@ -167,10 +170,16 @@ test("prepares every Web case in a fresh browser context", async () => {
   const second = await session?.prepareCase("LOGIN-002");
   assert.notEqual(first, second);
   assert.deepEqual(contexts.map(({ id }) => id), [1, 2]);
+  assert.deepEqual(guardedContexts, [1, 2]);
   assert.equal(contexts[0]?.closed, true);
   await session?.close();
   assert.equal(contexts[1]?.closed, true);
   assert.equal(await readFile(path.join(outputDir, "evidence", "LOGIN-001", "playwright-trace.zip"), "utf8"), "trace-1");
+  assert.equal(await readFile(path.join(outputDir, "evidence", "LOGIN-002", "playwright-trace.zip"), "utf8"), "trace-2");
+  assert.deepEqual(await session?.finalizeTraces(), [
+    path.join(outputDir, "evidence", "LOGIN-001", "playwright-trace.zip"),
+    path.join(outputDir, "evidence", "LOGIN-002", "playwright-trace.zip"),
+  ]);
 });
 
 test("visible session finalizes Trace before showing delivery results and closes idempotently", async () => {
@@ -234,6 +243,58 @@ test("visible session finalizes Trace before showing delivery results and closes
     "context.close",
     "browser.close",
   ]);
+});
+
+test("smoke network policy allows only the exact 127.0.0.1 origin and fails on external requests", async () => {
+  const outputDir = await mkdtemp(path.join(os.tmpdir(), "smoke-network-browser-"));
+  let routeHandler: ((route: {
+    request(): { url(): string };
+    continue(): Promise<void>;
+    abort(reason: string): Promise<void>;
+  }) => Promise<void>) | undefined;
+  const context = {
+    tracing: {
+      start: async () => undefined,
+      stop: async ({ path: tracePath }: { path: string }) => writeFile(tracePath, "trace", "utf8"),
+    },
+    route: async (_pattern: string, handler: typeof routeHandler) => { routeHandler = handler; },
+    newPage: async () => ({ kind: "page" } as unknown as Page),
+    close: async () => undefined,
+  };
+  const browser = {
+    newContext: async () => context,
+    close: async () => undefined,
+  };
+  const session = await openBrowserSession({
+    manifest: manifestWith("web.goto"),
+    mode: "interactive",
+    visibility: "visible",
+    outputDir,
+    allowedNetworkOrigin: "http://127.0.0.1:43123",
+    launchBrowser: async () => browser as unknown as Browser,
+  });
+  assert.ok(routeHandler);
+  const events: string[] = [];
+  const route = (url: string) => ({
+    request: () => ({ url: () => url }),
+    continue: async () => { events.push(`continue:${url}`); },
+    abort: async (reason: string) => { events.push(`abort:${reason}:${url}`); },
+  });
+
+  await routeHandler!(route("http://127.0.0.1:43123/fixture"));
+  await routeHandler!(route("http://127.0.0.1:43124/wrong-port"));
+  await routeHandler!(route("https://example.com/tracker.js"));
+
+  assert.deepEqual(events, [
+    "continue:http://127.0.0.1:43123/fixture",
+    "abort:blockedbyclient:http://127.0.0.1:43124/wrong-port",
+    "abort:blockedbyclient:https://example.com/tracker.js",
+  ]);
+  await assert.rejects(
+    session?.finalizeTrace(),
+    /smoke_external_request.*127\.0\.0\.1:43124.*example\.com/i,
+  );
+  await assert.rejects(session?.close(), /smoke_external_request/i);
 });
 
 test("browser setup failure closes the partial context and browser", async () => {

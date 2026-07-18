@@ -18,7 +18,9 @@ param(
     [ValidateNotNullOrEmpty()]
     [string]$Ref = "main",
 
-    [switch]$Force
+    [switch]$Force,
+
+    [switch]$Repair
 )
 
 $ErrorActionPreference = "Stop"
@@ -58,7 +60,73 @@ function Get-ValidSkillPackages {
     return $packages
 }
 
+function Get-FileSha256 {
+    param([Parameter(Mandatory = $true)][string]$Path)
+
+    $stream = [IO.File]::OpenRead($Path)
+    try {
+        $algorithm = [Security.Cryptography.SHA256]::Create()
+        try {
+            return ([BitConverter]::ToString($algorithm.ComputeHash($stream))).Replace("-", "").ToLowerInvariant()
+        }
+        finally {
+            $algorithm.Dispose()
+        }
+    }
+    finally {
+        $stream.Dispose()
+    }
+}
+
+function Invoke-CompleteEighthSkillInstaller {
+    param(
+        [Parameter(Mandatory = $true)][string]$DestinationRoot,
+        [switch]$Replace,
+        [switch]$RepairInstall
+    )
+
+    $completeSha256 = "__COMPLETE_INSTALLER_SHA256__"
+    if ($completeSha256 -cnotmatch "^[a-f0-9]{64}$") {
+        throw "通用安装器尚未写入完整运行时安装器的可信 SHA-256。"
+    }
+    $completeScript = $env:TESTING_SKILLS_COMPLETE_INSTALLER_SCRIPT
+    if (-not $completeScript -and $PSScriptRoot) {
+        $sibling = Join-Path $PSScriptRoot "install-web-api-test-execution-evidence.ps1"
+        if (Test-Path -LiteralPath $sibling -PathType Leaf) {
+            $completeScript = $sibling
+        }
+    }
+    if (-not $completeScript) {
+        $completeDownloadRoot = Join-Path ([IO.Path]::GetTempPath()) ("testing-skills-complete-installer-" + [Guid]::NewGuid().ToString("N"))
+        New-Item -ItemType Directory -Path $completeDownloadRoot | Out-Null
+        $completeScript = Join-Path $completeDownloadRoot "install-web-api-test-execution-evidence.ps1"
+        $completeUrl = "https://github.com/Saitamasans/testing-skills/releases/download/web-api-test-execution-evidence-v1.0.0/install-web-api-test-execution-evidence.ps1"
+        Invoke-WebRequest -UseBasicParsing -Uri $completeUrl -OutFile $completeScript
+    }
+    if (-not (Test-Path -LiteralPath $completeScript -PathType Leaf) -or
+        (Get-FileSha256 -Path $completeScript) -cne $completeSha256) {
+        throw "完整运行时安装器 SHA-256 校验失败。"
+    }
+
+    $powerShellExe = Join-Path $PSHOME "powershell.exe"
+    $arguments = @(
+        "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $completeScript,
+        "-InstallRoot", $DestinationRoot
+    )
+    if ($Replace) { $arguments += "-Force" }
+    if ($RepairInstall) { $arguments += "-Repair" }
+    & $powerShellExe @arguments
+    if ($LASTEXITCODE -ne 0) {
+        throw "完整运行时安装失败，退出码：$LASTEXITCODE。"
+    }
+}
+
 try {
+    $completeSkill = "web-api-test-execution-evidence"
+    if (-not $SourceDirectory -and -not $All -and $Skill -ceq $completeSkill) {
+        Invoke-CompleteEighthSkillInstaller -DestinationRoot ([IO.Path]::GetFullPath($InstallRoot)) -Replace:$Force -RepairInstall:$Repair
+        return
+    }
     if ($SourceDirectory) {
         $skillsRoot = Resolve-LocalSkillsRoot -Directory $SourceDirectory
         Write-Output "使用本地 Skill 来源：$skillsRoot"
@@ -98,6 +166,18 @@ try {
             $availableNames = ($availablePackages.Name -join "、")
             throw "未知 Skill：$Skill。可选名称：$availableNames"
         }
+    }
+    $containsCompleteSkill = @(
+        $requestedPackages | Where-Object { $_.Name -ceq $completeSkill }
+    ).Count -gt 0
+    if ($Repair -and -not $containsCompleteSkill) {
+        throw "-Repair 仅适用于 $completeSkill。"
+    }
+    if ($SourceDirectory -and $containsCompleteSkill) {
+        Write-Output "注意：第八个 Skill 的 -SourceDirectory 安装仅供开发者检查源码，不包含 Node.js、Runner 或 Chromium，不能执行 Web/API 自动化测试。"
+    }
+    elseif (-not $SourceDirectory -and $containsCompleteSkill) {
+        $requestedPackages = @($requestedPackages | Where-Object { $_.Name -cne $completeSkill })
     }
 
     foreach ($package in $requestedPackages) {
@@ -152,9 +232,19 @@ try {
         $installed++
     }
 
-    Write-Output "安装完成：新装/替换 $installed 个，保留 $skipped 个。"
-    Write-Output "安装目录：$installRootPath"
-    Write-Output "请重启 Codex、Claude Code 或 CC Switch，然后用自然语言调用对应 Skill。"
+    if ($SourceDirectory -and $containsCompleteSkill) {
+        Write-Output "开发者源码复制完成：复制 $installed 个，保留 $skipped 个。"
+        Write-Output "开发者源码目录：$installRootPath"
+        Write-Output "此模式不能执行 Web/API 自动化测试；-All 和正式单包安装必须使用完整 Release 安装器。"
+    }
+    else {
+        Write-Output "安装完成：新装/替换 $installed 个，保留 $skipped 个。"
+        Write-Output "安装目录：$installRootPath"
+        Write-Output "请重启 Codex、Claude Code 或 CC Switch，然后用自然语言调用对应 Skill。"
+    }
+    if (-not $SourceDirectory -and $containsCompleteSkill -and $All) {
+        Invoke-CompleteEighthSkillInstaller -DestinationRoot $installRootPath -Replace:$Force -RepairInstall:$Repair
+    }
 }
 catch {
     Write-Error ("安装失败：" + $_.Exception.Message)
@@ -166,5 +256,8 @@ finally {
     }
     if ($downloadRoot -and (Test-Path -LiteralPath $downloadRoot)) {
         Remove-Item -LiteralPath $downloadRoot -Recurse -Force -ErrorAction SilentlyContinue
+    }
+    if ($completeDownloadRoot -and (Test-Path -LiteralPath $completeDownloadRoot)) {
+        Remove-Item -LiteralPath $completeDownloadRoot -Recurse -Force -ErrorAction SilentlyContinue
     }
 }

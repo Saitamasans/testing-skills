@@ -17,7 +17,7 @@
 | 正式服验证<br>`production-verification-test` | 为上线后、灰度或生产环境设计低影响验证和安全门禁。 | [![Install](https://img.shields.io/badge/Install-2ea44f)](https://github.com/Saitamasans/testing-skills/releases/download/skill-installers-v1/install-production-verification-test.cmd) |
 | 用例质量审计<br>`test-case-quality-audit` | 审计已有用例的可执行性、需求一致性、遗漏风险和冗余。 | [![Install](https://img.shields.io/badge/Install-2ea44f)](https://github.com/Saitamasans/testing-skills/releases/download/skill-installers-v1/install-test-case-quality-audit.cmd) |
 | 需求澄清<br>`requirement-clarification-test` | 在写用例前找出需求缺口并判断是否具备开测条件。 | [![Install](https://img.shields.io/badge/Install-2ea44f)](https://github.com/Saitamasans/testing-skills/releases/download/skill-installers-v1/install-requirement-clarification-test.cmd) |
-| 自动执行与证据回填<br>`web-api-test-execution-evidence` | 自动执行已有 Web/API 正式用例并回填 Excel、HTML 和证据。 | [![Install](https://img.shields.io/badge/Install-2ea44f)](https://github.com/Saitamasans/testing-skills/releases/download/skill-installers-v1/install-web-api-test-execution-evidence.cmd) |
+| 自动执行与证据回填<br>`web-api-test-execution-evidence` | 自动执行已有 Web/API 正式用例并回填 Excel、HTML 和证据。 | [![Install](https://img.shields.io/badge/Install-2ea44f)](https://github.com/Saitamasans/testing-skills/releases/download/web-api-test-execution-evidence-v1.0.0/install-web-api-test-execution-evidence.cmd) |
 
 选择时以当前交付目标为准：一个任务只选择一个主 Skill，最多建议一个辅助 Skill；调用辅助 Skill 前先说明分工并等待确认，最终只生成一套结果。
 
@@ -27,15 +27,15 @@
 
 ### 推荐方式：Windows 安装按钮
 
-适合普通功能测试人员。Windows 10/11 自带的 Windows PowerShell 即可，**无需管理员权限**。依赖边界如下：
+适合普通功能测试人员。Windows 10/11 自带的 Windows PowerShell 即可，**无需管理员权限**。安装 8 个 Skill 无需安装 Node.js、npm、npx 或 Git。前 7 个 Skill 可以用下方通用安装器安装；其中前 5 个用例生成 Skill 实际生成 `.xlsx` 和 `.html` 文件时，仍需要可用的 Node.js 运行环境。
 
-- 安装 8 个 Skill 无需安装 Node.js、npm、npx 或 Git。
-- 前 5 个用例生成 Skill 实际生成 `.xlsx` 和 `.html` 文件时，需要可用的 Node.js 运行环境。
-- 第 8 个 `web-api-test-execution-evidence` 的 Runner 真正执行 Web/API 用例时，需要 Node.js 20+。
+第 8 个 `web-api-test-execution-evidence` 的最终用户必须使用 GitHub Release 完整安装器。完整安装不提供轻量版、API-only 或可选浏览器模式，安装时已交付 portable Node 22.23.1、Runner 1.1.1、Playwright 1.61.1、Chromium 1228、headless shell 1228 和 FFmpeg 1011；无需系统安装 Node.js、npm、Git、Chrome、Excel 或 Python。安装器完成下载、SHA-256 校验、解压、bundle 清单校验和本地完整 smoke test 后才显示“安装完成，可以执行 Web/API 自动化测试”。
 
 [![Install All 8 Skills](https://img.shields.io/badge/Install-All_8_Skills-2ea44f?style=for-the-badge&logo=github)](https://github.com/Saitamasans/testing-skills/releases/download/skill-installers-v1/install-all.cmd)
 
-点击按钮会下载纯文本 `.cmd` 启动器；下载后双击并完成 Windows 安全确认即可安装。GitHub 不能静默执行访问者电脑上的程序，也不会绕过浏览器或 Windows 的确认步骤。按钮在固定的 `skill-installers-v1` Release 资产发布后生效；如果下载返回 404，请使用下面的命令兜底。
+第 8 个 Skill 的执行就绪安装器：`install-web-api-test-execution-evidence.cmd` 或 `install-web-api-test-execution-evidence.ps1`。它使用固定版本的 GitHub Release 完整安装器，显示下载进度、速度、ETA、重试、续传、校验、解压和 smoke test；安装已损坏或不完整时，用同一安装器加 `-Repair`，不要在执行过程中下载或替换任何组件。
+
+点击按钮会下载纯文本 `.cmd` 启动器；下载后双击并完成 Windows 安全确认即可安装。GitHub 不能静默执行访问者电脑上的程序，也不会绕过浏览器或 Windows 的确认步骤。前 7 个和全部安装按钮从固定的 `skill-installers-v1` Release 提供；第 8 个执行就绪按钮只从不可变的 `web-api-test-execution-evidence-v1.0.0` Release 提供。Release 资产发布后按钮才生效；如果下载返回 404，请使用下面的命令兜底。
 
 `.cmd` 可以先在 GitHub 查看，或下载后右键用文本编辑器检查。Windows 可能显示“来自互联网”或 SmartScreen 提示，这是正常安全机制。启动器只读取本仓库的 HTTPS 安装脚本，默认写入当前用户的 `.agents\skills`，不写系统目录。
 
@@ -46,7 +46,7 @@
 安装全部 8 个 Skill：
 
 ```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "& ([scriptblock]::Create(([string]((Invoke-WebRequest -UseBasicParsing 'https://raw.githubusercontent.com/Saitamasans/testing-skills/main/scripts/install.ps1').Content)).TrimStart([char]0xFEFF))) -All"
+powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "$url='https://github.com/Saitamasans/testing-skills/releases/download/web-api-test-execution-evidence-v1.0.0/install-all.cmd'; $installer=Join-Path ([IO.Path]::GetTempPath()) ('testing-skills-'+[guid]::NewGuid().ToString('N')+'.cmd'); $exitCode=1; try { Invoke-WebRequest -UseBasicParsing -Uri $url -OutFile $installer; $env:TESTING_SKILLS_NO_PAUSE='1'; & $env:ComSpec /d /c ('call '+[char]34+$installer+[char]34); $exitCode=$LASTEXITCODE } finally { Remove-Item -LiteralPath $installer -Force -ErrorAction SilentlyContinue }; exit $exitCode"
 ```
 
 只安装“需求测试工作台”：
@@ -55,13 +55,13 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "& ([scriptblock]::Cr
 powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "& ([scriptblock]::Create(([string]((Invoke-WebRequest -UseBasicParsing 'https://raw.githubusercontent.com/Saitamasans/testing-skills/main/scripts/install.ps1').Content)).TrimStart([char]0xFEFF))) -Skill 'requirement-test-workbench'"
 ```
 
-把命令末尾的名称换成总览中的 Package 即可安装其他单个 Skill。例如只安装第 8 个 Skill：
+把命令末尾的名称换成总览中的 Package 即可安装前 7 个单个 Skill。`web-api-test-execution-evidence` 需要其专用 GitHub Release 完整安装器，通用安装器不提供执行所需的 Node、Runner 或 Chromium。
 
 ```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "& ([scriptblock]::Create(([string]((Invoke-WebRequest -UseBasicParsing 'https://raw.githubusercontent.com/Saitamasans/testing-skills/main/scripts/install.ps1').Content)).TrimStart([char]0xFEFF))) -Skill 'web-api-test-execution-evidence'"
+powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "$url='https://github.com/Saitamasans/testing-skills/releases/download/web-api-test-execution-evidence-v1.0.0/install-web-api-test-execution-evidence.cmd'; $installer=Join-Path ([IO.Path]::GetTempPath()) ('testing-skills-'+[guid]::NewGuid().ToString('N')+'.cmd'); $exitCode=1; try { Invoke-WebRequest -UseBasicParsing -Uri $url -OutFile $installer; $env:TESTING_SKILLS_NO_PAUSE='1'; & $env:ComSpec /d /c ('call '+[char]34+$installer+[char]34); $exitCode=$LASTEXITCODE } finally { Remove-Item -LiteralPath $installer -Force -ErrorAction SilentlyContinue }; exit $exitCode"
 ```
 
-默认安装到当前用户的 `.agents\skills`。目标 Skill 已存在时会保留原文件并提示跳过；确认需要替换时，在命令末尾增加 `-Force`。
+默认安装到当前用户的 `.agents\skills`。目标 Skill 已存在时会保留原文件并提示跳过；确认需要替换时，在命令末尾增加 `-Force`。从仓库的 Source ZIP 或 npx 安装第 8 个 Skill 仅供开发者检查和修改源代码，不能执行 Web/API 自动化测试。
 
 如果提示无法访问 `raw.githubusercontent.com` 或 `codeload.github.com`，说明当前网络或代理无法访问下载地址；安装器不会把网络失败伪装成安装成功。把仓库下载到本地后，可用本地目录兜底：
 
@@ -216,7 +216,7 @@ npx skills add Saitamasans/testing-skills@web-api-test-execution-evidence -g -y
 - **目标 Web/API 地址：** 当前执行环境必须能够访问。
 - **环境性质和执行授权：** 明确测试、预发或正式环境，并取得对应授权，不能根据域名猜测。
 - **执行前确认：** 先核对执行预览、目标、风险、动作数量和将读取的环境变量名。
-- **运行环境：** Node.js 20+。
+- **运行环境：** 已通过 GitHub Release 完整安装器交付的内置 runtime；不需要系统 Node.js。
 
 ### 按场景补充
 
@@ -241,7 +241,8 @@ npx skills add Saitamasans/testing-skills@web-api-test-execution-evidence -g -y
 
 ### 运行与安全注意事项
 
-- Runner 需要 Node.js 20+；Skill 会从固定 GitHub Release 自动下载并校验 Runner，无需 npm 账号，也无需手工安装 Runner。
+- 先安装 GitHub Release 完整安装器交付的 Node 22.23.1、Runner 1.1.1、Playwright 1.61.1、Chromium 1228、headless shell 1228 和 FFmpeg 1011。正式执行只快速验证安装回执、回执绑定的 bundle 清单、固定组件身份和关键可执行/证据标记，不会下载、安装或修改运行时。
+- Windows 只通过 `<ABSOLUTE_SKILL_ROOT>\scripts\testing-runner.ps1` 调用内置 runtime；若报告 `installation_incomplete` 或 `installation_corrupt`，重新运行完整安装器并带 `-Repair`。无需 npm 账号，也无需手工安装 Runner。
 - 凭据只放环境变量或 CI Secrets，不写入用例、命令、日志、报告或截图。
 - 非标准 Excel 字段映射需要用户确认，不能静默转换。
 - CI 只执行低风险 R0/R1 动作；需要人工登录、MFA、SSO 或扫码时应阻塞。

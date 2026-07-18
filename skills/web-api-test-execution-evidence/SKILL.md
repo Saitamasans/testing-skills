@@ -86,9 +86,11 @@ Do not trigger this Skill merely to generate test cases, clarify requirements, o
 
 ## 八、Runner 固定入口
 
-只使用本 Skill 安装目录内的 `scripts/testing-runner.mjs`，先解析 Skill 根目录的绝对路径，再调用启动器；不使用 latest，也不调用本地仓库中的 Runner。
+最终用户必须先使用 GitHub Release 完整安装器。完整安装不提供轻量版或可选浏览器，安装时已交付 portable Node 22.23.1、Runner 1.1.1、Playwright 1.61.1、Chromium 1228、headless shell 1228 和 FFmpeg 1011。无需系统安装 Node.js、npm、Git、Chrome、Excel 或 Python。
 
-首次运行时，启动器先告知 Runner 来源、固定版本、下载体积和缓存位置，再从项目 GitHub Release 自动下载并校验 SHA-256。无需 npm 账号，无需用户手工输入 npm 或 Runner 安装命令。交互可见执行需要 Web 动作或 API-only 全屏看板时，自动准备 Playwright Chromium；CI、headless 或显式关闭 API-only 面板时不额外下载浏览器。
+Windows 只使用已验证的 PowerShell 安全入口：`powershell.exe -NoProfile -ExecutionPolicy Bypass -File <ABSOLUTE_SKILL_ROOT>\scripts\testing-runner.ps1 <Runner args...>`。`.cmd` 桥接器不接收原始 Runner 参数；不要文档化或调用 Node MJS 入口、latest 或本地仓库 Runner。
+
+正式执行只快速验证安装回执、回执绑定的 bundle 清单、固定组件身份和关键可执行/证据标记，并使用安装包内置运行时；不会下载、安装或修改运行时。若报告 `installation_incomplete` 或 `installation_corrupt`，重新运行 GitHub Release 完整安装器并带 `-Repair`。安装完成后，调用 Skill 直接进入准备度、只读 discovery、审批和执行；无需 npm 账号或手工安装步骤。
 
 交互可见执行默认最大化浏览器并开启五阶段执行驾驶舱：
 
@@ -100,11 +102,11 @@ Do not trigger this Skill merely to generate test cases, clarify requirements, o
 
 Web/混合场景的实时执行阶段使用不参与定位、点击或断言的页面浮层，API-only 使用全屏执行看板。正式 Web 证据 PNG 不包含执行面板（包括驾驶舱和目标高亮），桌面教程录制保留完整可视过程；CI 和 `--browser headless` 不显示驾驶舱。只有用户显式要求关闭时才传 `--progress off`。
 
-```bash
-node <ABSOLUTE_SKILL_ROOT>/scripts/testing-runner.mjs discover-web --url https://example.test --output-dir .testing-run/discovery --browser visible
-node <ABSOLUTE_SKILL_ROOT>/scripts/testing-runner.mjs plan --input report.json --profile execution-profile.json --output-dir .testing-run
-node <ABSOLUTE_SKILL_ROOT>/scripts/testing-runner.mjs approve --manifest .testing-run/run-manifest.json --out .testing-run/approval.json --expires-at <ISO_EXPIRES_AT> --confirmed-by reviewer-name
-node <ABSOLUTE_SKILL_ROOT>/scripts/testing-runner.mjs run --manifest .testing-run/run-manifest.json --approval .testing-run/approval.json --output-dir .testing-run/result --mode interactive --browser auto --slow-mo 200 --progress auto
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "<ABSOLUTE_SKILL_ROOT>\scripts\testing-runner.ps1" discover-web --url https://example.test --output-dir .testing-run/discovery --browser visible
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "<ABSOLUTE_SKILL_ROOT>\scripts\testing-runner.ps1" plan --input report.json --profile execution-profile.json --output-dir .testing-run
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "<ABSOLUTE_SKILL_ROOT>\scripts\testing-runner.ps1" approve --manifest .testing-run/run-manifest.json --out .testing-run/approval.json --expires-at <ISO_EXPIRES_AT> --confirmed-by reviewer-name
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "<ABSOLUTE_SKILL_ROOT>\scripts\testing-runner.ps1" run --manifest .testing-run/run-manifest.json --approval .testing-run/approval.json --output-dir .testing-run/result --mode interactive --browser auto --slow-mo 200 --progress auto
 ```
 
 `<ABSOLUTE_SKILL_ROOT>` 必须替换为当前已安装 Skill 的绝对目录，路径含空格时正确加引号。`<ISO_EXPIRES_AT>` 使用本次执行窗口内的短期过期时间，不使用长期或永久审批。CI、退出码和完整参数读取 `references/runner-commands.md`。

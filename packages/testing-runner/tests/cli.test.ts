@@ -7,6 +7,7 @@ import test from "node:test";
 
 import { TEN_COLUMNS } from "../src/input/detect-input.js";
 import { normalizeRunCliOptions, runCli } from "../src/cli.js";
+import { resolveSmokeNetworkOrigin } from "../src/commands/run.js";
 import { createApproval } from "../src/security/approval.js";
 import type { ExecutionProfile, ManifestAction, RunManifest, RunManifestCase, RunResult } from "../src/types.js";
 import { startDemoApp } from "./fixtures/demo-app.js";
@@ -215,6 +216,26 @@ test("run CLI rejects an invalid execution mode", () => {
     }),
     /run_configuration_invalid: mode must be interactive or ci/,
   );
+});
+
+test("smoke network origin must be the one exact loopback manifest and profile target", () => {
+  const origin = "http://127.0.0.1:43123" as const;
+  const runManifest = {
+    targets: [origin],
+  } as unknown as RunManifest;
+  const profile = {
+    targets: { fixture: { kind: "web", origin } },
+  } as unknown as ExecutionProfile;
+
+  assert.equal(resolveSmokeNetworkOrigin(runManifest, profile, {
+    TESTING_RUNNER_SMOKE_ALLOWED_ORIGIN: origin,
+  }), origin);
+  assert.throws(() => resolveSmokeNetworkOrigin(runManifest, profile, {
+    TESTING_RUNNER_SMOKE_ALLOWED_ORIGIN: "http://127.0.0.1:43124",
+  }), /smoke.*origin.*manifest.*profile|target.*mismatch/i);
+  assert.throws(() => resolveSmokeNetworkOrigin(runManifest, profile, {
+    TESTING_RUNNER_SMOKE_ALLOWED_ORIGIN: "https://example.com",
+  }), /loopback|127\.0\.0\.1/i);
 });
 
 test("run command writes run result plus Excel and HTML for a passing approved API flow", async () => {

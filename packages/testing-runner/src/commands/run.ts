@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+import { createReadStream } from "node:fs";
 import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
@@ -5,7 +7,11 @@ import { pathToFileURL } from "node:url";
 import { executeAction as executeRegisteredAction } from "../actions/action-registry.js";
 import { sha256Canonical } from "../compiler/canonical-json.js";
 import { ELEVEN_COLUMNS, TEN_COLUMNS, type NativeReportDocument } from "../input/detect-input.js";
-import { projectExecutionReport, renderExecutionReports } from "../reporting/report-projector.js";
+import {
+  projectExecutionReport,
+  renderExecutionReports,
+  verifyExecutionDetailProjection,
+} from "../reporting/report-projector.js";
 import { verifyReportConsistency } from "../reporting/consistency-gate.js";
 import { runApprovedManifest } from "../runtime/run-orchestrator.js";
 import { createExecutionContext, type CreateExecutionContextInput } from "../runtime/execution-context.js";
@@ -153,6 +159,108 @@ async function deliveryArtifact(
   };
 }
 
+export function resolveSmokeNetworkOrigin(
+  manifest: RunManifest,
+  profile: ExecutionProfile,
+  env: Record<string, string | undefined> = process.env,
+): string | undefined {
+  const raw = env.TESTING_RUNNER_SMOKE_ALLOWED_ORIGIN;
+  if (raw === undefined) return undefined;
+  let parsed: URL;
+  try {
+    parsed = new URL(raw);
+  } catch {
+    throw new Error("smoke network origin must be a valid loopback URL");
+  }
+  if (
+    parsed.protocol !== "http:"
+    || parsed.hostname !== "127.0.0.1"
+    || parsed.port === ""
+    || parsed.origin !== raw
+  ) {
+    throw new Error("smoke network origin must be exactly http://127.0.0.1:<port>");
+  }
+  const manifestTargets = [...(manifest.targets ?? [])];
+  const profileTargets = normalizeTargetOrigins(profile.targets);
+  if (
+    manifestTargets.length !== 1
+    || profileTargets.length !== 1
+    || manifestTargets[0] !== raw
+    || profileTargets[0] !== raw
+  ) {
+    throw new Error("smoke network origin target mismatch with manifest and profile");
+  }
+  return raw;
+}
+
+async function sha256File(file: string): Promise<string> {
+  const digest = createHash("sha256");
+  for await (const chunk of createReadStream(file)) digest.update(chunk);
+  return digest.digest("hex");
+}
+
+export async function attachTraceEvidence(input: {
+  result: RunResult;
+  manifest: RunManifest;
+  outputDir: string;
+  tracePath?: string | undefined;
+  tracePaths?: string[] | undefined;
+}): Promise<RunResult> {
+  const absolutePaths = [...new Set([
+    ...(input.tracePaths ?? []),
+    ...(input.tracePath ? [input.tracePath] : []),
+  ])];
+  if (absolutePaths.length === 0) return input.result;
+
+  const references = await Promise.all(absolutePaths.map(async (tracePath) => {
+    const relative = path.relative(input.outputDir, tracePath).replaceAll("\\", "/");
+    if (relative === "" || relative === ".." || relative.startsWith("../") || path.isAbsolute(relative)) {
+      throw new Error("Playwright Trace must be inside the run output directory");
+    }
+    return { path: relative, sha256: await sha256File(tracePath) };
+  }));
+  const matched = new Set<string>();
+  const cases = input.result.cases.map((item) => {
+    const applicable = references.filter((reference) =>
+      reference.path === "evidence/playwright-trace.zip"
+      || reference.path === `evidence/${item.case_id}/playwright-trace.zip`
+    );
+    for (const reference of applicable) matched.add(reference.path);
+    const evidence = [...item.evidence];
+    for (const reference of applicable) {
+      const existing = evidence.find(({ path: evidencePath }) => evidencePath === reference.path);
+      if (existing && existing.sha256 !== reference.sha256) {
+        throw new Error(`Playwright Trace evidence hash drift for ${item.case_id}`);
+      }
+      if (!existing) evidence.push(reference);
+    }
+    return { ...item, assertions: [...item.assertions], evidence };
+  });
+  const orphan = references.find((reference) => !matched.has(reference.path));
+  if (orphan) throw new Error(`Playwright Trace has no matching Test Case: ${orphan.path}`);
+  return { ...input.result, cases };
+}
+
+export async function finalizeResultForReporting(input: {
+  result: RunResult;
+  manifest: RunManifest;
+  outputDir: string;
+  finalizeTrace?: () => Promise<string | undefined>;
+  finalizeTraces?: () => Promise<string[]>;
+}): Promise<RunResult> {
+  const tracePaths = input.finalizeTraces
+    ? await input.finalizeTraces()
+    : input.finalizeTrace
+      ? [await input.finalizeTrace()].filter((value): value is string => value !== undefined)
+      : [];
+  return attachTraceEvidence({
+    result: input.result,
+    manifest: input.manifest,
+    outputDir: input.outputDir,
+    tracePaths,
+  });
+}
+
 export async function writeReports(
   outputDir: string,
   manifest: RunManifest,
@@ -161,8 +269,12 @@ export async function writeReports(
   const report = await sourceReport(manifest);
   const projected = projectExecutionReport({ report, result });
   const consistency = verifyReportConsistency({ report: projected, result });
-  if (!consistency.valid) {
-    throw new Error(`report consistency failed: ${consistency.errors.join("; ")}`);
+  const detailConsistency = verifyExecutionDetailProjection({ report: projected, result });
+  if (!consistency.valid || !detailConsistency.valid) {
+    throw new Error(`report consistency failed: ${[
+      ...consistency.errors,
+      ...detailConsistency.errors,
+    ].join("; ")}`);
   }
   await writeJson(path.join(outputDir, "projected-report.json"), projected);
   await renderExecutionReports(projected, outputDir, "result");
@@ -181,8 +293,14 @@ async function persistBlockedResult(
   manifest: RunManifest,
   runStatus: RunStatus,
   reason: string,
+  finalizeTraces?: () => Promise<string[]>,
 ): Promise<RunResult> {
-  const result = validateDocument<RunResult>("run-result", blockedResult(manifest, runStatus, reason));
+  const result = validateDocument<RunResult>("run-result", await finalizeResultForReporting({
+    result: blockedResult(manifest, runStatus, reason),
+    manifest,
+    outputDir,
+    ...(finalizeTraces ? { finalizeTraces } : {}),
+  }));
   await writeJson(path.join(outputDir, "run-result.json"), result);
   await writeReports(outputDir, manifest, result);
   return result;
@@ -202,6 +320,7 @@ export async function runRunCommand(options: RunCommandOptions): Promise<number>
 
   const profile = await readRuntimeProfile(options.manifest);
   assertProfileTargetsLocked(profile, approval);
+  const allowedNetworkOrigin = resolveSmokeNetworkOrigin(manifest, profile);
   let secrets: ReturnType<typeof resolveCredentials>;
   try {
     secrets = resolveCredentials(credentialRefs(profile), process.env);
@@ -218,6 +337,7 @@ export async function runRunCommand(options: RunCommandOptions): Promise<number>
     mode,
     outputDir: options.outputDir,
   };
+  if (allowedNetworkOrigin !== undefined) browserOptions.allowedNetworkOrigin = allowedNetworkOrigin;
   if (options.browser !== undefined) browserOptions.visibility = options.browser;
   if (options.slowMo !== undefined) browserOptions.slowMo = options.slowMo;
   if (options.progress !== undefined) browserOptions.progress = options.progress;
@@ -232,7 +352,7 @@ export async function runRunCommand(options: RunCommandOptions): Promise<number>
     };
     if (browserSession?.page) contextInput.page = browserSession.page;
     let context = createExecutionContext(contextInput);
-    const result = validateDocument<RunResult>("run-result", await runApprovedManifest({
+    let result = validateDocument<RunResult>("run-result", await runApprovedManifest({
       manifest,
       outputDir: options.outputDir,
       ...(browserSession?.observer ? { observer: browserSession.observer } : {}),
@@ -244,15 +364,23 @@ export async function runRunCommand(options: RunCommandOptions): Promise<number>
       executeAction: (action) => executeRegisteredAction(action, context),
     }));
 
+    result = validateDocument<RunResult>("run-result", await finalizeResultForReporting({
+      result,
+      manifest,
+      outputDir: options.outputDir,
+      ...(browserSession ? { finalizeTraces: browserSession.finalizeTraces } : {}),
+    }));
     await writeJson(path.join(options.outputDir, "run-result.json"), result);
     const artifacts = await writeReports(options.outputDir, manifest, result);
-    const tracePath = await browserSession?.finalizeTrace();
-    if (tracePath) {
+    const traceReferences = [...new Set(result.cases.flatMap((item) => item.evidence
+      .map(({ path: evidencePath }) => evidencePath)
+      .filter((evidencePath) => evidencePath.endsWith("/playwright-trace.zip"))))];
+    for (const traceReference of traceReferences) {
       artifacts.push(await deliveryArtifact(
         options.outputDir,
         "trace",
-        "Playwright Trace",
-        tracePath,
+        `Playwright Trace：${traceReference}`,
+        path.join(options.outputDir, ...traceReference.split("/")),
       ));
     }
     await browserSession?.showDeliveryResult({ result, artifacts });
@@ -260,7 +388,13 @@ export async function runRunCommand(options: RunCommandOptions): Promise<number>
     return exitCodeForRunResult(result);
   } catch (error) {
     if (error instanceof Error && error.name === "ManualCredentialRequiredError") {
-      const result = await persistBlockedResult(options.outputDir, manifest, "manual_required", error.message);
+      const result = await persistBlockedResult(
+        options.outputDir,
+        manifest,
+        "manual_required",
+        error.message,
+        browserSession?.finalizeTraces,
+      );
       return exitCodeForRunResult(result);
     }
     throw error;

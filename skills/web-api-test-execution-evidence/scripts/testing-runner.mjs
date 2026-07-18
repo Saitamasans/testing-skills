@@ -1,40 +1,38 @@
 #!/usr/bin/env node
-import { readFile } from "node:fs/promises";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
-
 import {
-  BootstrapError,
-  ensureRunnerRuntime,
-  forwardRunnerCommand,
-  prepareBrowserForCommand,
-} from "./runner-bootstrap-lib.mjs";
+  InstallationError,
+  forwardInstalledRunnerCommand,
+  verifyInstalledRuntime,
+} from "./installed-runtime-lib.mjs";
+
+function resolveRunnerArgs() {
+  const encoded = process.env.TESTING_RUNNER_ARGS_B64;
+  if (encoded === undefined) return process.argv.slice(2);
+  if (process.argv.length !== 2 || !/^[A-Za-z0-9+/]*={0,2}$/.test(encoded) || encoded.length % 4 !== 0) {
+    throw new InstallationError("installation_corrupt", "TESTING_RUNNER_ARGS_B64 is invalid");
+  }
+  let decoded;
+  try { decoded = JSON.parse(Buffer.from(encoded, "base64").toString("utf8")); } catch {
+    throw new InstallationError("installation_corrupt", "TESTING_RUNNER_ARGS_B64 is not valid JSON");
+  }
+  if (!Array.isArray(decoded) || decoded.some((value) => typeof value !== "string")) {
+    throw new InstallationError("installation_corrupt", "TESTING_RUNNER_ARGS_B64 must encode a string argument array");
+  }
+  delete process.env.TESTING_RUNNER_ARGS_B64;
+  return decoded;
+}
 
 async function main() {
-  const skillRoot = fileURLToPath(new URL("..", import.meta.url));
-  const manifestPath = process.env.TESTING_RUNNER_RELEASE_MANIFEST
-    || path.join(skillRoot, "assets", "runner-release.json");
-  const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
-  const runtime = await ensureRunnerRuntime({
-    manifest,
-    env: process.env,
-    log: (line) => console.error(line),
-  });
-  await prepareBrowserForCommand({
-    cliPath: runtime.cliPath,
-    args: process.argv.slice(2),
-    env: process.env,
-    log: (line) => console.error(line),
-  });
-  process.exitCode = await forwardRunnerCommand({
-    cliPath: runtime.cliPath,
-    args: process.argv.slice(2),
+  const runtime = await verifyInstalledRuntime({ env: process.env });
+  process.exitCode = await forwardInstalledRunnerCommand({
+    runtime,
+    args: resolveRunnerArgs(),
     env: process.env,
   });
 }
 
 main().catch((error) => {
-  if (error instanceof BootstrapError) {
+  if (error instanceof InstallationError) {
     console.error(error.message);
     process.exitCode = 20;
     return;
