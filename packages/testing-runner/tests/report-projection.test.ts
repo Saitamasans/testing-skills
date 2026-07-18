@@ -12,6 +12,7 @@ import { verifyReportConsistency } from "../src/reporting/consistency-gate.js";
 import type { RunResult } from "../src/types.js";
 
 const COLUMNS = ["用例 ID", "所属模块", "用例标题", "验证功能点", "前置条件", "测试步骤", "预期结果", "优先级", "执行结果", "备注"];
+const ELEVEN_COLUMNS = [...COLUMNS.slice(0, 8), "实际结果", ...COLUMNS.slice(8)];
 
 function sourceReport() {
   return {
@@ -30,6 +31,13 @@ function sourceReport() {
       },
     ],
   };
+}
+
+function sourceReportWithActualResults() {
+  const report = sourceReport();
+  report.sheets[0]!.columns = ELEVEN_COLUMNS;
+  for (const row of report.sheets[0]!.rows) row.values.splice(8, 0, "尚未执行");
+  return report;
 }
 
 function runResult(): RunResult {
@@ -69,6 +77,20 @@ test("projects one RunResult into exact ten-column case statuses and execution n
   assert.match(rows[1]!.values[9], /evidence=1/);
   assert.match(rows[1]!.values[9], /manifest=b{64}/);
   assert.equal(verifyReportConsistency({ report: projected, result: runResult() }).valid, true);
+});
+
+test("projects assertion actuals into the eleven-column actual result field", () => {
+  const result = runResult();
+  result.cases[0]!.assertions[0]!.actual = { url: "/dashboard", visible: "退出" };
+  const projected = projectExecutionReport({ report: sourceReportWithActualResults(), result });
+  const rows = projected.sheets[0]!.rows;
+
+  assert.deepEqual(projected.sheets[0]!.columns, ELEVEN_COLUMNS);
+  assert.match(String(rows[0]!.values[8]), /a1.*dashboard.*退出/);
+  assert.match(String(rows[1]!.values[8]), /a2.*500/);
+  assert.deepEqual(rows.map((row) => row.values[9]), ["通过", "不通过"]);
+  assert.match(String(rows[1]!.values[10]), /run_status=completed/);
+  assert.equal(verifyReportConsistency({ report: projected, result }).valid, true);
 });
 
 test("consistency gate rejects status drift between RunResult and projected report", () => {

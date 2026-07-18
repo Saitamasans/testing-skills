@@ -21,6 +21,12 @@ export const TEN_COLUMNS = [
   "备注",
 ] as const;
 
+export const ELEVEN_COLUMNS = [
+  ...TEN_COLUMNS.slice(0, 8),
+  "实际结果",
+  ...TEN_COLUMNS.slice(8),
+] as const;
+
 const OLE_COMPOUND_FILE_SIGNATURE = Buffer.from("d0cf11e0a1b11ae1", "hex");
 const SUPPORTED_INPUT_MESSAGE =
   "仅支持符合 report.schema.json 的 JSON 报告或标准十列 .xlsx 工作簿";
@@ -94,13 +100,17 @@ function headerValues(sheet: ExcelJS.Worksheet): string[] {
   return values;
 }
 
-function hasExactTenColumns(workbook: ExcelJS.Workbook): boolean {
+export function isSupportedCaseColumns(headers: readonly string[]): boolean {
+  return [TEN_COLUMNS, ELEVEN_COLUMNS].some((expected) =>
+    headers.length === expected.length &&
+    headers.every((header, index) => header === expected[index]),
+  );
+}
+
+function hasExactCaseColumns(workbook: ExcelJS.Workbook): boolean {
   return workbook.worksheets.some((sheet) => {
     const headers = headerValues(sheet);
-    return (
-      headers.length === TEN_COLUMNS.length &&
-      headers.every((header, index) => header === TEN_COLUMNS[index])
-    );
+    return isSupportedCaseColumns(headers);
   });
 }
 
@@ -151,7 +161,7 @@ export async function detectInputFromBytes(file: string, bytes: Buffer): Promise
   }
 
   return {
-    input_kind: hasExactTenColumns(workbook) ? "standard-excel" : "nonstandard-excel",
+    input_kind: hasExactCaseColumns(workbook) ? "standard-excel" : "nonstandard-excel",
     sheet_names: workbook.worksheets.map(({ name }) => name),
     workbook,
   };
@@ -164,8 +174,10 @@ export async function detectInputKind(file: string): Promise<InputKind> {
 
 export function worksheetHasExactTenColumns(sheet: ExcelJS.Worksheet): boolean {
   const headers = headerValues(sheet);
-  return (
-    headers.length === TEN_COLUMNS.length &&
-    headers.every((header, index) => header === TEN_COLUMNS[index])
-  );
+  return isSupportedCaseColumns(headers);
+}
+
+export function worksheetCaseColumns(sheet: ExcelJS.Worksheet): string[] | undefined {
+  const headers = headerValues(sheet);
+  return isSupportedCaseColumns(headers) ? headers : undefined;
 }

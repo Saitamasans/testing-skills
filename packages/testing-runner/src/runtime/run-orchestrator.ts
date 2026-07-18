@@ -62,6 +62,8 @@ export interface RunInput {
   outputDir: string;
   run_id?: string;
   observer?: RunObserver;
+  beforeCase?(item: ManifestCase): void | Promise<void>;
+  afterCase?(item: ManifestCase): void | Promise<void>;
   executeAction(action: RunManifest["cases"][number]["steps"][number], attempt: number): Promise<ActionOutcome>;
 }
 
@@ -143,6 +145,8 @@ export async function runApprovedManifest(input: RunInput): Promise<RunResult> {
       item,
       action_total: item.steps.length,
     };
+    await input.beforeCase?.(item);
+    try {
     await input.observer?.caseStarted?.(caseEvent);
     const assertions: AssertionResult[] = [];
     const evidence: EvidenceReference[] = [];
@@ -308,6 +312,9 @@ export async function runApprovedManifest(input: RunInput): Promise<RunResult> {
     };
     cases.push(caseResult);
     await input.observer?.caseCompleted?.({ ...caseEvent, result: caseResult });
+    } finally {
+      await input.afterCase?.(item);
+    }
   }
 
   const result: RunResult = {

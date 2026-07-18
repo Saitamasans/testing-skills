@@ -54,6 +54,15 @@ class SourceContractsTest(unittest.TestCase):
             for term in required:
                 self.assertIn(term, self.texts[slug], f"{slug}: {term}")
 
+    def test_requirement_workbench_emits_actual_results_and_independent_web_cases(self):
+        text = self.texts["requirement-test-workbench"]
+        columns = "用例 ID | 所属模块 | 用例标题 | 验证功能点 | 前置条件 | 测试步骤 | 预期结果 | 优先级 | 实际结果 | 执行结果"
+        self.assertIn(columns, text)
+        self.assertIn("实际结果默认“尚未执行”", text)
+        self.assertIn("禁止依赖上一条用例的终态", text)
+        self.assertIn("新建未登录浏览器会话并打开登录页", text)
+        self.assertIn("建态 → 动作 → 断言", text)
+
 
 if __name__ == "__main__":
     unittest.main()

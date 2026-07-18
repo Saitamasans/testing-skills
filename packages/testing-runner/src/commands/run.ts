@@ -4,7 +4,7 @@ import { pathToFileURL } from "node:url";
 
 import { executeAction as executeRegisteredAction } from "../actions/action-registry.js";
 import { sha256Canonical } from "../compiler/canonical-json.js";
-import { TEN_COLUMNS, type NativeReportDocument } from "../input/detect-input.js";
+import { ELEVEN_COLUMNS, TEN_COLUMNS, type NativeReportDocument } from "../input/detect-input.js";
 import { projectExecutionReport, renderExecutionReports } from "../reporting/report-projector.js";
 import { verifyReportConsistency } from "../reporting/consistency-gate.js";
 import { runApprovedManifest } from "../runtime/run-orchestrator.js";
@@ -87,6 +87,9 @@ function credentialRefs(profile: RuntimeExecutionProfile): CredentialRef[] {
 }
 
 function reportFromManifest(manifest: RunManifest): NativeReportDocument {
+  const columns = manifest.cases.some((item) => Object.hasOwn(item.original, "实际结果"))
+    ? [...ELEVEN_COLUMNS]
+    : [...TEN_COLUMNS];
   return {
     title: "Execution result",
     generated_at: new Date().toISOString(),
@@ -95,9 +98,9 @@ function reportFromManifest(manifest: RunManifest): NativeReportDocument {
       {
         name: "Cases",
         kind: "test_cases",
-        columns: [...TEN_COLUMNS],
+        columns,
         rows: manifest.cases.map((item) => ({
-          values: TEN_COLUMNS.map((column) => String(item.original[column] ?? "")),
+          values: columns.map((column) => String(item.original[column] ?? "")),
         })),
       },
     ],
@@ -228,11 +231,16 @@ export async function runRunCommand(options: RunCommandOptions): Promise<number>
       mode,
     };
     if (browserSession?.page) contextInput.page = browserSession.page;
-    const context = createExecutionContext(contextInput);
+    let context = createExecutionContext(contextInput);
     const result = validateDocument<RunResult>("run-result", await runApprovedManifest({
       manifest,
       outputDir: options.outputDir,
       ...(browserSession?.observer ? { observer: browserSession.observer } : {}),
+      beforeCase: async (item) => {
+        if (!browserSession || !item.steps.some((action) => action.type.startsWith("web.") || action.type === "cleanup.web")) return;
+        const page = await browserSession.prepareCase(item.case_id);
+        context = createExecutionContext({ ...contextInput, page });
+      },
       executeAction: (action) => executeRegisteredAction(action, context),
     }));
 
