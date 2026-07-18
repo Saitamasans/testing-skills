@@ -34,6 +34,8 @@ export type TenColumnName =
   | "优先级"
   | "执行结果"
   | "备注";
+export type CaseColumnName = TenColumnName | "实际结果";
+export type CaseValues = Record<TenColumnName, string> & Partial<Record<"实际结果", string>>;
 
 export type SkillInvocation =
   | string
@@ -64,7 +66,7 @@ export interface OriginalSourceRow {
 
 export interface NormalizedCase {
   id: string;
-  values: Record<TenColumnName, string>;
+  values: CaseValues;
   raw_values: unknown[];
   source: string;
   source_sheet: string;
@@ -76,7 +78,7 @@ export interface NormalizedCase {
 }
 
 export interface NormalizedCaseSet {
-  columns: TenColumnName[];
+  columns: CaseColumnName[];
   cases: NormalizedCase[];
   source_snapshot: SourceSnapshot;
   skill_invocation?: SkillInvocation;
@@ -296,6 +298,7 @@ export interface RunManifestCase {
     "测试步骤": string;
     "预期结果": string;
     "优先级": string;
+    "实际结果"?: string;
     "执行结果": "" | CaseStatus;
     "备注": string;
   };

@@ -13,27 +13,42 @@ export interface ProjectExecutionReportInput {
   result: RunResult;
 }
 
-const CASE_ID_INDEX = 0;
-const STATUS_INDEX = 8;
-const REMARK_INDEX = 9;
-const TEN_COLUMN_COUNT = 10;
-
 function cloneReport(report: TestingSkillsReport): TestingSkillsReport {
   return JSON.parse(JSON.stringify(report)) as TestingSkillsReport;
 }
 
-function ensureTenValues(row: NativeReportRow): void {
-  while (row.values.length < TEN_COLUMN_COUNT) row.values.push("");
-  if (row.values.length > TEN_COLUMN_COUNT) row.values = row.values.slice(0, TEN_COLUMN_COUNT);
+function ensureColumnValues(row: NativeReportRow, count: number): void {
+  while (row.values.length < count) row.values.push("");
+  if (row.values.length > count) row.values = row.values.slice(0, count);
 }
 
-function rowCaseId(row: NativeReportRow): string {
-  return String(row.values[CASE_ID_INDEX] ?? "").trim();
+function columnIndex(sheet: NativeReportSheet, name: string): number {
+  const index = sheet.columns.indexOf(name);
+  if (index < 0) throw new Error(`${sheet.name} 缺少 ${name} 列`);
+  return index;
 }
 
-function appendRemark(row: NativeReportRow, note: string): void {
-  const existing = String(row.values[REMARK_INDEX] ?? "").trim();
-  row.values[REMARK_INDEX] = existing ? `${existing}\n${note}` : note;
+function appendRemark(row: NativeReportRow, index: number, note: string): void {
+  const existing = String(row.values[index] ?? "").trim();
+  row.values[index] = existing ? `${existing}\n${note}` : note;
+}
+
+function actualText(value: unknown): string {
+  if (value === undefined) return "未记录实际值";
+  if (typeof value === "string") return value;
+  const json = JSON.stringify(value);
+  return json === undefined ? String(value) : json;
+}
+
+function assertionSummary(item: RunCaseResult): string {
+  const lines = item.assertions.map((assertion) => {
+    const text = actualText(assertion.actual).replaceAll(/\s+/g, " ").trim();
+    const bounded = text.length > 500 ? `${text.slice(0, 497)}...` : text;
+    return `${assertion.assertion_id}: ${bounded}`;
+  });
+  if (lines.length === 0) return "未记录业务断言";
+  const summary = lines.join("\n");
+  return summary.length > 2000 ? `${summary.slice(0, 1997)}...` : summary;
 }
 
 function executionNote(result: RunResult, item: RunCaseResult): string {
@@ -48,13 +63,14 @@ function executionNote(result: RunResult, item: RunCaseResult): string {
   ].join(" ");
 }
 
-function findCaseRow(report: TestingSkillsReport, caseId: string): NativeReportRow | undefined {
+function findCaseRow(report: TestingSkillsReport, caseId: string): { row: NativeReportRow; sheet: NativeReportSheet } | undefined {
   for (const sheet of report.sheets) {
     if ((sheet as NativeReportSheet).kind !== "test_cases") continue;
+    const caseIdIndex = columnIndex(sheet, "用例 ID");
     for (const row of sheet.rows) {
       if (row.divider === true) continue;
-      ensureTenValues(row);
-      if (rowCaseId(row) === caseId) return row;
+      ensureColumnValues(row, sheet.columns.length);
+      if (String(row.values[caseIdIndex] ?? "").trim() === caseId) return { row, sheet };
     }
   }
   return undefined;
@@ -116,14 +132,17 @@ export function projectExecutionReport(input: ProjectExecutionReportInput): Test
 
   for (const sheet of projected.sheets) {
     if ((sheet as NativeReportSheet).kind !== "test_cases") continue;
-    for (const row of sheet.rows) ensureTenValues(row);
+    for (const row of sheet.rows) ensureColumnValues(row, sheet.columns.length);
   }
 
   for (const item of input.result.cases) {
-    const row = findCaseRow(projected, item.case_id);
-    if (!row) continue;
-    row.values[STATUS_INDEX] = item.case_status;
-    appendRemark(row, executionNote(input.result, item));
+    const found = findCaseRow(projected, item.case_id);
+    if (!found) continue;
+    const { row, sheet } = found;
+    row.values[columnIndex(sheet, "执行结果")] = item.case_status;
+    const actualResultIndex = sheet.columns.indexOf("实际结果");
+    if (actualResultIndex >= 0) row.values[actualResultIndex] = assertionSummary(item);
+    appendRemark(row, columnIndex(sheet, "备注"), executionNote(input.result, item));
   }
 
   projected.sheets.push(createOverviewSheet(input.result), createEvidenceSheet(input.result));

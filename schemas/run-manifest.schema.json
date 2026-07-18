@@ -72,6 +72,7 @@
         "测试步骤": { "$ref": "#/$defs/nonSecretText" },
         "预期结果": { "$ref": "#/$defs/nonSecretText" },
         "优先级": { "$ref": "#/$defs/nonSecretText" },
+        "实际结果": { "$ref": "#/$defs/nonSecretText" },
         "执行结果": { "allOf": [{ "$ref": "#/$defs/nonSecretText" }, { "enum": ["", "未执行", "通过", "不通过", "待定"] }] },
         "备注": { "$ref": "#/$defs/nonSecretText" }
       }

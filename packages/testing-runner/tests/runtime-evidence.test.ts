@@ -382,3 +382,25 @@ test("orchestrator reports the observable run lifecycle in authoritative executi
     "run.completed",
   ]);
 });
+
+test("orchestrator runs case setup and teardown around every case", async () => {
+  const directory = await tempDir("runner-case-lifecycle-");
+  const events: string[] = [];
+  await runApprovedManifest({
+    manifest: manifestWithCases(["CASE-001", "CASE-002"]),
+    outputDir: directory,
+    run_id: "run-case-lifecycle",
+    beforeCase: async (item) => { events.push(`before:${item.case_id}`); },
+    afterCase: async (item) => { events.push(`after:${item.case_id}`); },
+    executeAction: async (action) => ({
+      action_id: action.action_id,
+      started_at: new Date().toISOString(),
+      finished_at: new Date().toISOString(),
+      status: "passed",
+      actual: { status: 200 },
+      attachments: [],
+    }),
+  });
+
+  assert.deepEqual(events, ["before:CASE-001", "after:CASE-001", "before:CASE-002", "after:CASE-002"]);
+});

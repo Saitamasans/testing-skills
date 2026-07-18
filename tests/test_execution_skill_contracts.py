@@ -162,6 +162,62 @@ class ExecutionSkillContractsTest(unittest.TestCase):
         self.assertIn("短期", combined)
         self.assertNotIn("2999-01-01T00:00:00.000Z", combined)
 
+    def test_cross_state_web_cases_require_transition_discovery(self):
+        required = [
+            "起始状态 → 迁移动作 → 目标状态 → 终态业务断言",
+            "transition_discovery_required",
+            "状态迁移探测预览",
+            "不回填正式 Excel/HTML",
+            "重新生成 discovery/proposal hash",
+            "重新经过第二次确认门禁",
+            "目标状态 discovery 结果必须与正式 manifest 预览在第二次确认门禁一并确认",
+        ]
+        for document in [self.text, self.generated_text]:
+            for phrase in required:
+                self.assertIn(phrase, document)
+
+    def test_action_conservation_and_core_path_gate_are_required(self):
+        required = [
+            "动作守恒矩阵",
+            "mapped",
+            "禁止把包含已确认迁移动作的整条用例",
+            "完整可执行核心路径数",
+            "不能进入 E4",
+            "普通的“确认执行”不得被解释为接受核心业务目标降级",
+        ]
+        for document in [self.text, self.generated_text]:
+            for phrase in required:
+                self.assertIn(phrase, document)
+
+    def test_partial_execution_cannot_claim_core_business_completion(self):
+        required = [
+            "部分执行",
+            "核心流程未执行",
+            "产物一致，只证明产物一致",
+            "不证明核心业务目标已覆盖",
+        ]
+        for document in [self.text, self.generated_text]:
+            for phrase in required:
+                self.assertIn(phrase, document)
+
+    def test_similar_state_transition_failures_are_prevented_before_approval(self):
+        locator_reference = (
+            ROOT / "skills" / self.item["slug"] / "references/locators-assertions-and-rules.md"
+        ).read_text(encoding="utf-8")
+        required = [
+            "搜索首页 → 搜索结果页",
+            "登录页 → 登录后工作台",
+            "SPA 页面 → 弹窗或异步结果区域",
+            "当前页 → 新标签页",
+            "提交页 → 下载或确认页",
+            "R2/R3",
+            "Enter 不受支持时不得用点击替代",
+            "第一次确认门禁前纠正",
+        ]
+        for document in [self.text, locator_reference]:
+            for phrase in required:
+                self.assertIn(phrase, document)
+
 
 if __name__ == "__main__":
     unittest.main()

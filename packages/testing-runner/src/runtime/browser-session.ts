@@ -35,6 +35,7 @@ export interface BrowserSessionOptions extends BrowserSettingsInput {
 export interface BrowserSession {
   page: Page;
   observer?: RunObserver;
+  prepareCase(caseId: string): Promise<Page>;
   finalizeTrace(): Promise<string | undefined>;
   showDeliveryResult(summary: DeliverySummary): Promise<void>;
   completionPause(): Promise<void>;
@@ -108,8 +109,9 @@ export async function openBrowserSession(
 
   let context: BrowserContext | undefined;
   let page: Page;
+  const contextOptions = settings.headless ? undefined : { viewport: null };
   try {
-    context = await browser.newContext(settings.headless ? undefined : { viewport: null });
+    context = await browser.newContext(contextOptions);
     await context.tracing.start({ screenshots: true, snapshots: true, sources: true });
     page = await context.newPage();
     if (!webActions) {
@@ -137,8 +139,11 @@ export async function openBrowserSession(
     }
     throw error;
   }
+  if (!context) throw new Error("browser context was not initialized");
+  let activeContext: BrowserContext = context;
   let closed = false;
   let tracePromise: Promise<string | undefined> | undefined;
+  let currentCaseId: string | undefined;
   const progressController = showProgress
     ? new VisualProgressController(page, !webActions, settings.slowMo)
     : undefined;
@@ -146,10 +151,12 @@ export async function openBrowserSession(
   const finalizeTrace = (): Promise<string | undefined> => {
     if (tracePromise) return tracePromise;
     tracePromise = (async () => {
-      const evidenceDir = path.join(options.outputDir, "evidence");
+      const evidenceDir = currentCaseId
+        ? path.join(options.outputDir, "evidence", currentCaseId)
+        : path.join(options.outputDir, "evidence");
       await mkdir(evidenceDir, { recursive: true });
       const tracePath = path.join(evidenceDir, "playwright-trace.zip");
-      await context.tracing.stop({ path: tracePath });
+      await activeContext.tracing.stop({ path: tracePath });
       return tracePath;
     })();
     return tracePromise;
@@ -157,6 +164,23 @@ export async function openBrowserSession(
 
   const session: BrowserSession = {
     page,
+    prepareCase: async (caseId) => {
+      if (closed) throw new Error("browser session is closed");
+      if (currentCaseId === undefined) {
+        currentCaseId = caseId;
+        return page;
+      }
+      if (currentCaseId === caseId) return page;
+      await finalizeTrace();
+      await activeContext.close();
+      activeContext = await browser.newContext(contextOptions);
+      await activeContext.tracing.start({ screenshots: true, snapshots: true, sources: true });
+      page = await activeContext.newPage();
+      currentCaseId = caseId;
+      tracePromise = undefined;
+      session.page = page;
+      return page;
+    },
     finalizeTrace,
     showDeliveryResult: async (summary) => {
       if (progressController) await progressController.showDeliveryResult(summary);
@@ -174,7 +198,7 @@ export async function openBrowserSession(
         traceError = error;
       }
       try {
-        await context.close();
+        await activeContext.close();
       } finally {
         await browser.close();
       }

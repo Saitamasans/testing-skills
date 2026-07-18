@@ -28,6 +28,12 @@ const TEN_COLUMNS = [
   "备注",
 ] as const;
 
+const ELEVEN_COLUMNS = [
+  ...TEN_COLUMNS.slice(0, 8),
+  "实际结果",
+  ...TEN_COLUMNS.slice(8),
+] as const;
+
 const FIXTURES = path.resolve(import.meta.dirname, "fixtures");
 const REPORT_FIXTURE = path.join(FIXTURES, "standard-report.json");
 const TRACKED_EXCEL_FIXTURE = path.join(FIXTURES, "standard-ten-column.xlsx");
@@ -88,10 +94,28 @@ test("detects native report JSON and standard Excel by validated content", async
   assert.equal(await detectInputKind(excelFixture), "standard-excel");
 });
 
+test("detects and preserves the workbench eleven-column Excel format", async () => {
+  const dir = await mkdtemp(path.join(os.tmpdir(), "runner-eleven-column-"));
+  const file = path.join(dir, "workbench-eleven-column.xlsx");
+  const rows = CASE_ROWS.map((row) => {
+    const values = [...row];
+    values.splice(8, 0, values[0] === "【模块分割行】" ? "-" : "尚未执行");
+    return values;
+  });
+  await writeWorkbook(file, ELEVEN_COLUMNS, rows);
+
+  assert.equal(await detectInputKind(file), "standard-excel");
+  const result = await readStandardExcel(file);
+  assert.deepEqual(result.columns, ELEVEN_COLUMNS);
+  assert.equal(result.cases[1]?.values["实际结果"], "尚未执行");
+  assert.equal(result.cases[1]?.status, "未执行");
+});
+
 test("normalizes native report with exact columns, invocation and row provenance", async () => {
   const result = await readNativeReport(REPORT_FIXTURE);
 
   assert.deepEqual(result.columns, TEN_COLUMNS);
+  assert.equal(Object.hasOwn(result.cases[1]!.values, "实际结果"), false);
   assert.deepEqual(result.skill_invocation, {
     primary: "single-api-test-full",
     secondary: "production-verification-test",

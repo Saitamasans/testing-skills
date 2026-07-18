@@ -138,6 +138,41 @@ test("visible session launches headed and writes Playwright trace", async () => 
   );
 });
 
+test("prepares every Web case in a fresh browser context", async () => {
+  const outputDir = await mkdtemp(path.join(os.tmpdir(), "isolated-browser-cases-"));
+  const contexts: Array<{ id: number; closed: boolean }> = [];
+  const browser = {
+    newContext: async () => {
+      const state = { id: contexts.length + 1, closed: false };
+      contexts.push(state);
+      return {
+        tracing: {
+          start: async () => undefined,
+          stop: async ({ path: tracePath }: { path: string }) => writeFile(tracePath, `trace-${state.id}`, "utf8"),
+        },
+        newPage: async () => ({ contextId: state.id } as unknown as Page),
+        close: async () => { state.closed = true; },
+      };
+    },
+    close: async () => undefined,
+  };
+  const session = await openBrowserSession({
+    manifest: manifestWith("web.goto"),
+    mode: "ci",
+    outputDir,
+    launchBrowser: async () => browser as unknown as Browser,
+  });
+
+  const first = await session?.prepareCase("LOGIN-001");
+  const second = await session?.prepareCase("LOGIN-002");
+  assert.notEqual(first, second);
+  assert.deepEqual(contexts.map(({ id }) => id), [1, 2]);
+  assert.equal(contexts[0]?.closed, true);
+  await session?.close();
+  assert.equal(contexts[1]?.closed, true);
+  assert.equal(await readFile(path.join(outputDir, "evidence", "LOGIN-001", "playwright-trace.zip"), "utf8"), "trace-1");
+});
+
 test("visible session finalizes Trace before showing delivery results and closes idempotently", async () => {
   const events: string[] = [];
   const outputDir = await mkdtemp(path.join(os.tmpdir(), "delivery-browser-"));

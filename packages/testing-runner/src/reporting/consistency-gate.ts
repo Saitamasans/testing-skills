@@ -28,8 +28,6 @@ interface ReportCaseRow {
   row: NativeReportRow;
 }
 
-const CASE_ID_INDEX = 0;
-const STATUS_INDEX = 8;
 const CASE_STATUSES: CaseStatus[] = ["未执行", "通过", "不通过", "待定"];
 
 function emptyCaseStatusCounts(): Record<CaseStatus, number> {
@@ -55,11 +53,14 @@ function collectReportCases(report: NativeReportDocument): ReportCaseRow[] {
 
   for (const sheet of report.sheets) {
     if ((sheet as NativeReportSheet).kind !== "test_cases") continue;
+    const caseIdIndex = sheet.columns.indexOf("用例 ID");
+    const statusIndex = sheet.columns.indexOf("执行结果");
+    if (caseIdIndex < 0 || statusIndex < 0) continue;
     for (const [index, row] of sheet.rows.entries()) {
       if (isDivider(row)) continue;
       rows.push({
-        caseId: rowValue(row, CASE_ID_INDEX),
-        status: rowValue(row, STATUS_INDEX),
+        caseId: rowValue(row, caseIdIndex),
+        status: rowValue(row, statusIndex),
         sheetName: sheet.name,
         rowNumber: index + 2,
         row,

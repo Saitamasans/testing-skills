@@ -1,11 +1,13 @@
 import type {
   CaseStatus,
+  CaseColumnName,
+  CaseValues,
   NormalizedCase,
   NormalizedCaseSet,
   SkillInvocation,
   TenColumnName,
 } from "../types.js";
-import { TEN_COLUMNS, UnsupportedInputError, type NativeReportDocument } from "./detect-input.js";
+import { ELEVEN_COLUMNS, TEN_COLUMNS, UnsupportedInputError, isSupportedCaseColumns, type NativeReportDocument } from "./detect-input.js";
 import { inspectSource } from "./source-snapshot.js";
 
 export type { NormalizedCase, NormalizedCaseSet } from "../types.js";
@@ -31,9 +33,9 @@ function asText(value: unknown): string {
   return String(value);
 }
 
-function padRawValues(sourceValues: readonly unknown[]): unknown[] {
+function padRawValues(sourceValues: readonly unknown[], length: number): unknown[] {
   const values = [...sourceValues];
-  while (values.length < TEN_COLUMNS.length) values.push("");
+  while (values.length < length) values.push("");
   return values;
 }
 
@@ -65,25 +67,31 @@ export interface SourceRow {
   row: number;
   values: readonly unknown[];
   divider?: boolean;
+  columns?: readonly string[];
   extensionColumns?: readonly string[];
 }
 
 export function normalizeSourceRows(rows: readonly SourceRow[]): NormalizedCase[] {
   const cases = rows.map((row): NormalizedCase => {
-    const rawValues = padRawValues(row.values);
+    const columns = row.columns ?? TEN_COLUMNS;
+    if (!isSupportedCaseColumns(columns)) {
+      throw new Error(`${row.sheet}!1 不是受支持的十列或十一列用例表头`);
+    }
+    const rawValues = padRawValues(row.values, columns.length);
     const normalizedValues = rawValues.map(asText);
     const source = `${row.sheet}!${row.row}`;
-    const originalStatus = normalizedValues[8] ?? "";
+    const valueByColumn = new Map(columns.map((column, index) => [column, normalizedValues[index] ?? ""]));
+    const originalStatus = valueByColumn.get("执行结果") ?? "";
     const divider = row.divider ?? normalizedValues[0] === "【模块分割行】";
     const values = Object.fromEntries(
-      TEN_COLUMNS.map((column, index) => [column, normalizedValues[index] ?? ""]),
-    ) as Record<TenColumnName, string>;
+      TEN_COLUMNS.map((column) => [column, valueByColumn.get(column) ?? ""]),
+    ) as CaseValues;
+    if (valueByColumn.has("实际结果")) values["实际结果"] = valueByColumn.get("实际结果") ?? "";
     values["执行结果"] = normalizedStatus(originalStatus, divider, source);
-    values["备注"] = normalizedValues[9] ?? "";
 
     const extensions: Record<string, string> = {};
-    for (let index = TEN_COLUMNS.length; index < rawValues.length; index += 1) {
-      const header = row.extensionColumns?.[index - TEN_COLUMNS.length]?.trim();
+    for (let index = columns.length; index < rawValues.length; index += 1) {
+      const header = row.extensionColumns?.[index - columns.length]?.trim();
       extensions[header || `列 ${index + 1}`] = normalizedValues[index] ?? "";
     }
 
@@ -113,20 +121,26 @@ export async function readNativeReport(file: string): Promise<NormalizedCaseSet>
   }
   const report: NativeReportDocument = inspected.detected.report;
   const rows: SourceRow[] = [];
+  let outputColumns: CaseColumnName[] = [...TEN_COLUMNS];
   for (const sheet of report.sheets) {
     if (sheet.kind !== "test_cases") continue;
+    if (!isSupportedCaseColumns(sheet.columns)) {
+      throw new UnsupportedInputError(file, `${sheet.name} 不是精确标准十列或工作台十一列`);
+    }
+    if (sheet.columns.length === ELEVEN_COLUMNS.length) outputColumns = [...ELEVEN_COLUMNS];
     sheet.rows.forEach((row, index) => {
       rows.push({
         sheet: sheet.name,
         row: index + 2,
         values: row.values,
+        columns: sheet.columns,
         ...(row.divider === undefined ? {} : { divider: row.divider }),
       });
     });
   }
 
   return {
-    columns: [...TEN_COLUMNS],
+    columns: outputColumns,
     cases: normalizeSourceRows(rows),
     source_snapshot: inspected.snapshot,
     skill_invocation: report.skill_invocation as SkillInvocation,

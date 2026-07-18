@@ -1,10 +1,12 @@
 import { spawn } from "node:child_process";
+import { createRequire } from "node:module";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const packageRoot = fileURLToPath(new URL("..", import.meta.url));
+const require = createRequire(import.meta.url);
 const commands = [
-  [path.join(packageRoot, "node_modules", "typescript", "bin", "tsc"), ["-p", path.join(packageRoot, "tsconfig.json")]],
+  [require.resolve("typescript/bin/tsc"), ["-p", path.join(packageRoot, "tsconfig.json")]],
   [path.join(packageRoot, "scripts", "copy-schemas.mjs"), []],
   [path.join(packageRoot, "scripts", "copy-knowledge.mjs"), []],
   [path.join(packageRoot, "scripts", "copy-renderer.mjs"), []],
