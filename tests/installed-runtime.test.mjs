@@ -12,6 +12,7 @@ import {
   verifyInstalledRuntime,
 } from "../skill-sources/web-api-test-execution-evidence/scripts/runner-bootstrap-lib.mjs";
 
+const windowsRuntimeTest = process.platform === "win32" ? test : test.skip;
 const skillName = "web-api-test-execution-evidence";
 const repoRoot = fileURLToPath(new URL("..", import.meta.url));
 const passStatus = "\u901a\u8fc7";
@@ -377,7 +378,7 @@ async function exists(file) {
   }
 }
 
-test("CMD launches the receipt-bundled Node with an empty PATH", async () => {
+windowsRuntimeTest("CMD launches the receipt-bundled Node with an empty PATH", async () => {
   const state = await installedFixture({ nodeContents: await readFile(process.execPath) });
   const cmd = path.join(repoRoot, "skill-sources", skillName, "scripts", "testing-runner.cmd");
   const result = await runCmd(cmd, ["plan"], {
@@ -390,7 +391,7 @@ test("CMD launches the receipt-bundled Node with an empty PATH", async () => {
   assert.equal(result.code, 0, result.stderr);
 });
 
-test("CMD preflight rejects a node inventory hash mismatch without executing that Node", async () => {
+windowsRuntimeTest("CMD preflight rejects a node inventory hash mismatch without executing that Node", async () => {
   const state = await installedFixture({ nodeContents: await readFile(process.execPath) });
   const manifestPath = path.join(state.runtime, "bundle-manifest.json");
   const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
@@ -412,7 +413,7 @@ test("CMD preflight rejects a node inventory hash mismatch without executing tha
   assert.equal(await exists(marker), false);
 });
 
-test("CMD preflight rejects a runtime junction without executing that Node", async () => {
+windowsRuntimeTest("CMD preflight rejects a runtime junction without executing that Node", async () => {
   const state = await installedFixture({ nodeContents: await readFile(process.execPath) });
   const runtimeParent = path.dirname(state.runtime);
   const outside = `${runtimeParent}-outside`;
@@ -430,7 +431,7 @@ test("CMD preflight rejects a runtime junction without executing that Node", asy
   assert.equal(await exists(marker), false);
 });
 
-test("CMD forwards ordinary Runner arguments from the Base64 JSON environment contract", async () => {
+windowsRuntimeTest("CMD forwards ordinary Runner arguments from the Base64 JSON environment contract", async () => {
   const argsOutput = path.join(await mkdtemp(path.join(os.tmpdir(), "cmd-args-")), "args.json");
   const state = await installedFixture({
     nodeContents: await readFile(process.execPath),
@@ -447,7 +448,7 @@ test("CMD forwards ordinary Runner arguments from the Base64 JSON environment co
   assert.deepEqual(JSON.parse(await readFile(argsOutput, "utf8")), args);
 });
 
-test("PowerShell starts the verified runtime bundle launcher before the installed Skill inventory", async () => {
+windowsRuntimeTest("PowerShell starts the verified runtime bundle launcher before the installed Skill inventory", async () => {
   const marker = path.join(await mkdtemp(path.join(os.tmpdir(), "runtime-launcher-")), "ran.txt");
   const launcher = "import { writeFileSync } from \"node:fs\"; writeFileSync(process.env.RUNTIME_LAUNCHER_MARKER, \"ran\");\n";
   const state = await installedFixture({ nodeContents: await readFile(process.execPath), runtimeLauncherContents: launcher });
@@ -460,7 +461,7 @@ test("PowerShell starts the verified runtime bundle launcher before the installe
   assert.equal(await exists(marker), true);
 });
 
-test("PowerShell rejects a tampered runtime bundle launcher before Node executes it", async () => {
+windowsRuntimeTest("PowerShell rejects a tampered runtime bundle launcher before Node executes it", async () => {
   const state = await installedFixture({ nodeContents: await readFile(process.execPath) });
   const marker = path.join(state.home, "runtime-launcher-tampered.txt");
   await writeFile(
@@ -475,7 +476,7 @@ test("PowerShell rejects a tampered runtime bundle launcher before Node executes
   assert.equal(await exists(marker), false);
 });
 
-test("PowerShell does not execute a tampered installed launcher", async () => {
+windowsRuntimeTest("PowerShell does not execute a tampered installed launcher", async () => {
   const state = await installedFixture({ nodeContents: await readFile(process.execPath) });
   const marker = path.join(state.home, "installed-launcher-tampered.txt");
   await writeFile(
@@ -490,7 +491,7 @@ test("PowerShell does not execute a tampered installed launcher", async () => {
   assert.equal(await exists(marker), false);
 });
 
-test("PowerShell forwards direct argument arrays without CMD interpolation", async () => {
+windowsRuntimeTest("PowerShell forwards direct argument arrays without CMD interpolation", async () => {
   const argsOutput = path.join(await mkdtemp(path.join(os.tmpdir(), "ps-args-")), "args.json");
   const state = await installedFixture({
     nodeContents: await readFile(process.execPath),
@@ -505,7 +506,7 @@ test("PowerShell forwards direct argument arrays without CMD interpolation", asy
   assert.deepEqual(JSON.parse(await readFile(argsOutput, "utf8")), args);
 });
 
-test("CMD reads normal Runner arguments only from the Base64 JSON environment contract", async () => {
+windowsRuntimeTest("CMD reads normal Runner arguments only from the Base64 JSON environment contract", async () => {
   const argsOutput = path.join(await mkdtemp(path.join(os.tmpdir(), "cmd-b64-args-")), "args.json");
   const state = await installedFixture({
     nodeContents: await readFile(process.execPath),
@@ -521,7 +522,7 @@ test("CMD reads normal Runner arguments only from the Base64 JSON environment co
   assert.deepEqual(JSON.parse(await readFile(argsOutput, "utf8")), args);
 });
 
-test("PowerShell classifies a verified-manifest Node mismatch as corrupt", async () => {
+windowsRuntimeTest("PowerShell classifies a verified-manifest Node mismatch as corrupt", async () => {
   const state = await installedFixture({ nodeContents: await readFile(process.execPath) });
   const manifestPath = path.join(state.runtime, "bundle-manifest.json");
   const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
@@ -538,7 +539,7 @@ test("PowerShell classifies a verified-manifest Node mismatch as corrupt", async
   assert.match(result.stderr, /installation_corrupt/);
 });
 
-test("PowerShell handles case-variant canonical receipt paths without looping", async () => {
+windowsRuntimeTest("PowerShell handles case-variant canonical receipt paths without looping", async () => {
   const state = await installedFixture({ nodeContents: await readFile(process.execPath) });
   const receipt = JSON.parse(await readFile(state.receiptPath, "utf8"));
   receipt.runtime_path = state.runtime.toUpperCase();
