@@ -6,7 +6,7 @@ description: Use when users want to automatically execute existing Web/API test 
 <!-- 此文件由源文件自动生成，请勿直接编辑。 -->
 # Web/API 测试用例自动执行与证据回填
 
-硬规则：本 Skill 只执行和回填已有 Web/API 测试用例，不生成测试用例，不替用户猜测环境，不静默转换非标准输入，不把密钥写入任何产物。普通十列测试用例（Test Cases）只描述测试意图，不等于机器执行清单；没有经过确认的定位器/接口契约、测试数据和显式业务断言时，只能做准备度检查与执行预览，不能真实执行。
+硬规则：本 Skill 只执行和回填已有 Web/API 测试用例，不生成测试用例，不替用户猜测环境，不静默转换非标准输入，不把密钥写入任何产物。普通十列测试用例（Test Cases）只描述测试意图，不等于机器执行清单；没有经过确认的定位器/接口契约、测试数据和显式业务断言时，只能做准备度检查与执行预览，不能真实执行。不得为了生成可运行 manifest 而删除已确认的核心动作、猜测目标页定位器或把核心业务链路整体降级为 blocked。
 
 ## 一、互斥路由
 
@@ -43,7 +43,11 @@ Do not trigger this Skill merely to generate test cases, clarify requirements, o
 
 ### 黑盒 Web 输入
 
-用户只提供测试用例（Test Cases）和公开页面地址、且禁止查看源码或预写定位器时，先运行只读页面探测。探测只允许打开目标页、读取实时 DOM 与无障碍树、统计可见候选，不允许点击、输入、提交或调用内部 API。先展示 `web-discovery.json` 中的候选定位器、匹配数、可见数和置信度，再结合测试用例（Test Cases）的步骤与预期结果形成逐条动作和断言方案；用户确认后才能写入 `case_plans` 并进入 `plan`。
+用户只提供测试用例（Test Cases）和公开页面地址、且禁止查看源码或预写定位器时，先运行只读页面探测。探测只允许打开目标页、读取实时 DOM 与无障碍树、统计可见候选，不允许点击、输入、提交或调用内部 API。先展示 `web-discovery.json` 中的候选定位器、匹配数、可见数和置信度，再结合测试用例（Test Cases）的步骤与预期结果形成逐条动作和断言方案。
+
+跨页面或跨业务状态的 Web 用例必须逐条建模为“起始状态 → 迁移动作 → 目标状态 → 终态业务断言”。目标状态尚未探测时，不得把整条用例直接压成 blocked；把对应动作标为 `transition_discovery_required`，在第一次确认门禁展示独立的“状态迁移探测预览”。用户确认后才允许使用已有用例中的 R0/R1 动作到达目标状态并执行新的只读 discovery；探测结果必须隔离，不回填正式 Excel/HTML，也不作为正式测试通过。目标状态 discovery 结果必须与正式 manifest 预览在第二次确认门禁一并确认：先重新生成 discovery/proposal hash、manifest hash、动作数和断言预览，并重新经过第二次确认门禁；不得额外虚构第三次确认，也不得跳过第二次确认。
+
+同一审查必须覆盖“搜索首页 → 搜索结果页”“登录页 → 登录后工作台”“SPA 页面 → 弹窗或异步结果区域”“当前页 → 新标签页”“提交页 → 下载或确认页”。R2/R3、验证码、扫码、MFA 和不可逆动作不能自动迁移探测；Enter 不受支持时不得用点击替代。发现动作或终态缺口时必须在第一次确认门禁前纠正，不能留到录屏或正式执行后才说明。
 
 需要展开输入识别、E0-E4、字段映射和材料提示时，读取 `references/input-and-readiness.md`。
 
@@ -59,6 +63,7 @@ Do not trigger this Skill merely to generate test cases, clarify requirements, o
 ## 六、定位器、断言和规则
 
 - 陌生网页先用 `discover-web` 只读探测；定位器失败不能静默自愈，只能提出修复建议，用户确认后才应用。
+- 第一次确认门禁前逐用例展示动作守恒矩阵；每个测试步骤动作必须标为 `mapped`、`transition_discovery_required`、`blocked` 或 `manual_required`。禁止把包含已确认迁移动作的整条用例压缩成一个笼统的 `execution.blocked`，除非已证明状态迁移探测也不可执行并写明具体能力缺口。
 - 断言准确性优先于覆盖面；行业经验只做少量候选判断，并标明自动判定来源。
 - 每条可执行测试用例（Test Case）至少包含一个 `web.assert`、`api.assert` 或 `db.assert`。`web.goto`、点击、输入、`api.request`、`db.select` 和清理动作都不算业务断言；Runner 不得生成“动作完成即通过”的兜底结论。
 - Web 断言使用明确可观察值：URL 相等/包含、输入值、可见文本、元素可见/隐藏/不存在、可见数量；精确文本必须真实可见，隐藏 DOM 文本不能通过。
@@ -75,8 +80,9 @@ Do not trigger this Skill merely to generate test cases, clarify requirements, o
 - 辅助 Skill：无，或一个用户确认后的辅助 Skill
 - 分工：本 Skill 负责准备度、执行预览、Runner 调用、证据和报告；辅助 Skill 只负责其明确范围
 - discovery/proposal hash、manifest hash、目标 origin、风险等级、动作数量、每条业务断言、将要读取的环境变量名
+- 测试用例总数、完整可执行用例数、blocked/manual 数、核心业务路径数、完整可执行核心路径数，以及每个核心目标的终态断言覆盖情况
 
-用户确认前不执行 Web/API/数据库动作。
+用户请求完整执行时，只要任一核心业务目标没有至少一条包含迁移动作、目标状态和终态断言的完整可执行路径，就不能进入 E4，也不能生成供正式执行确认的最终 manifest。普通的“确认执行”不得被解释为接受核心业务目标降级；降级确认必须逐项列出未覆盖目标及影响。用户确认前不执行 Web/API/数据库动作。
 
 ## 八、Runner 固定入口
 
@@ -109,6 +115,8 @@ node <ABSOLUTE_SKILL_ROOT>/scripts/testing-runner.mjs run --manifest .testing-ru
 - 运行七状态：planned、running、completed、blocked、executor_error、infrastructure_error、manual_required。
 - run-result.json 是唯一判定来源；Excel/HTML/JSON 一致性通过后才能交付。
 - 输出必须包含 `.xlsx`、`.html`、`run-result.json`、证据目录和必要的 blocked/manual 说明。
+- 核心用例 blocked 或未执行时，结论必须先写明未触达的核心动作和业务结果，并使用“部分执行”“准备度验证结果”或“核心流程未执行”；禁止称为“全部测试完成”“核心流程通过”或等价措辞。
+- 录屏、Excel、HTML 和 JSON 产物一致，只证明产物一致，不证明核心业务目标已覆盖；准备类用例通过不能抵消核心路径未覆盖。
 
 CI 证据、报告一致性、上传产物和失败退出码读取 `references/ci-evidence-and-reporting.md`。
 
@@ -121,6 +129,8 @@ CI 证据、报告一致性、上传产物和失败退出码读取 `references/c
 - [ ] 是否保护密钥，没有把账号密码、token、连接串写入产物？
 - [ ] 是否使用本 Skill 内置启动器、固定 Runner 版本和审批文件？
 - [ ] 陌生 Web 页面是否先完成只读探测，并由用户确认定位器和断言后才写入执行清单？
+- [ ] 是否逐用例完成状态图和动作守恒矩阵，且没有把可探测的迁移动作错误传播为整条 blocked？
+- [ ] 每个核心业务目标是否至少有一条完整可执行路径；否则是否阻止进入 E4 或取得明确的逐项目标降级确认？
 - [ ] 每条真实执行的测试用例（Test Case）是否至少有一个显式业务断言，且没有“动作完成即通过”？
 - [ ] 交互可见执行是否完整展示执行准备、用例预告、实时执行、证据收集和结果中心，且正式 PNG 不含驾驶舱？
 - [ ] 是否保留未执行、通过、不通过、待定四状态和七个运行状态的区别？
@@ -132,3 +142,4 @@ CI 证据、报告一致性、上传产物和失败退出码读取 `references/c
 - 不要把“不通过”和“待定”混在一起。
 - 不要把环境猜测写成事实。
 - 不要在 CI 中等待人工登录、MFA、扫码或补充数据。
+- 不要用点击冒充 Enter、用直接打开目标 URL 冒充提交、用动作完成冒充业务通过。
