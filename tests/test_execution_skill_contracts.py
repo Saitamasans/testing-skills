@@ -76,8 +76,8 @@ class ExecutionSkillContractsTest(unittest.TestCase):
 
     def test_runner_commands_statuses_and_report_gate(self):
         for phrase in [
-            "scripts/testing-runner.mjs plan",
-            "scripts/testing-runner.mjs run",
+            'scripts\\testing-runner.ps1" plan',
+            'scripts\\testing-runner.ps1" run',
             "run-result.json 是唯一判定来源",
             "Excel/HTML/JSON 一致性",
             "未执行",
@@ -93,6 +93,63 @@ class ExecutionSkillContractsTest(unittest.TestCase):
             "manual_required",
         ]:
             self.assertIn(phrase, self.body)
+
+    def test_complete_installation_and_execution_contract(self):
+        readme = (ROOT / "README.md").read_text(encoding="utf-8")
+        for document in [self.text, self.generated_text, readme]:
+            for phrase in [
+                "GitHub Release 完整安装器",
+                "Node 22.23.1",
+                "Runner 1.1.1",
+                "Playwright 1.61.1",
+                "Chromium 1228",
+                "headless shell 1228",
+                "FFmpeg 1011",
+                "无需系统安装 Node.js、npm、Git、Chrome、Excel 或 Python",
+                "安装回执、回执绑定的 bundle 清单、固定组件身份和关键可执行/证据标记",
+                "不会下载、安装或修改运行时",
+                "installation_incomplete",
+                "installation_corrupt",
+                "-Repair",
+                "scripts\\testing-runner.ps1",
+            ]:
+                self.assertIn(phrase, document)
+            self.assertNotIn("scripts/testing-runner.mjs", document)
+            self.assertNotIn("node <ABSOLUTE_SKILL_ROOT>", document)
+            self.assertNotIn("首次运行下载", document)
+
+        installer = (ROOT / "scripts" / "install-web-api-test-execution-evidence.ps1").read_text(
+            encoding="utf-8"
+        )
+        for phrase in [
+            "总字节=",
+            "字节/秒=",
+            "ETA=",
+            "重试=",
+            "续传偏移=",
+            "SHA-256",
+            "本地完整 smoke test",
+            "安装完成，可以执行 Web/API 自动化测试",
+        ]:
+            self.assertIn(phrase, installer)
+        self.assertEqual(1, installer.count("安装完成，可以执行 Web/API 自动化测试"))
+
+    def test_runner_command_reference_uses_verified_launcher_without_downloads(self):
+        source_reference = self.text.split(
+            "<!-- reference: references/runner-commands.md -->", 1
+        )[1].split("<!-- /reference -->", 1)[0]
+        generated_reference = (
+            ROOT / "skills" / self.item["slug"] / "references" / "runner-commands.md"
+        ).read_text(encoding="utf-8")
+        self.assertEqual(source_reference.strip(), generated_reference.strip())
+        for document in [source_reference, generated_reference]:
+            self.assertIn("scripts\\testing-runner.ps1", document)
+            self.assertIn("installation_incomplete", document)
+            self.assertIn("installation_corrupt", document)
+            self.assertIn("-Repair", document)
+            self.assertNotIn("testing-runner.mjs", document)
+            self.assertNotIn("node <ABSOLUTE_SKILL_ROOT>", document)
+            self.assertNotIn("启动或下载浏览器", document)
 
     def test_interactive_execution_is_visually_explained_by_default(self):
         for phrase in [
@@ -122,20 +179,21 @@ class ExecutionSkillContractsTest(unittest.TestCase):
             ]:
                 self.assertIn(phrase, document)
 
-    def test_execution_skill_uses_automatic_bootstrap_only(self):
+    def test_execution_skill_uses_verified_installed_runtime_only(self):
         combined = self.text + self.generated_text + (ROOT / "README.md").read_text(encoding="utf-8")
         for phrase in [
-            "scripts/testing-runner.mjs",
-            "首次运行",
-            "自动下载",
-            "无需 npm 账号",
+            "scripts\\testing-runner.ps1",
+            "installation_incomplete",
+            "installation_corrupt",
+            "-Repair",
         ]:
             self.assertIn(phrase, combined)
         self.assertNotIn("npm install --save-dev @saitamasans/testing-runner", combined)
         self.assertNotIn("npx @saitamasans/testing-runner", combined)
 
         launcher = (ROOT / "skill-sources/web-api-test-execution-evidence/scripts/testing-runner.mjs").read_text(encoding="utf-8")
-        self.assertIn("prepareBrowserForCommand", launcher)
+        self.assertIn("verifyInstalledRuntime", launcher)
+        self.assertNotIn("prepareBrowserForCommand", launcher)
 
     def test_progressive_references_are_declared(self):
         for reference in [

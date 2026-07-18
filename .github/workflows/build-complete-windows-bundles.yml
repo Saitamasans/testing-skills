@@ -1,0 +1,105 @@
+name: Build complete Windows bundles
+
+on:
+  workflow_call:
+    inputs:
+      release_tag:
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-smoke:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-2025
+            arch: x64
+            processor_architecture: AMD64
+          - os: windows-11-arm
+            arch: arm64
+            processor_architecture: ARM64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          clean: true
+
+      - name: Prove native Windows host prerequisites
+        shell: powershell
+        run: |
+          if ($env:PROCESSOR_ARCHITECTURE -cne "${{ matrix.processor_architecture }}") {
+            throw "Native architecture mismatch: $env:PROCESSOR_ARCHITECTURE"
+          }
+          if (-not $env:ImageOS) { throw "ImageOS is unavailable" }
+          if ($PSVersionTable.PSEdition -cne "Desktop" -or $PSVersionTable.PSVersion.Major -ne 5) {
+            throw "Windows PowerShell 5.1 is required: $($PSVersionTable | Out-String)"
+          }
+          $freeBytes = (Get-PSDrive -Name ([IO.Path]::GetPathRoot($PWD).TrimEnd(':\'))).Free
+          if ($freeBytes -lt 25GB) { throw "At least 25 GiB free space is required; found $freeBytes" }
+          Write-Output "ImageOS=$env:ImageOS architecture=$env:PROCESSOR_ARCHITECTURE free_bytes=$freeBytes PowerShell=$($PSVersionTable.PSVersion)"
+
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.12"
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: "22.23.1"
+          architecture: ${{ matrix.arch }}
+          cache: npm
+
+      - name: Prove locked native Node
+        shell: powershell
+        run: |
+          if ((node --version) -cne "v22.23.1") { throw "Node version mismatch" }
+          if ((node -p process.arch) -cne "${{ matrix.arch }}") { throw "Node architecture mismatch" }
+          $lockedTag = node -p "require('./packages/testing-runner/release/windows-runtime-lock.json').release_tag"
+          if ("${{ inputs.release_tag }}" -cne $lockedTag) {
+            throw "workflow input does not match runtime lock release tag: ${{ inputs.release_tag }} / $lockedTag"
+          }
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Validate runtime lock and generated Skill
+        run: |
+          node --test tests/windows-runtime-lock.test.mjs
+          python tooling/build_skills.py
+          python tooling/build_skills.py --check
+
+      - name: Build native complete bundle
+        run: node packages/testing-runner/scripts/build-windows-bundle.mjs "${{ matrix.arch }}" build/windows-bundles
+
+      - name: Extract and run bundled smoke with Windows PowerShell 5.1
+        shell: powershell
+        run: |
+          $bundle = Get-ChildItem -LiteralPath build/windows-bundles -Filter "web-api-test-execution-evidence-*-windows-${{ matrix.arch }}.zip" -File | Select-Object -First 1
+          if (-not $bundle) { throw "bundle was not produced" }
+          $extract = Join-Path $PWD "build/smoke-${{ matrix.arch }}"
+          $diagnostics = Join-Path $PWD "build/smoke-diagnostics-${{ matrix.arch }}"
+          New-Item -ItemType Directory -Path $diagnostics -Force | Out-Null
+          Expand-Archive -LiteralPath $bundle.FullName -DestinationPath $extract
+          & "$extract\node\node.exe" "$extract\smoke\installation-smoke-test.mjs" $diagnostics *>&1 |
+            Tee-Object -FilePath (Join-Path $diagnostics "smoke-console.log")
+          $smokeExit = $LASTEXITCODE
+          if ($smokeExit -ne 0) { exit $smokeExit }
+          foreach ($pattern in @("*.png", "*.zip", "*.xlsx", "*.html", "run-result.json", "*.log")) {
+            if (-not (Get-ChildItem -LiteralPath $diagnostics -Recurse -File -Filter $pattern | Select-Object -First 1)) {
+              throw "smoke diagnostic is missing: $pattern"
+            }
+          }
+
+      - name: Upload verified native bundle and diagnostics
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: complete-windows-bundle-${{ matrix.arch }}
+          if-no-files-found: error
+          retention-days: 14
+          path: |
+            build/windows-bundles/web-api-test-execution-evidence-*-windows-${{ matrix.arch }}.zip
+            build/windows-bundles/web-api-test-execution-evidence-*-windows-${{ matrix.arch }}.manifest.json
+            build/smoke-diagnostics-${{ matrix.arch }}/**

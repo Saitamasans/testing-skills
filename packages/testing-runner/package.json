@@ -1,6 +1,6 @@
 {
   "name": "@saitamasans/testing-runner",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "type": "module",
   "bin": {
     "testing-runner": "dist/cli.js"
@@ -21,7 +21,7 @@
     "mysql2": "^3.14.1",
     "node-sql-parser": "^5.4.0",
     "pg": "^8.16.0",
-    "playwright": "^1.52.0"
+    "playwright": "1.61.1"
   },
   "devDependencies": {
     "@types/node": "^22.15.3",

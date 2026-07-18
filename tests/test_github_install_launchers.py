@@ -12,6 +12,10 @@ RELEASE_BASE = (
     "https://github.com/Saitamasans/testing-skills/releases/download/"
     "skill-installers-v1/"
 )
+RUNTIME_RELEASE_BASE = (
+    "https://github.com/Saitamasans/testing-skills/releases/download/"
+    "web-api-test-execution-evidence-v1.0.0/"
+)
 RAW_INSTALLER = (
     "https://raw.githubusercontent.com/Saitamasans/testing-skills/"
     "main/scripts/install.ps1"
@@ -39,7 +43,7 @@ class GitHubInstallLauncherTest(unittest.TestCase):
         launcher = self.installers / "install-all.cmd"
         self.assertTrue(launcher.exists(), launcher)
         text = launcher.read_text(encoding="utf-8")
-        self._assert_common_launcher_contract(text)
+        self._assert_common_launcher_contract(text, immutable=True)
         self.assertIn("-All", text)
         self.assertNotIn("-Skill", text)
 
@@ -49,20 +53,30 @@ class GitHubInstallLauncherTest(unittest.TestCase):
                 launcher = self.installers / f"install-{slug}.cmd"
                 self.assertTrue(launcher.exists(), launcher)
                 text = launcher.read_text(encoding="utf-8")
-                self._assert_common_launcher_contract(text)
+                self._assert_common_launcher_contract(
+                    text,
+                    immutable=slug == "web-api-test-execution-evidence",
+                )
                 self.assertIn(f'set "INSTALL_SELECTOR=-Skill {slug}"', text)
                 self.assertNotIn("-All", text)
                 self.assertEqual(1, text.count("-Skill"))
                 self.assertNotRegex(text, r"%(?:\*|[0-9])")
 
-    def _assert_common_launcher_contract(self, text):
+    def _assert_common_launcher_contract(self, text, *, immutable=False):
         self.assertIn(r"%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe", text)
         self.assertIn(r"%SystemRoot%\Sysnative\WindowsPowerShell\v1.0\powershell.exe", text)
-        self.assertIn("TESTING_SKILLS_INSTALLER_SCRIPT", text)
         self.assertIn('"%POWERSHELL_EXE%"', text)
         self.assertNotRegex(text, r"(?im)^\s*powershell\.exe\s")
-        self.assertIn(RAW_INSTALLER, text)
-        self.assertIn("scripts/install.ps1", text)
+        if immutable:
+            self.assertNotIn("TESTING_SKILLS_INSTALLER_SCRIPT", text)
+            self.assertNotIn(RAW_INSTALLER, text)
+            self.assertIn("web-api-test-execution-evidence-v1.0.0", text)
+            self.assertIn("Get-FileHash", text)
+            self.assertRegex(text, r"(?i)SHA256=[a-f0-9]{64}")
+        else:
+            self.assertIn("TESTING_SKILLS_INSTALLER_SCRIPT", text)
+            self.assertIn(RAW_INSTALLER, text)
+            self.assertIn("scripts/install.ps1", text)
         self.assertIn("TESTING_SKILLS_NO_PAUSE", text)
         self.assertIn('set "INSTALL_EXIT_CODE=%ERRORLEVEL%"', text)
         self.assertIn("exit /b %INSTALL_EXIT_CODE%", text)
@@ -85,8 +99,19 @@ class GitHubInstallReadmeTest(unittest.TestCase):
         self.assertIn("Install All 8 Skills", self.readme)
         for slug in self.slugs:
             with self.subTest(slug=slug):
-                asset_url = RELEASE_BASE + f"install-{slug}.cmd"
-                self.assertEqual(1, self.readme.count(asset_url))
+                base = (
+                    RUNTIME_RELEASE_BASE
+                    if slug == "web-api-test-execution-evidence"
+                    else RELEASE_BASE
+                )
+                asset_url = base + f"install-{slug}.cmd"
+                expected_count = 2 if slug == "web-api-test-execution-evidence" else 1
+                self.assertEqual(expected_count, self.readme.count(asset_url))
+        self.assertIn(RUNTIME_RELEASE_BASE + "install-all.cmd", self.readme)
+        self.assertNotIn(
+            RELEASE_BASE + "install-web-api-test-execution-evidence.cmd",
+            self.readme,
+        )
         self.assertNotIn("/releases/latest/", self.readme)
 
     def test_readme_keeps_command_fallback_and_explains_download_boundary(self):
@@ -106,6 +131,19 @@ class GitHubInstallReadmeTest(unittest.TestCase):
         self.assertIn("-All", self.readme)
         self.assertIn("-Skill 'requirement-test-workbench'", self.readme)
 
+    def test_complete_fallbacks_run_immutable_cmds_without_pausing_and_preserve_exit_code(self):
+        fallback = self.readme.split("### 命令兜底：Windows 零 Node 安装", 1)[1].split(
+            "### 高级方式：npx",
+            1,
+        )[0]
+        for name in ["install-all.cmd", "install-web-api-test-execution-evidence.cmd"]:
+            with self.subTest(name=name):
+                self.assertIn(RUNTIME_RELEASE_BASE + name, fallback)
+        self.assertEqual(2, fallback.count("TESTING_SKILLS_NO_PAUSE"))
+        self.assertEqual(2, fallback.count("$env:ComSpec"))
+        self.assertEqual(2, fallback.count("exit $exitCode"))
+        self.assertEqual(2, fallback.count("[guid]::NewGuid()"))
+
     def test_readme_distinguishes_node_requirements_by_workflow(self):
         start_marker = '<a id="install"></a>'
         end_marker = '<a id="usage-guides"></a>'
@@ -117,11 +155,9 @@ class GitHubInstallReadmeTest(unittest.TestCase):
         )[0]
 
         for phrase in [
-            "安装 8 个 Skill 无需安装 Node.js、npm、npx 或 Git",
-            "前 5 个用例生成 Skill 实际生成 `.xlsx` 和 `.html` 文件时，"
-            "需要可用的 Node.js 运行环境",
-            "第 8 个 `web-api-test-execution-evidence` 的 Runner 真正执行 "
-            "Web/API 用例时，需要 Node.js 20+",
+            "前 7 个 Skill 可以用下方通用安装器安装",
+            "第 8 个 `web-api-test-execution-evidence` 的最终用户必须使用 GitHub Release 完整安装器",
+            "无需系统安装 Node.js、npm、Git、Chrome、Excel 或 Python",
         ]:
             with self.subTest(phrase=phrase):
                 self.assertIn(phrase, install_guide)
@@ -152,7 +188,7 @@ class GitHubInstallReadmeTest(unittest.TestCase):
             "测试数据和清理方案",
             "前后端源码",
             "执行前确认",
-            "Node.js 20+",
+            "不需要系统 Node.js",
             "需求文档、需求截图、原型和流程图不能代替正式测试用例",
             "requirement-test-workbench",
         ]:
@@ -233,8 +269,14 @@ class GitHubInstallReadmeTest(unittest.TestCase):
                     re.fullmatch(r"[^。！？]+[。！？]", cells[1]),
                     cells[1],
                 )
-                asset_url = RELEASE_BASE + f"install-{slug}.cmd"
-                self.assertEqual(1, self.readme.count(asset_url))
+                base = (
+                    RUNTIME_RELEASE_BASE
+                    if slug == "web-api-test-execution-evidence"
+                    else RELEASE_BASE
+                )
+                asset_url = base + f"install-{slug}.cmd"
+                expected_count = 2 if slug == "web-api-test-execution-evidence" else 1
+                self.assertEqual(expected_count, self.readme.count(asset_url))
                 self.assertEqual(1, cells[2].count(asset_url))
                 self.assertRegex(
                     cells[2],
@@ -251,10 +293,14 @@ class GitHubInstallReadmeTest(unittest.TestCase):
 
 
 class GitHubInstallerReleaseWorkflowTest(unittest.TestCase):
-    def test_main_updates_publish_all_launchers_to_the_fixed_release(self):
-        workflow = (
+    @classmethod
+    def setUpClass(cls):
+        cls.workflow = (
             ROOT / ".github" / "workflows" / "publish-installers.yml"
         ).read_text(encoding="utf-8")
+
+    def test_main_excludes_eighth_and_reuses_verified_all_launcher(self):
+        workflow = self.workflow
 
         for phrase in [
             "push:",
@@ -264,8 +310,58 @@ class GitHubInstallerReleaseWorkflowTest(unittest.TestCase):
             "gh release upload skill-installers-v1",
             "--clobber",
             "GH_TOKEN: ${{ github.token }}",
+            "web-api-test-execution-evidence-v1.0.0",
+            "gh release download",
+            "install-all.cmd",
+            "SHA256SUMS.txt",
+            "workflow_run:",
+            "Publish verified eighth Skill runtime",
+            "github.event.workflow_run.conclusion == 'success'",
+            "gh release delete-asset skill-installers-v1",
+            "install-web-api-test-execution-evidence.cmd",
+            "build/mutable-installers/SHA256SUMS.txt",
+            "mutable eighth launcher still exists",
+            "runtime release is missing or not immutable; mutable installers are unchanged",
+            'if [[ "$GITHUB_EVENT_NAME" == "workflow_run" ]]',
+            "ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}",
         ]:
             self.assertIn(phrase, workflow)
+        self.assertIn("! -name 'install-web-api-test-execution-evidence.cmd'", workflow)
+        self.assertNotIn("gh release upload skill-installers-v1 installers/*.cmd", workflow)
+
+    def test_checked_out_source_is_reachable_from_origin_main(self):
+        workflow = self.workflow
+        fetch = "git fetch --no-tags origin main"
+        ancestry = 'git merge-base --is-ancestor "$source_commit" "refs/remotes/origin/main"'
+
+        self.assertIn(fetch, workflow)
+        self.assertIn('source_commit="$(git rev-parse HEAD)"', workflow)
+        self.assertIn(ancestry, workflow)
+        self.assertLess(workflow.index(fetch), workflow.index(ancestry))
+
+    def test_runtime_release_is_ready_before_any_release_asset_mutation(self):
+        workflow = self.workflow
+        metadata_query = 'gh api "repos/$GITHUB_REPOSITORY/releases/tags/$RUNTIME_TAG"'
+        readiness_checks = [
+            "value.tag_name !== tag",
+            "value.draft !== false",
+            "value.immutable !== true",
+        ]
+        release_operations = [
+            "gh release download",
+            "gh release delete-asset",
+            "gh release upload",
+        ]
+
+        self.assertIn(metadata_query, workflow)
+        for phrase in readiness_checks:
+            with self.subTest(phrase=phrase):
+                self.assertIn(phrase, workflow)
+        for operation in release_operations:
+            with self.subTest(operation=operation):
+                self.assertGreater(workflow.index(operation), workflow.index(metadata_query))
+        self.assertIn("runtime release is missing or not immutable; mutable installers are unchanged", workflow)
+        self.assertIn("successful runtime workflow did not publish the required immutable release", workflow)
 
 
 if __name__ == "__main__":

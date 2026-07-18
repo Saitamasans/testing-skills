@@ -4,9 +4,9 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const packageRoot = fileURLToPath(new URL("..", import.meta.url));
-const require = createRequire(import.meta.url);
+const requireFromPackage = createRequire(path.join(packageRoot, "package.json"));
 const commands = [
-  [require.resolve("typescript/bin/tsc"), ["-p", path.join(packageRoot, "tsconfig.json")]],
+  [requireFromPackage.resolve("typescript/bin/tsc"), ["-p", path.join(packageRoot, "tsconfig.json")]],
   [path.join(packageRoot, "scripts", "copy-schemas.mjs"), []],
   [path.join(packageRoot, "scripts", "copy-knowledge.mjs"), []],
   [path.join(packageRoot, "scripts", "copy-renderer.mjs"), []],
