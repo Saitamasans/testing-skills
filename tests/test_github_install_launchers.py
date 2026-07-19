@@ -105,7 +105,7 @@ class GitHubInstallReadmeTest(unittest.TestCase):
                     else RELEASE_BASE
                 )
                 asset_url = base + f"install-{slug}.cmd"
-                expected_count = 2 if slug == "web-api-test-execution-evidence" else 1
+                expected_count = 3 if slug == "web-api-test-execution-evidence" else 1
                 self.assertEqual(expected_count, self.readme.count(asset_url))
         self.assertIn(RUNTIME_RELEASE_BASE + "install-all.cmd", self.readme)
         self.assertNotIn(
@@ -275,7 +275,7 @@ class GitHubInstallReadmeTest(unittest.TestCase):
                     else RELEASE_BASE
                 )
                 asset_url = base + f"install-{slug}.cmd"
-                expected_count = 2 if slug == "web-api-test-execution-evidence" else 1
+                expected_count = 3 if slug == "web-api-test-execution-evidence" else 1
                 self.assertEqual(expected_count, self.readme.count(asset_url))
                 self.assertEqual(1, cells[2].count(asset_url))
                 self.assertRegex(
@@ -328,6 +328,28 @@ class GitHubInstallerReleaseWorkflowTest(unittest.TestCase):
             self.assertIn(phrase, workflow)
         self.assertIn("! -name 'install-web-api-test-execution-evidence.cmd'", workflow)
         self.assertNotIn("gh release upload skill-installers-v1 installers/*.cmd", workflow)
+
+    def test_mutable_release_publishes_auditable_windows_x64_user_notes(self):
+        notes_path = ROOT / "docs" / "release" / "skill-installers-v1.md"
+        self.assertTrue(notes_path.exists())
+        notes = notes_path.read_text(encoding="utf-8")
+
+        self.assertIn('"docs/release/skill-installers-v1.md"', self.workflow)
+        self.assertIn("gh release edit skill-installers-v1", self.workflow)
+        self.assertIn("--notes-file docs/release/skill-installers-v1.md", self.workflow)
+        for phrase in [
+            "Windows x64 三步使用",
+            "install-web-api-test-execution-evidence.cmd",
+            "web-api-test-execution-evidence-1.0.0-windows-x64.zip",
+            "SHA256SUMS.txt",
+            "调用第八个 Skill 执行",
+            "-Repair",
+            r"%USERPROFILE%\.testing-skills\installations\web-api-test-execution-evidence.json",
+            r"%USERPROFILE%\.testing-skills\diagnostics\web-api-test-execution-evidence",
+            "正常执行阶段不会下载 Node、Runner、Playwright 或 Chromium",
+        ]:
+            with self.subTest(phrase=phrase):
+                self.assertIn(phrase, notes)
 
     def test_checked_out_source_is_reachable_from_origin_main(self):
         workflow = self.workflow

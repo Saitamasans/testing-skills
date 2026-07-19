@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - "installers/*.cmd"
+      - "docs/release/skill-installers-v1.md"
       - ".github/workflows/publish-installers.yml"
   workflow_dispatch:
   workflow_run:
@@ -131,3 +132,6 @@ jobs:
             echo "public mutable installer assets differ from trusted current-main bytes" >&2
             exit 1
           fi
+          gh release edit skill-installers-v1 \
+            --title "Windows Skill Installers v1" \
+            --notes-file docs/release/skill-installers-v1.md
