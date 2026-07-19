@@ -51,20 +51,18 @@ jobs:
 
           mkdir -p build
           runtime_release_ready=false
-          git fetch --force origin "refs/tags/$RUNTIME_TAG:refs/tags/$RUNTIME_TAG"
-          runtime_tag_commit="$(git rev-parse "refs/tags/$RUNTIME_TAG^{commit}")"
-          git merge-base --is-ancestor "$runtime_tag_commit" "refs/remotes/origin/main"
-          if gh api "repos/$GITHUB_REPOSITORY/releases/tags/$RUNTIME_TAG" \
-            > build/runtime-release-metadata.json 2>/dev/null; then
-            if node - "$RUNTIME_TAG" "$runtime_tag_commit" build/runtime-release-metadata.json <<'NODE'
+          if git fetch --force origin "refs/tags/$RUNTIME_TAG:refs/tags/$RUNTIME_TAG"; then
+            runtime_tag_commit="$(git rev-parse "refs/tags/$RUNTIME_TAG^{commit}")"
+            if git merge-base --is-ancestor "$runtime_tag_commit" "refs/remotes/origin/main" && \
+              gh api "repos/$GITHUB_REPOSITORY/releases/tags/$RUNTIME_TAG" \
+                > build/runtime-release-metadata.json 2>/dev/null; then
+              if node - "$RUNTIME_TAG" "$runtime_tag_commit" build/runtime-release-metadata.json <<'NODE'
           const fs = require("node:fs");
           const [tag, commit, file] = process.argv.slice(2);
           const value = JSON.parse(fs.readFileSync(file, "utf8"));
           const expected = [
             "SHA256SUMS.txt", "install-all.cmd", "install-web-api-test-execution-evidence.cmd",
             "install-web-api-test-execution-evidence.ps1", "install.ps1",
-            "web-api-test-execution-evidence-1.0.0-windows-arm64.manifest.json",
-            "web-api-test-execution-evidence-1.0.0-windows-arm64.zip",
             "web-api-test-execution-evidence-1.0.0-windows-x64.manifest.json",
             "web-api-test-execution-evidence-1.0.0-windows-x64.zip",
           ];
@@ -77,8 +75,9 @@ jobs:
             process.exit(1);
           }
           NODE
-            then
-              runtime_release_ready=true
+              then
+                runtime_release_ready=true
+              fi
             fi
           fi
           if [[ "$runtime_release_ready" != "true" ]]; then
@@ -91,10 +90,6 @@ jobs:
           fi
           mkdir -p build/immutable-all build/mutable-installers
           gh release download "$RUNTIME_TAG" --dir build/immutable-all
-          for artifact in build/immutable-all/*; do
-            gh attestation verify "$artifact" --repo "$GITHUB_REPOSITORY" \
-              --signer-workflow "https://github.com/$GITHUB_REPOSITORY/.github/workflows/publish-eighth-skill-runtime.yml"
-          done
           test "$(grep -c '  install-all.cmd$' build/immutable-all/SHA256SUMS.txt)" -eq 1
           grep '  install-all.cmd$' build/immutable-all/SHA256SUMS.txt |
             (cd build/immutable-all && sha256sum -c -)

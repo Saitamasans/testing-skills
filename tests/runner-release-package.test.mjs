@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -12,6 +12,32 @@ import {
   resolveReleaseOutputDir,
   sha256File,
 } from "../packages/testing-runner/scripts/package-release.mjs";
+import { verifyReleaseTarball } from "../packages/testing-runner/scripts/verify-release-tarball.mjs";
+
+const REPO_ROOT = fileURLToPath(new URL("..", import.meta.url));
+
+test("release packaging consumes a committed exact dependency lock", async () => {
+  const runnerPackage = JSON.parse(await readFile(
+    path.join(REPO_ROOT, "packages", "testing-runner", "package.json"),
+    "utf8",
+  ));
+  const releaseLock = JSON.parse(await readFile(
+    path.join(REPO_ROOT, "packages", "testing-runner", "release", "package-lock.json"),
+    "utf8",
+  ));
+  const releaseScript = await readFile(
+    path.join(REPO_ROOT, "packages", "testing-runner", "scripts", "package-release.mjs"),
+    "utf8",
+  );
+
+  assert.equal(releaseLock.lockfileVersion, 3);
+  assert.equal(releaseLock.packages[""].name, runnerPackage.name);
+  assert.equal(releaseLock.packages[""].version, runnerPackage.version);
+  assert.deepEqual(releaseLock.packages[""].dependencies, runnerPackage.dependencies);
+  assert.doesNotMatch(releaseScript, /package-lock-only/);
+  assert.doesNotMatch(releaseScript, /pnpm/);
+  assert.match(releaseScript, /release[\\/]+package-lock\.json/);
+});
 
 test("release CLI resolves a relative output directory from the repository root", () => {
   const repoRoot = fileURLToPath(new URL("..", import.meta.url));
@@ -52,7 +78,7 @@ test("release tarball contains runner and bundled production dependencies", asyn
   }
 
   assert.equal(await sha256File(release.archivePath), release.sha256);
-  assert.equal(release.fileName, "saitamasans-testing-runner-1.1.1.tgz");
+  assert.equal(release.fileName, "saitamasans-testing-runner-1.1.2.tgz");
   assert.ok(release.sizeBytes > 100_000);
 
   const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
@@ -60,8 +86,8 @@ test("release tarball contains runner and bundled production dependencies", asyn
     schema_version: 1,
     runner: {
       name: "@saitamasans/testing-runner",
-      version: "1.1.1",
-      download_url: "https://github.com/Saitamasans/testing-skills/releases/download/testing-runner-v1.1.1/saitamasans-testing-runner-1.1.1.tgz",
+      version: "1.1.2",
+      download_url: "https://github.com/Saitamasans/testing-skills/releases/download/testing-runner-v1.1.2/saitamasans-testing-runner-1.1.2.tgz",
       sha256: release.sha256,
       size_bytes: release.sizeBytes,
       minimum_node: 20,
@@ -73,4 +99,44 @@ test("release tarball contains runner and bundled production dependencies", asyn
     },
   });
   assert.equal(release.manifestPath, manifestPath);
+});
+
+test("release tarball verification rejects workspace execution and succeeds outside checkout", async (t) => {
+  const outputDir = await mkdtemp(path.join(os.tmpdir(), "runner-release-isolation-"));
+  const workspace = await mkdtemp(path.join(os.tmpdir(), "runner-workspace-"));
+  const outsideWorkDir = await mkdtemp(path.join(os.tmpdir(), "runner-outside-workspace-"));
+  const previousWorkspace = process.env.GITHUB_WORKSPACE;
+  const previousNodePath = process.env.NODE_PATH;
+  const previousNodeOptions = process.env.NODE_OPTIONS;
+  t.after(async () => {
+    if (previousWorkspace === undefined) delete process.env.GITHUB_WORKSPACE;
+    else process.env.GITHUB_WORKSPACE = previousWorkspace;
+    if (previousNodePath === undefined) delete process.env.NODE_PATH;
+    else process.env.NODE_PATH = previousNodePath;
+    if (previousNodeOptions === undefined) delete process.env.NODE_OPTIONS;
+    else process.env.NODE_OPTIONS = previousNodeOptions;
+    await Promise.all([outputDir, workspace, outsideWorkDir].map(
+      (directory) => rm(directory, { recursive: true, force: true }),
+    ));
+  });
+
+  const release = await buildReleaseTarball(outputDir, path.join(outputDir, "runner-release.json"));
+  process.env.GITHUB_WORKSPACE = workspace;
+  process.env.NODE_PATH = path.join(REPO_ROOT, "node_modules");
+  process.env.NODE_OPTIONS = `--require=${path.join(REPO_ROOT, "package.json")}`;
+  await assert.rejects(
+    verifyReleaseTarball(release.archivePath, path.join(workspace, "build", "packaged-tar")),
+    /package root must be outside GITHUB_WORKSPACE/,
+  );
+
+  const evidence = await verifyReleaseTarball(release.archivePath, outsideWorkDir);
+  assert.equal(evidence.workspace_realpath, await realpath(workspace));
+  assert.equal(
+    evidence.package_root_realpath,
+    await realpath(path.join(outsideWorkDir, "extracted", "package")),
+  );
+  assert.equal(evidence.package_outside_workspace, true);
+  assert.equal(evidence.NODE_PATH, null);
+  assert.equal(evidence.NODE_OPTIONS, null);
+  assert.deepEqual(evidence.commands, ["--version", "plan", "approve", "run", "verify-report"]);
 });

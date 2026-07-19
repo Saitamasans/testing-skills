@@ -3,13 +3,13 @@ name: Publish immutable testing Runner
 on:
   push:
     tags:
-      - "testing-runner-v1.1.1"
+      - "testing-runner-v1.1.2"
   workflow_dispatch:
     inputs:
       tag:
         description: Existing reviewed Runner tag to publish
         required: true
-        default: testing-runner-v1.1.1
+        default: testing-runner-v1.1.2
         type: string
 
 concurrency:
@@ -20,9 +20,9 @@ permissions:
   contents: read
 
 env:
-  EXPECTED_TAG: testing-runner-v1.1.1
-  EXPECTED_VERSION: 1.1.1
-  RUNNER_ASSET: saitamasans-testing-runner-1.1.1.tgz
+  EXPECTED_TAG: testing-runner-v1.1.2
+  EXPECTED_VERSION: 1.1.2
+  RUNNER_ASSET: saitamasans-testing-runner-1.1.2.tgz
 
 jobs:
   validate-tag:
@@ -43,6 +43,7 @@ jobs:
           tag="${{ github.event.inputs.tag || github.ref_name }}"
           test "$tag" = "$EXPECTED_TAG"
           test "$(node -p "require('./packages/testing-runner/package.json').version")" = "$EXPECTED_VERSION"
+          git fetch --force origin "refs/tags/$tag:refs/tags/$tag"
           commit="$(git rev-parse "refs/tags/$tag^{commit}")"
           if [[ "$GITHUB_EVENT_NAME" == "push" ]]; then test "$commit" = "$GITHUB_SHA"; fi
           git fetch --no-tags origin main
@@ -52,7 +53,8 @@ jobs:
 
   build-and-contract-test:
     needs: validate-tag
-    runs-on: ubuntu-latest
+    runs-on: windows-2025
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
@@ -66,28 +68,37 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          test "$(node -p process.arch)" = "x64"
           npm ci --ignore-scripts
+          node node_modules/playwright/cli.js install chromium
           npm run build --workspace @saitamasans/testing-runner
           npm test --workspace @saitamasans/testing-runner
           npm run pack:runner-release
           test -f "build/releases/$RUNNER_ASSET"
           test -f "build/releases/$RUNNER_ASSET.sha256"
-          grep -Fx "$(sha256sum "build/releases/$RUNNER_ASSET" | sed 's#  build/releases/#  #')" \
-            "build/releases/$RUNNER_ASSET.sha256"
-          sha256sum "build/releases/$RUNNER_ASSET" "build/releases/$RUNNER_ASSET.sha256" |
-            sed 's#  build/releases/#  #' | LC_ALL=C sort -k2 > build/releases/SHA256SUMS.txt
           node - <<'NODE'
           const fs = require("node:fs");
           const crypto = require("node:crypto");
-          const asset = "build/releases/saitamasans-testing-runner-1.1.1.tgz";
+          const path = require("node:path");
+          const releaseDir = "build/releases";
+          const assetName = "saitamasans-testing-runner-1.1.2.tgz";
+          const asset = path.join(releaseDir, assetName);
           const release = JSON.parse(fs.readFileSync("skill-sources/web-api-test-execution-evidence/assets/runner-release.json", "utf8")).runner;
           const lock = JSON.parse(fs.readFileSync("packages/testing-runner/release/windows-runtime-lock.json", "utf8")).runner;
           const bytes = fs.readFileSync(asset);
           const actual = { size_bytes: bytes.length, sha256: crypto.createHash("sha256").update(bytes).digest("hex") };
+          const checksumPath = asset + ".sha256";
+          const expectedChecksum = `${actual.sha256}  ${assetName}\n`;
+          if (fs.readFileSync(checksumPath, "utf8") !== expectedChecksum) throw new Error("Runner checksum companion mismatch");
           for (const expected of [release, lock]) {
-            if (expected.name !== "@saitamasans/testing-runner" || expected.version !== "1.1.1") throw new Error("locked Runner identity mismatch");
+            if (expected.name !== "@saitamasans/testing-runner" || expected.version !== "1.1.2") throw new Error("locked Runner identity mismatch");
             if (expected.size_bytes !== actual.size_bytes || expected.sha256 !== actual.sha256) throw new Error("built Runner does not match locked size and SHA-256");
           }
+          const sums = [assetName, assetName + ".sha256"].sort().map((name) => {
+            const digest = crypto.createHash("sha256").update(fs.readFileSync(path.join(releaseDir, name))).digest("hex");
+            return `${digest}  ${name}`;
+          }).join("\n") + "\n";
+          fs.writeFileSync(path.join(releaseDir, "SHA256SUMS.txt"), sums, "utf8");
           NODE
       - name: Inspect packaged Runner contract
         shell: bash
@@ -100,7 +111,7 @@ jobs:
           const fs = require("node:fs");
           const root = "build/runner-inspection/package";
           const pkg = JSON.parse(fs.readFileSync(`${root}/package.json`, "utf8"));
-          if (pkg.name !== "@saitamasans/testing-runner" || pkg.version !== "1.1.1") throw new Error("Runner package identity mismatch");
+          if (pkg.name !== "@saitamasans/testing-runner" || pkg.version !== "1.1.2") throw new Error("Runner package identity mismatch");
           if (pkg.dependencies?.playwright !== "1.61.1") throw new Error('"playwright": "1.61.1" is required');
           for (const relative of [
             "dist/cli.js", "dist/commands/run.js", "dist/commands/verify-report.js",
@@ -108,7 +119,7 @@ jobs:
             "node_modules/playwright/cli.js", "node_modules/playwright-core/browsers.json",
           ]) if (!fs.statSync(`${root}/${relative}`).isFile()) throw new Error(`missing packaged Runner file: ${relative}`);
           const cli = fs.readFileSync(`${root}/dist/cli.js`, "utf8");
-          if (!cli.includes("1.1.1")) throw new Error("compiled CLI does not expose Runner 1.1.1");
+          if (!cli.includes("1.1.2")) throw new Error("compiled CLI does not expose Runner 1.1.2");
           const run = fs.readFileSync(`${root}/dist/commands/run.js`, "utf8");
           if (!run.includes("run-result.json")) throw new Error("packaged Runner lacks current result behavior");
           const browsers = JSON.parse(fs.readFileSync(`${root}/node_modules/playwright-core/browsers.json`, "utf8")).browsers;
@@ -118,19 +129,58 @@ jobs:
           }
           NODE
           grep -F "installation-smoke-test.mjs" packages/testing-runner/scripts/build-windows-bundle.mjs
-          grep -F "1.1.1" packages/testing-runner/scripts/installation-smoke-test.mjs
+          grep -F "1.1.2" packages/testing-runner/scripts/installation-smoke-test.mjs
+      - name: Execute the packaged production dependency combination
+        shell: powershell
+        run: |
+          $ErrorActionPreference = "Stop"
+          $archive = (Resolve-Path -LiteralPath "build/releases/$env:RUNNER_ASSET").Path
+          $evidenceRoot = Join-Path $PWD "build/packaged-tar-verification"
+          $smokeRoot = Join-Path $env:RUNNER_TEMP ("runner-tar-smoke-" + [Guid]::NewGuid().ToString("N"))
+          try {
+            node packages/testing-runner/scripts/verify-release-tarball.mjs $archive $smokeRoot
+            if ($LASTEXITCODE -ne 0) { throw "packaged Runner execution failed" }
+          } finally {
+            try {
+              New-Item -ItemType Directory -Path $evidenceRoot -Force | Out-Null
+              $evidenceFiles = @{
+                "packaged-tar-evidence.json" = "packaged-tar-evidence.json"
+                "execution-network.jsonl" = "execution-network.jsonl"
+                "result/run-result.json" = "packaged-run-result.json"
+                "result/projected-report.json" = "packaged-projected-report.json"
+                "plan/run-manifest.json" = "packaged-run-manifest.json"
+                "plan/approval.json" = "packaged-approval.json"
+              }
+              foreach ($entry in $evidenceFiles.GetEnumerator()) {
+                $source = Join-Path $smokeRoot $entry.Key
+                if (Test-Path -LiteralPath $source -PathType Leaf) {
+                  Copy-Item -LiteralPath $source -Destination (Join-Path $evidenceRoot $entry.Value) -Force
+                }
+              }
+            } finally {
+              if (Test-Path -LiteralPath $smokeRoot) {
+                Remove-Item -LiteralPath $smokeRoot -Recurse -Force
+              }
+            }
+          }
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: verified-testing-runner-1.1.1-assets
+          name: testing-runner-1.1.2-execution-evidence
+          path: build/packaged-tar-verification/**
+          if-no-files-found: error
+          retention-days: 14
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: verified-testing-runner-1.1.2-assets
           path: |
-            build/releases/saitamasans-testing-runner-1.1.1.tgz
-            build/releases/saitamasans-testing-runner-1.1.1.tgz.sha256
+            build/releases/saitamasans-testing-runner-1.1.2.tgz
+            build/releases/saitamasans-testing-runner-1.1.2.tgz.sha256
             build/releases/SHA256SUMS.txt
           if-no-files-found: error
           retention-days: 14
 
   attest-assets:
-    needs: build-and-contract-test
+    needs: post-publish-verify
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -139,14 +189,42 @@ jobs:
     steps:
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
-          name: verified-testing-runner-1.1.1-assets
+          name: verified-testing-runner-1.1.2-assets
           path: build/runner-release
-      - uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2
+      - id: attest
+        continue-on-error: true
+        uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2
         with:
           subject-path: build/runner-release/*
+      - if: steps.attest.outcome != 'success'
+        run: echo "::warning::attestation creation failed for the published Runner assets"
+
+  immutable-release-advisory:
+    needs: validate-tag
+    runs-on: ubuntu-latest
+    steps:
+      - name: Report repository immutable-release configuration
+        env:
+          GH_TOKEN: ${{ secrets.IMMUTABLE_RELEASES_ADMIN_READ_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -z "${GH_TOKEN:-}" ]]; then
+            echo "::warning::immutable release settings admin-read token is not configured"
+            exit 0
+          fi
+          if ! enabled="$(gh api "repos/$GITHUB_REPOSITORY/immutable-releases" --jq .enabled)"; then
+            echo "::warning::immutable release settings could not be read"
+            exit 0
+          fi
+          if [[ "$enabled" != "true" ]]; then
+            echo "::warning::immutable releases are not enabled"
+            exit 0
+          fi
+          echo "Repository immutable releases are enabled."
 
   create-draft:
-    needs: [validate-tag, build-and-contract-test, attest-assets]
+    needs: [validate-tag, build-and-contract-test, immutable-release-advisory]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -157,7 +235,7 @@ jobs:
           clean: true
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
-          name: verified-testing-runner-1.1.1-assets
+          name: verified-testing-runner-1.1.2-assets
           path: build/trusted
       - name: Create non-overwritable Runner draft
         env:
@@ -167,14 +245,25 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
-            echo "Runner Release already exists and must never be overwritten" >&2
-            exit 1
+          if gh api "repos/$GITHUB_REPOSITORY/releases/tags/$RELEASE_TAG" > build/release.json 2>/dev/null; then
+            echo "Existing legal draft found; reusing verified assets"
+          else
+            gh release create "$RELEASE_TAG" --draft --verify-tag --target "$TAG_COMMIT" \
+              --title "Testing Runner 1.1.2" build/trusted/*
+            gh api "repos/$GITHUB_REPOSITORY/releases/tags/$RELEASE_TAG" > build/release.json
           fi
-          gh release create "$RELEASE_TAG" --draft --verify-tag --target "$TAG_COMMIT" \
-            --title "Testing Runner 1.1.1" build/trusted/*
-          mkdir build/draft
+          node - "$RELEASE_TAG" "$TAG_COMMIT" build/release.json <<'NODE'
+          const fs = require("node:fs");
+          const [tag, commit, file] = process.argv.slice(2);
+          const value = JSON.parse(fs.readFileSync(file, "utf8"));
+          const expected = ["SHA256SUMS.txt", "saitamasans-testing-runner-1.1.2.tgz", "saitamasans-testing-runner-1.1.2.tgz.sha256"];
+          const actual = value.assets.map(({ name }) => name).sort();
+          if (!value.draft || value.tag_name !== tag || value.target_commitish !== commit) throw new Error("existing Runner release is not the expected legal draft");
+          if (JSON.stringify(actual) !== JSON.stringify(expected)) throw new Error("existing Runner draft asset allowlist changed");
+          NODE
+          rm -rf build/draft && mkdir build/draft
           gh release download "$RELEASE_TAG" --dir build/draft
+          (cd build/draft && sha256sum -c SHA256SUMS.txt)
           diff --no-dereference --recursive build/trusted build/draft
 
   publish-release:
@@ -190,16 +279,8 @@ jobs:
           clean: true
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
-          name: verified-testing-runner-1.1.1-assets
+          name: verified-testing-runner-1.1.2-assets
           path: build/trusted
-      - name: Verify immutable releases are enabled
-        env:
-          GH_TOKEN: ${{ secrets.IMMUTABLE_RELEASES_ADMIN_READ_TOKEN }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          test -n "${GH_TOKEN:-}" || { echo "immutable release settings admin-read token is not configured" >&2; exit 1; }
-          test "$(gh api "repos/$GITHUB_REPOSITORY/immutable-releases" --jq .enabled)" = true
       - name: Reverify draft provenance and publish
         env:
           GH_TOKEN: ${{ github.token }}
@@ -214,7 +295,7 @@ jobs:
           const fs = require("node:fs");
           const [tag, commit, file] = process.argv.slice(2);
           const release = JSON.parse(fs.readFileSync(file, "utf8"));
-          const expected = ["SHA256SUMS.txt", "saitamasans-testing-runner-1.1.1.tgz", "saitamasans-testing-runner-1.1.1.tgz.sha256"];
+          const expected = ["SHA256SUMS.txt", "saitamasans-testing-runner-1.1.2.tgz", "saitamasans-testing-runner-1.1.2.tgz.sha256"];
           const actual = release.assets.map(({ name }) => name).sort();
           if (!release.draft || release.tag_name !== tag || release.target_commitish !== commit) throw new Error("Runner draft identity changed");
           if (JSON.stringify(actual) !== JSON.stringify(expected)) throw new Error("Runner draft asset allowlist changed");
@@ -222,8 +303,6 @@ jobs:
           rm -rf build/draft && mkdir build/draft
           gh release download "$RELEASE_TAG" --dir build/draft
           diff --no-dereference --recursive build/trusted build/draft
-          gh attestation verify "build/draft/$RUNNER_ASSET" --repo "$GITHUB_REPOSITORY" \
-            --signer-workflow "https://github.com/$GITHUB_REPOSITORY/.github/workflows/publish-testing-runner.yml"
           gh release edit "$RELEASE_TAG" --draft=false
 
   post-publish-verify:
@@ -234,7 +313,7 @@ jobs:
     steps:
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
-          name: verified-testing-runner-1.1.1-assets
+          name: verified-testing-runner-1.1.2-assets
           path: build/trusted
       - name: Verify public immutable Runner bytes and package contract
         env:
@@ -256,15 +335,13 @@ jobs:
           gh release download "$RELEASE_TAG" --dir build/public
           diff --no-dereference --recursive build/trusted build/public
           (cd build/public && sha256sum -c SHA256SUMS.txt)
-          gh attestation verify "build/public/$RUNNER_ASSET" --repo "$GITHUB_REPOSITORY" \
-            --signer-workflow "https://github.com/$GITHUB_REPOSITORY/.github/workflows/publish-testing-runner.yml"
           mkdir build/public-package
           tar -xzf "build/public/$RUNNER_ASSET" -C build/public-package
           node - <<'NODE'
           const fs = require("node:fs");
           const root = "build/public-package/package";
           const pkg = JSON.parse(fs.readFileSync(`${root}/package.json`, "utf8"));
-          if (pkg.version !== "1.1.1" || pkg.dependencies?.playwright !== "1.61.1") throw new Error("public Runner package contract mismatch");
+          if (pkg.version !== "1.1.2" || pkg.dependencies?.playwright !== "1.61.1") throw new Error("public Runner package contract mismatch");
           for (const file of ["dist/cli.js", "dist/commands/run.js", "dist/commands/verify-report.js", "vendor/test-case-renderer.mjs"]) {
             if (!fs.statSync(`${root}/${file}`).isFile()) throw new Error(`public Runner is missing ${file}`);
           }

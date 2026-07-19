@@ -16,7 +16,7 @@
 - The public launcher and installer use immutable versioned Release URLs; no installed or public launcher executes a script from the mutable `main` branch.
 - The release bootstrap has an anchored trust chain: the generated public CMD embeds the installer SHA-256, and the verified installer embeds each architecture-specific companion manifest SHA-256.
 - The canonical receipt path is `%USERPROFILE%\.testing-skills\installations\web-api-test-execution-evidence.json`; it is the only activation commit point and is written atomically last.
-- Runner is released as the new immutable 1.1.1 artifact with SHA-256 `c9d6cdafcd8d9b67d4a21bfac6e3efee02b0c0451c47c2da10b81572a4a78311` and size `22763679` bytes; the public Release bytes must match exactly.
+- Runner is released as the new immutable 1.1.2 artifact with SHA-256 `0db2c917eaf786fa9c03bacc9f33a058ef8a9b429bc111772c7833f82c664a07` and size `22769464` bytes; the public Release bytes must match exactly.
 - Playwright is pinned exactly to 1.61.1. Chromium 1228 uses the fixed Windows `chrome-win64.zip` archive (`192511857` bytes, SHA-256 `ebc0c2b75e2ea98151a7f18ff47037bfcbab44a8660e79b9ffa6520f9b7607ab`); headless shell 1228 uses `chrome-headless-shell-win64.zip` (`119099822` bytes, SHA-256 `5cfda0c763aa6a867ce2efad0c467e3220e9c5c01c4cba02fd57afe49ede5457`); FFmpeg 1011 uses `ffmpeg-win64.zip` (`1411741` bytes, SHA-256 `8d08827c019ad36e7b9d49d3648447d884534cb2acf200e71c715f6dd834cc50`). Windows ARM64 bundles intentionally use Playwright's supported win64 browser archives under x64 emulation; no unverified ARM64 Chrome URL is invented, and the native ARM64 release job must prove the browser starts.
 - Portable Node.js is pinned to 22.23.1. Windows x64 SHA-256 is `7df0bc9375723f4a86b3aa1b7cc73342423d9677a8df4538aca31a049e309c29`; Windows ARM64 SHA-256 is `b470fdfe3502c05151656e06d495e3f47544f2ee8b1d9c8705090f2dd5996bd0`.
 - Existing unrelated dirty-worktree changes are preserved and excluded from task commits.
@@ -53,7 +53,7 @@ The lock exposes:
   "bundle_version": "1.0.0",
   "release_tag": "web-api-test-execution-evidence-v1.0.0",
   "node": { "version": "22.23.1", "windows": { "x64": {}, "arm64": {} } },
-  "runner": { "version": "1.1.1", "size_bytes": 22763679, "sha256": "c9d6...8311" },
+  "runner": { "version": "1.1.2", "size_bytes": 22769464, "sha256": "0db2...4a07" },
   "playwright": { "version": "1.61.1", "chromium_revision": "1228", "chromium_headless_shell_revision": "1228", "ffmpeg_revision": "1011", "archives": { "windows": {} } }
 }
 ```
@@ -100,7 +100,7 @@ Export `validateRuntimeLock(value)`, `inventoryTree(root)`, `validateBundleLayou
 
 - [ ] **Step 4: Implement the release builder**
 
-The builder verifies the portable Node ZIP against the checked-in SHA, downloads/verifies the already-published immutable Runner 1.1.1 tarball, rejects a Runner whose internal Playwright identity is not exactly 1.61.1 with browser revisions 1228/1228/1011, verifies each locked browser archive before extraction, copies the generated Skill, adds smoke assets, emits the internal per-file payload manifest, creates the ZIP, and emits a separate companion manifest with ZIP and payload-manifest hashes. Network and process operations are injectable for unit tests.
+The builder verifies the portable Node ZIP against the checked-in SHA, downloads/verifies the already-published immutable Runner 1.1.2 tarball, rejects a Runner whose internal Playwright identity is not exactly 1.61.1 with browser revisions 1228/1228/1011, verifies each locked browser archive before extraction, copies the generated Skill, adds smoke assets, emits the internal per-file payload manifest, creates the ZIP, and emits a separate companion manifest with ZIP and payload-manifest hashes. Network and process operations are injectable for unit tests.
 
 - [ ] **Step 5: Implement local deterministic smoke test**
 
@@ -260,7 +260,7 @@ Run: `python -m unittest tests.test_eighth_skill_release_workflow tests.test_git
 
 - [ ] **Step 3: Add Windows bundle publication workflow**
 
-Use the mandatory native matrix `windows-2025` for x64 and `windows-11-arm` for ARM64. Verify `process.arch`, OS image, and free space in each job. Build from a clean checkout, install exact dependencies from `package-lock.json`, package the exact browser set, execute the installed-bundle smoke test, render the public installer with fixed script/manifest hashes, then publish only when both architectures pass. Create a new draft `web-api-test-execution-evidence-v1.0.0` release, verify its tag commit and complete asset set, then publish it under a protected release environment. Never use `--clobber` for runtime release assets.
+Use native `windows-2025` x64 as the P0 release gate; retain `windows-11-arm` as a non-blocking follow-up validation. Verify `process.arch`, OS image, and free space in each job. Build from a clean checkout, install exact dependencies from `package-lock.json`, package the exact browser set, execute the x64 installed-bundle smoke test, and render the public installer with fixed script/manifest hashes. Create or resume the legal draft `web-api-test-execution-evidence-v1.0.0`, verify its tag commit and exact x64 asset set, then publish it under a protected release environment. Never use `--clobber` for runtime release assets. Run immutable-release administration and attestation checks as advisory P2 jobs.
 
 - [ ] **Step 4: Make launcher publication depend on complete assets**
 

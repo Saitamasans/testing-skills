@@ -38,6 +38,10 @@ class EighthSkillReleaseWorkflowContractTest(unittest.TestCase):
             if runner_release_path.exists()
             else ""
         )
+        windows_release_ci = ROOT / ".github/workflows/validate-runner-windows-release.yml"
+        cls.windows_release_ci = windows_release_ci.read_text(encoding="utf-8") if windows_release_ci.exists() else ""
+        packaged_smoke = ROOT / "packages/testing-runner/scripts/verify-release-tarball.mjs"
+        cls.packaged_smoke = packaged_smoke.read_text(encoding="utf-8") if packaged_smoke.exists() else ""
 
     def test_native_build_proves_host_image_ps51_and_space_before_bundle(self):
         for phrase in [
@@ -69,7 +73,32 @@ class EighthSkillReleaseWorkflowContractTest(unittest.TestCase):
         self.assertIn("inputs.release_tag", self.bundle)
         self.assertRegex(self.bundle, r"(?s)inputs\.release_tag.*runtime lock release tag")
 
-    def test_rendered_installer_runs_clean_room_on_both_native_architectures(self):
+    def test_x64_release_path_is_independent_from_arm64_validation(self):
+        build_x64 = re.search(
+            r"(?ms)^  build-x64:\n(.*?)(?=^  [a-z][a-z0-9-]+:\n)",
+            self.release,
+        )
+        arm64 = re.search(
+            r"(?ms)^  validate-arm64:\n(.*?)(?=^  [a-z][a-z0-9-]+:\n)",
+            self.release,
+        )
+        assemble = re.search(
+            r"(?ms)^  assemble-release:\n(.*?)(?=^  [a-z][a-z0-9-]+:\n)",
+            self.release,
+        )
+        self.assertIsNotNone(build_x64)
+        self.assertIsNotNone(arm64)
+        self.assertIsNotNone(assemble)
+        self.assertIn("architecture: x64", build_x64.group(1))
+        self.assertIn("architecture: arm64", arm64.group(1))
+        self.assertIn("non_blocking: true", arm64.group(1))
+        self.assertIn("needs: [validate-tag, build-x64]", assemble.group(1))
+        self.assertNotIn("validate-arm64", assemble.group(1))
+        self.assertNotIn("complete-windows-bundle-arm64", assemble.group(1))
+        self.assertNotIn("--arm64-manifest", assemble.group(1))
+        self.assertNotIn("--arm64-bundle", assemble.group(1))
+
+    def test_rendered_x64_installer_runs_clean_room_on_native_x64(self):
         job = re.search(
             r"(?ms)^  clean-room-install-smoke:\n(.*?)(?=^  [a-z][a-z-]+:\n)",
             self.release,
@@ -79,9 +108,7 @@ class EighthSkillReleaseWorkflowContractTest(unittest.TestCase):
         for phrase in [
             "needs: assemble-release",
             "windows-2025",
-            "windows-11-arm",
             "complete-windows-bundle-x64",
-            "complete-windows-bundle-arm64",
             "install-web-api-test-execution-evidence.ps1",
             "-ManifestSha256",
             "-AllowLocalFixture",
@@ -101,6 +128,8 @@ class EighthSkillReleaseWorkflowContractTest(unittest.TestCase):
         ]:
             with self.subTest(phrase=phrase):
                 self.assertIn(phrase, text)
+        self.assertNotIn("windows-11-arm", text)
+        self.assertNotIn("complete-windows-bundle-arm64", text)
         create_draft = re.search(
             r"(?ms)^  create-draft:\n(.*?)(?=^  [a-z][a-z-]+:\n)",
             self.release,
@@ -138,7 +167,7 @@ class EighthSkillReleaseWorkflowContractTest(unittest.TestCase):
         self.assertNotIn(-1, positions)
         self.assertEqual(sorted(positions), positions)
 
-    def test_verified_artifact_is_rechecked_after_approval_and_immutability_is_gated(self):
+    def test_verified_artifact_is_rechecked_after_approval_and_immutability_is_advisory(self):
         create_draft = re.search(
             r"(?ms)^  create-draft:\n(.*?)(?=^  [a-z][a-z-]+:\n)",
             self.release,
@@ -163,13 +192,25 @@ class EighthSkillReleaseWorkflowContractTest(unittest.TestCase):
                 self.assertIn("sha256sum -c SHA256SUMS.txt", job)
                 self.assertIn("target_commitish", job)
 
+        advisory = re.search(
+            r"(?ms)^  immutable-release-advisory:\n(.*?)(?=^  [a-z][a-z-]+:\n)",
+            self.release,
+        )
+        self.assertIsNotNone(advisory)
+        advisory_text = advisory.group(1)
+        for phrase in [
+            'gh api "repos/$GITHUB_REPOSITORY/immutable-releases"',
+            "GH_TOKEN: ${{ secrets.IMMUTABLE_RELEASES_ADMIN_READ_TOKEN }}",
+            "::warning::immutable release settings admin-read token is not configured",
+            "::warning::immutable releases are not enabled",
+            "exit 0",
+        ]:
+            with self.subTest(phrase=phrase):
+                self.assertIn(phrase, advisory_text)
+
         protected = publish.group(1)
         for phrase in [
             "environment: release",
-            'gh api "repos/$GITHUB_REPOSITORY/immutable-releases"',
-            "GH_TOKEN: ${{ secrets.IMMUTABLE_RELEASES_ADMIN_READ_TOKEN }}",
-            "immutable release settings admin-read token is not configured",
-            "immutable releases must be enabled before publication",
             "value.draft",
             "value.tag_name",
             "value.target_commitish",
@@ -179,9 +220,9 @@ class EighthSkillReleaseWorkflowContractTest(unittest.TestCase):
         ]:
             with self.subTest(phrase=phrase):
                 self.assertIn(phrase, protected)
+        self.assertNotIn("IMMUTABLE_RELEASES_ADMIN_READ_TOKEN", protected)
+        self.assertNotIn("immutable-releases", protected)
         edit = 'gh release edit "$RELEASE_TAG" --draft=false'
-        if "immutable-releases" in protected and edit in protected:
-            self.assertLess(protected.index("immutable-releases"), protected.index(edit))
         if "diff --no-dereference --recursive" in protected and edit in protected:
             self.assertLess(
                 protected.index("diff --no-dereference --recursive"),
@@ -192,6 +233,47 @@ class EighthSkillReleaseWorkflowContractTest(unittest.TestCase):
         self.assertIn("releases/tags/$tag", post)
         self.assertIn("published release is not immutable", post)
         self.assertIn(".immutable", post)
+
+    def test_existing_legal_drafts_are_resumed_without_replacing_assets(self):
+        for name, workflow in [
+            ("runtime", self.release),
+            ("runner", self.runner_release),
+        ]:
+            create_draft = re.search(
+                r"(?ms)^  create-draft:\n(.*?)(?=^  [a-z][a-z-]+:\n)",
+                workflow,
+            )
+            self.assertIsNotNone(create_draft)
+            text = create_draft.group(1)
+            with self.subTest(workflow=name):
+                self.assertIn("Existing legal draft found; reusing verified assets", text)
+                self.assertIn("gh api", text)
+                self.assertIn("value.draft", text)
+                self.assertIn("value.tag_name", text)
+                self.assertIn("value.target_commitish", text)
+                self.assertIn("value.assets", text)
+                self.assertIn("gh release download", text)
+                self.assertIn("diff --no-dereference --recursive", text)
+                self.assertIn("gh release create", text)
+                self.assertNotIn("gh release upload", text)
+                self.assertNotIn("--clobber", text)
+                self.assertNotIn("Release already exists", text)
+
+    def test_immutable_admin_advisory_runs_before_any_draft_creation(self):
+        for name, workflow in [
+            ("runtime", self.release),
+            ("runner", self.runner_release),
+        ]:
+            advisory = workflow.find("  immutable-release-advisory:")
+            draft = workflow.find("  create-draft:")
+            with self.subTest(workflow=name):
+                self.assertGreaterEqual(advisory, 0)
+                self.assertGreater(draft, advisory)
+                create_draft = re.search(
+                    r"(?ms)^  create-draft:\n(.*?)(?=^  [a-z][a-z-]+:\n)",
+                    workflow,
+                )
+                self.assertIn("immutable-release-advisory", create_draft.group(1))
 
     def test_permissions_are_scoped_to_mutating_and_attestation_jobs(self):
         self.assertIn("permissions:\n  contents: read", self.release)
@@ -218,12 +300,42 @@ class EighthSkillReleaseWorkflowContractTest(unittest.TestCase):
         self.assertIn("contents: write", publish.group(1))
         self.assertNotIn("contents: write", attest.group(1))
 
+    def test_attestation_is_post_publish_advisory_not_a_p0_dependency(self):
+        for name, workflow, job_name in [
+            ("runtime", self.release, "attest-release-assets"),
+            ("runner", self.runner_release, "attest-assets"),
+        ]:
+            attest = re.search(
+                rf"(?ms)^  {job_name}:\n(.*?)(?=^  [a-z][a-z0-9-]+:\n)",
+                workflow,
+            )
+            create_draft = re.search(
+                r"(?ms)^  create-draft:\n(.*?)(?=^  [a-z][a-z0-9-]+:\n)",
+                workflow,
+            )
+            publish = re.search(
+                r"(?ms)^  publish-release:\n(.*?)(?=^  [a-z][a-z0-9-]+:\n)",
+                workflow,
+            )
+            post = re.search(r"(?ms)^  post-publish-verify:\n(.*)\Z", workflow)
+            self.assertIsNotNone(attest)
+            self.assertIsNotNone(create_draft)
+            self.assertIsNotNone(publish)
+            self.assertIsNotNone(post)
+            with self.subTest(workflow=name):
+                self.assertIn("needs: post-publish-verify", attest.group(1))
+                self.assertIn("continue-on-error: true", attest.group(1))
+                self.assertIn("::warning::attestation", attest.group(1))
+                self.assertNotIn(job_name, create_draft.group(1))
+                self.assertNotIn("gh attestation verify", publish.group(1))
+                self.assertNotIn("gh attestation verify", post.group(1))
+
+        self.assertNotIn("gh attestation verify", self.publish_installers)
+
     def test_release_contract_has_exact_assets_and_placeholder_gate(self):
         for name in [
             "web-api-test-execution-evidence-1.0.0-windows-x64.zip",
             "web-api-test-execution-evidence-1.0.0-windows-x64.manifest.json",
-            "web-api-test-execution-evidence-1.0.0-windows-arm64.zip",
-            "web-api-test-execution-evidence-1.0.0-windows-arm64.manifest.json",
             "install-web-api-test-execution-evidence.ps1",
             "install-web-api-test-execution-evidence.cmd",
             "install.ps1",
@@ -232,8 +344,18 @@ class EighthSkillReleaseWorkflowContractTest(unittest.TestCase):
         ]:
             with self.subTest(name=name):
                 self.assertIn(name, self.release)
+        for name in [
+            "web-api-test-execution-evidence-1.0.0-windows-arm64.zip",
+            "web-api-test-execution-evidence-1.0.0-windows-arm64.manifest.json",
+        ]:
+            with self.subTest(excluded=name):
+                assemble = re.search(
+                    r"(?ms)^  assemble-release:\n(.*?)(?=^  [a-z][a-z0-9-]+:\n)",
+                    self.release,
+                )
+                self.assertNotIn(name, assemble.group(1))
         self.assertIn("unresolved placeholder", self.release)
-        self.assertIn("github.sha", self.release)
+        self.assertIn("GITHUB_SHA", self.release)
         self.assertIn("target_commitish", self.release)
         self.assertIn("npm ci --ignore-scripts", self.release)
 
@@ -254,12 +376,45 @@ class EighthSkillReleaseWorkflowContractTest(unittest.TestCase):
             self.assertLess(text.index(fetch), text.index(ancestry))
             self.assertLess(text.index('commit="$(git rev-parse'), text.index(ancestry))
 
+    def test_runtime_dispatch_resolves_tag_without_matching_workflow_ref_sha(self):
+        validate = re.search(
+            r"(?ms)^  validate-tag:\n(.*?)(?=^  [a-z][a-z0-9-]+:\n)",
+            self.release,
+        )
+        self.assertIsNotNone(validate)
+        text = validate.group(1)
+        equality = 'if [[ "$GITHUB_EVENT_NAME" == "push" ]]; then test "$commit" = "$GITHUB_SHA"; fi'
+        self.assertIn(equality, text)
+        self.assertNotIn('test "$commit" = "${{ github.sha }}"', text)
+
+        self.assertIn("source_commit:", self.bundle)
+        self.assertIn("ref: ${{ inputs.source_commit }}", self.bundle)
+        for phrase in [
+            "source_commit: ${{ needs.validate-tag.outputs.commit }}",
+            "ref: ${{ needs.validate-tag.outputs.commit }}",
+        ]:
+            with self.subTest(phrase=phrase):
+                self.assertIn(phrase, self.release)
+
+    def test_manual_release_workflows_fetch_the_reviewed_tag_before_resolving_it(self):
+        for name, workflow in [
+            ("runtime", self.release),
+            ("runner", self.runner_release),
+        ]:
+            with self.subTest(workflow=name):
+                fetch = 'git fetch --force origin "refs/tags/$tag:refs/tags/$tag"'
+                resolve = 'commit="$(git rev-parse "refs/tags/$tag^{commit}")"'
+                self.assertIn(fetch, workflow)
+                self.assertIn(resolve, workflow)
+                self.assertLess(workflow.index(fetch), workflow.index(resolve))
+
     def test_release_workflows_pin_every_third_party_action_to_a_full_commit(self):
         workflows = {
             "bundle": self.bundle,
             "runtime": self.release,
             "runner": self.runner_release,
             "installers": self.publish_installers,
+            "windows-release-ci": self.windows_release_ci,
         }
         action_use = re.compile(r"(?m)^\s*-?\s*uses:\s*([^\s#]+)(?:\s+#\s*(v\d+[^\r\n]*))?$")
         for workflow, text in workflows.items():
@@ -271,10 +426,10 @@ class EighthSkillReleaseWorkflowContractTest(unittest.TestCase):
                     self.assertRegex(target, r"^[^@]+@[a-f0-9]{40}$")
                     self.assertRegex(version_comment, r"^v\d+")
 
-    def test_runner_111_release_is_immutable_attested_and_publicly_contract_verified(self):
+    def test_runner_112_release_is_immutable_and_publicly_contract_verified(self):
         for phrase in [
-            "testing-runner-v1.1.1",
-            "saitamasans-testing-runner-1.1.1.tgz",
+            "testing-runner-v1.1.2",
+            "saitamasans-testing-runner-1.1.2.tgz",
             "npm ci --ignore-scripts",
             "npm run pack:runner-release",
             "package.json",
@@ -283,7 +438,6 @@ class EighthSkillReleaseWorkflowContractTest(unittest.TestCase):
             "installation-smoke-test.mjs",
             "SHA256SUMS.txt",
             "actions/attest-build-provenance@",
-            "gh attestation verify",
             "--draft",
             "environment: release",
             "immutable-releases",
@@ -294,6 +448,131 @@ class EighthSkillReleaseWorkflowContractTest(unittest.TestCase):
             with self.subTest(phrase=phrase):
                 self.assertIn(phrase, self.runner_release)
         self.assertNotIn("--clobber", self.runner_release)
+        publish = re.search(
+            r"(?ms)^  publish-release:\n(.*?)(?=^  [a-z][a-z-]+:\n)",
+            self.runner_release,
+        )
+        self.assertIsNotNone(publish)
+        self.assertNotIn("IMMUTABLE_RELEASES_ADMIN_READ_TOKEN", publish.group(1))
+
+    def test_runner_release_installs_its_pinned_ci_browser_before_tests(self):
+        job = re.search(
+            r"(?ms)^  build-and-contract-test:\n(.*?)(?=^  [a-z][a-z-]+:\n)",
+            self.runner_release,
+        )
+        self.assertIsNotNone(job)
+        text = job.group(1)
+        install = "node node_modules/playwright/cli.js install chromium"
+        test = "npm test --workspace @saitamasans/testing-runner"
+        self.assertIn("runs-on: windows-2025", text)
+        self.assertIn('test "$(node -p process.arch)" = "x64"', text)
+        self.assertIn("timeout-minutes: 45", text)
+        self.assertIn(install, text)
+        self.assertIn(test, text)
+        self.assertNotIn("sha256sum", text)
+        self.assertIn("SHA256SUMS.txt", text)
+        self.assertLess(text.index(install), text.index(test))
+
+    def test_windows_x64_pr_ci_builds_twice_and_executes_the_packaged_tar(self):
+        workflow = self.windows_release_ci
+        for phrase in [
+            "pull_request:",
+            "permissions:\n  contents: read",
+            "runs-on: windows-2025",
+            'node-version: "22.23.1"',
+            'npm --version) -cne "10.9.8"',
+            "packages/testing-runner/release/package-lock.json",
+            "build/release-a",
+            "build/release-b",
+            "Get-FileHash",
+            "windows-runtime-lock.json",
+            "verify-release-tarball.mjs",
+            "CompleteInstallerTest.test_clean_install_is_path_independent_and_writes_receipt_after_smoke",
+            "CompleteInstallerTest.test_smoke_failure_retains_diagnostics_but_not_receipt",
+            "CompleteInstallerTest.test_activation_failure_removes_staging_and_preserves_previous_install",
+            "windows-x64-release-evidence",
+        ]:
+            with self.subTest(phrase=phrase):
+                self.assertIn(phrase, workflow)
+        self.assertNotIn("contents: write", workflow)
+        self.assertNotIn("gh release", workflow)
+        release_docs = "\n".join(
+            path.read_text(encoding="utf-8")
+            for path in (ROOT / "docs/superpowers").rglob("*.md")
+        )
+        self.assertIn("Windows x64 is the P0 release path", release_docs)
+        self.assertNotIn("publish only when both architectures pass", release_docs)
+        self.assertNotIn("Publication is rejected if either architecture", release_docs)
+
+    def test_packaged_tar_smoke_runs_outside_checkout_and_copies_only_evidence(self):
+        for workflow in [self.windows_release_ci, self.runner_release]:
+            with self.subTest(workflow=workflow.splitlines()[0]):
+                self.assertIn("$env:RUNNER_TEMP", workflow)
+                self.assertIn("runner-tar-smoke-", workflow)
+                self.assertIn("[Guid]::NewGuid()", workflow)
+                self.assertIn("finally", workflow)
+                self.assertIn("Copy-Item", workflow)
+                self.assertIn("Remove-Item -LiteralPath $smokeRoot -Recurse -Force", workflow)
+                self.assertNotIn("build/windows-x64-release-evidence/packaged-tar", workflow)
+
+        for phrase in [
+            "workspace_realpath",
+            "package_root_realpath",
+            "package_outside_workspace",
+            "package root must be outside GITHUB_WORKSPACE",
+        ]:
+            with self.subTest(phrase=phrase):
+                self.assertIn(phrase, self.packaged_smoke)
+
+    def test_packaged_tar_smoke_blocks_downloads_and_root_dependencies(self):
+        for phrase in [
+            "package/node_modules",
+            "dependency resolved outside packaged node_modules",
+            '"--version"',
+            '"plan"',
+            '"run"',
+            '"verify-report"',
+            "PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD",
+            "blocked external network request",
+            "blocked package manager invocation",
+            "https://github.com/Saitamasans/testing-skills/releases/download/",
+            "https://cdn.playwright.dev/",
+            "network_events",
+            "package_manager_invocations",
+            "empty-path",
+            "NODE_PATH",
+        ]:
+            with self.subTest(phrase=phrase):
+                self.assertIn(phrase, self.packaged_smoke)
+        build = re.search(
+            r"(?ms)^  build-and-contract-test:\n(.*?)(?=^  [a-z][a-z0-9-]+:\n)",
+            self.runner_release,
+        )
+        self.assertIsNotNone(build)
+        self.assertIn("verify-release-tarball.mjs", build.group(1))
+
+    def test_runner_111_is_retired_and_112_is_the_only_publishable_target(self):
+        retired = "testing-runner-v1.1.1"
+        for relative in [
+            ".github/workflows",
+            "installers",
+            "packages/testing-runner",
+            "scripts",
+            "skill-sources/web-api-test-execution-evidence",
+            "skills/web-api-test-execution-evidence",
+        ]:
+            for path in (ROOT / relative).rglob("*"):
+                if not path.is_file() or path.suffix.lower() in {".zip", ".tgz", ".pyc"}:
+                    continue
+                with self.subTest(path=path.relative_to(ROOT)):
+                    self.assertNotIn(retired, path.read_text(encoding="utf-8", errors="ignore"))
+
+        readme = (ROOT / "README.md").read_text(encoding="utf-8")
+        self.assertIn("testing-runner-v1.1.1", readme)
+        self.assertIn("未发布/作废发布目标", readme)
+        self.assertIn("首个可发布目标为 `testing-runner-v1.1.2`", readme)
+        self.assertIn('tags:\n      - "testing-runner-v1.1.2"', self.runner_release)
+        self.assertNotIn('tags:\n      - "testing-runner-v1.1.1"', self.runner_release)
 
     def test_mutable_installer_publication_reverifies_provenance_and_exact_public_bytes(self):
         for phrase in [
@@ -303,8 +582,6 @@ class EighthSkillReleaseWorkflowContractTest(unittest.TestCase):
             "target_commitish",
             "value.assets",
             "exact runtime asset allowlist",
-            "gh attestation verify",
-            "github.com/$GITHUB_REPOSITORY/.github/workflows/publish-eighth-skill-runtime.yml",
             "git merge-base --is-ancestor",
             "diff --no-dereference --recursive",
             "public mutable installer assets differ from trusted current-main bytes",
@@ -312,13 +589,12 @@ class EighthSkillReleaseWorkflowContractTest(unittest.TestCase):
             with self.subTest(phrase=phrase):
                 self.assertIn(phrase, self.publish_installers)
 
-    def test_post_public_verification_installs_through_public_cmd_on_native_x64_and_arm64(self):
+    def test_post_public_verification_installs_through_public_cmd_on_native_x64(self):
         job = re.search(r"(?ms)^  post-publish-verify:\n(.*)\Z", self.release)
         self.assertIsNotNone(job)
         text = job.group(1)
         for phrase in [
             "windows-2025",
-            "windows-11-arm",
             "PROCESSOR_ARCHITECTURE",
             "verified-eighth-runtime-release-assets",
             "diff --no-dereference --recursive",
@@ -339,6 +615,14 @@ class EighthSkillReleaseWorkflowContractTest(unittest.TestCase):
         ]:
             with self.subTest(phrase=phrase):
                 self.assertIn(phrase, text)
+        self.assertNotIn("windows-11-arm", text)
+        self.assertNotIn("windows-arm64", text)
+
+    def test_mutable_installer_gate_uses_the_x64_p0_runtime_allowlist(self):
+        self.assertIn("web-api-test-execution-evidence-1.0.0-windows-x64.zip", self.publish_installers)
+        self.assertIn("web-api-test-execution-evidence-1.0.0-windows-x64.manifest.json", self.publish_installers)
+        self.assertNotIn("web-api-test-execution-evidence-1.0.0-windows-arm64.zip", self.publish_installers)
+        self.assertNotIn("web-api-test-execution-evidence-1.0.0-windows-arm64.manifest.json", self.publish_installers)
 
     def test_renderer_declares_its_zip_parser_dependency(self):
         package = json.loads((ROOT / "package.json").read_text(encoding="utf-8"))
@@ -387,13 +671,13 @@ class WindowsInstallerRendererContractTest(unittest.TestCase):
                 "node": {"version": "22.23.1"},
                 "runner": {
                     "name": "@saitamasans/testing-runner",
-                    "version": "1.1.1",
+                    "version": "1.1.2",
                     "download_url": (
                         "https://github.com/Saitamasans/testing-skills/releases/download/"
-                        "testing-runner-v1.1.1/saitamasans-testing-runner-1.1.1.tgz"
+                        "testing-runner-v1.1.2/saitamasans-testing-runner-1.1.2.tgz"
                     ),
-                    "sha256": "c9d6cdafcd8d9b67d4a21bfac6e3efee02b0c0451c47c2da10b81572a4a78311",
-                    "size_bytes": 22763679,
+                    "sha256": "0db2c917eaf786fa9c03bacc9f33a058ef8a9b429bc111772c7833f82c664a07",
+                    "size_bytes": 22769464,
                 },
                 "playwright": {
                     "version": "1.61.1",
@@ -483,6 +767,37 @@ class WindowsInstallerRendererContractTest(unittest.TestCase):
             "--output", str(output),
         ]
         return subprocess.run(command, capture_output=True, text=True, check=False)
+
+    def _run_x64_only(self, output):
+        command = [
+            NODE,
+            str(RENDERER),
+            "--lock", str(ROOT / "packages/testing-runner/release/windows-runtime-lock.json"),
+            "--x64-manifest", str(self.x64_manifest),
+            "--x64-bundle", str(self.x64_bundle),
+            "--complete-template", str(ROOT / "installers/templates/install-web-api-test-execution-evidence.ps1.in"),
+            "--cmd-template", str(ROOT / "installers/templates/install-web-api-test-execution-evidence.cmd.in"),
+            "--generic-template", str(ROOT / "scripts/install.ps1"),
+            "--all-template", str(ROOT / "installers/install-all.cmd"),
+            "--output", str(output),
+        ]
+        return subprocess.run(command, capture_output=True, text=True, check=False)
+
+    def test_renders_x64_only_release_without_arm64_assets_or_installer_route(self):
+        output = self.root / "x64-release"
+        result = self._run_x64_only(output)
+        self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+        names = {item.name for item in output.iterdir()}
+        self.assertIn(self.x64_bundle.name, names)
+        self.assertIn(self.x64_manifest.name, names)
+        self.assertNotIn(self.arm64_bundle.name, names)
+        self.assertNotIn(self.arm64_manifest.name, names)
+        complete = (output / "install-web-api-test-execution-evidence.ps1").read_text(encoding="utf-8-sig")
+        self.assertIn('[ValidateSet("x64")]', complete)
+        self.assertNotIn("windows-arm64.manifest.json", complete)
+        self.assertNotIn('return "arm64"', complete)
+        checksum_lines = (output / "SHA256SUMS.txt").read_text().splitlines()
+        self.assertEqual(6, len(checksum_lines))
 
     def test_renders_manifest_to_ps1_to_cmd_to_all_hash_chain(self):
         output = self.root / "release"

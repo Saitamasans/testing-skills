@@ -183,7 +183,7 @@ function validateComponents(manifest) {
   exact(object(components.node, "node component").version, "22.23.1", "bundled Node version");
   const runner = object(components.runner, "runner component");
   exact(runner.name, "@saitamasans/testing-runner", "bundled Runner name");
-  exact(runner.version, "1.1.1", "bundled Runner version");
+  exact(runner.version, "1.1.2", "bundled Runner version");
   const playwright = object(components.playwright, "Playwright component");
   exact(playwright.version, "1.61.1", "bundled Playwright version");
   exact(playwright.chromium_revision, "1228", "bundled Chromium revision");
@@ -195,7 +195,7 @@ function validateComponents(manifest) {
 async function validateRuntimeIdentity(runtimePath) {
   const runner = await jsonFile(path.join(runtimePath, "runner", "package.json"), "Runner package");
   exact(runner.name, "@saitamasans/testing-runner", "Runner package name");
-  exact(runner.version, "1.1.1", "Runner package version");
+  exact(runner.version, "1.1.2", "Runner package version");
   exact(runner.dependencies?.playwright, "1.61.1", "Runner Playwright dependency");
   const playwright = await jsonFile(path.join(runtimePath, "runner", "node_modules", "playwright", "package.json"), "Playwright package");
   exact(playwright.version, "1.61.1", "Playwright package version");
@@ -271,7 +271,7 @@ async function validateSmoke(diagnosticsPath, smoke, architecture) {
   const node = object(smoke.node, "smoke Node identity");
   exact(node.version, "22.23.1", "smoke Node version");
   exact(node.arch, architecture, "smoke Node architecture");
-  exact(object(smoke.runner, "smoke Runner identity").version, "1.1.1", "smoke Runner version");
+  exact(object(smoke.runner, "smoke Runner identity").version, "1.1.2", "smoke Runner version");
   exact(object(smoke.browser, "smoke browser identity").visible, true, "smoke visible browser result");
   exact(smoke.case_id, CASE_ID, "smoke case ID");
   exact(smoke.case_status, PASS_STATUS, "smoke case status");

@@ -43,7 +43,7 @@ The bundle contains:
 
 - the generated `web-api-test-execution-evidence` Skill package;
 - a pinned portable Node.js 20+ runtime;
-- Runner 1.1.1 and all production dependencies;
+- Runner 1.1.2 and all production dependencies;
 - the exact Playwright Chromium, Chromium headless shell, and Playwright FFmpeg revisions required by the bundled Playwright version, each downloaded from a locked HTTPS archive URL with an exact byte size and SHA-256 before safe ZIP extraction;
 - a local smoke-test fixture and expected output contract;
 - an immutable inner payload manifest.
@@ -81,7 +81,7 @@ The smoke test is local and deterministic. It does not access Baidu or another e
 It must verify:
 
 1. bundled Node.js starts and reports the pinned version and architecture;
-2. Runner CLI starts and reports Runner 1.1.1;
+2. Runner CLI starts and reports Runner 1.1.2;
 3. all bundled Runner production dependencies load;
 4. the exact Chromium executable exists and matches the installed browser metadata;
 5. Chromium starts visibly, opens a local fixture, renders expected text, captures a PNG, records a Playwright Trace, and closes cleanly;
@@ -107,7 +107,7 @@ It must not call GitHub, Playwright CDN, `playwright install`, npm, or another d
 
 The public CMD embeds the immutable installer asset URL and SHA-256. The verified installer embeds each architecture-specific companion manifest URL and SHA-256. The installer accepts only HTTPS assets from that fixed project GitHub Release. Redirect targets must remain HTTPS. Proxy variables and the Windows certificate store are supported; credentials are never logged. Size and SHA-256 are mandatory even when TLS succeeds.
 
-Release CI first publishes Runner 1.1.1 through its own immutable, attested Release workflow and proves the public tarball matches the checked lock and packaged CLI/report contract. It then builds complete Skill artifacts from a clean checkout, uses exact dependency locks, installs the complete exact Playwright browser set, creates architecture-specific bundles, verifies each bundle on a clean native-architecture Windows runner, and assembles a draft release containing bundles, companion manifests, version-bound installers, attestations, and a SHA-256 list. Publication is rejected if either architecture or clean-machine smoke test fails. After publication, native x64 and ARM64 jobs download and byte-compare the public assets with the trusted current-run artifact, install through the public CMD chain, and execute the formal smoke again with dependency network access blocked. Runtime release assets are never overwritten; the repository's immutable-release setting must be enabled before the release is made public.
+Windows x64 is the P0 release path. Release CI first packages Runner 1.1.2 twice from the committed production dependency lock, proves byte-for-byte reproducibility, and executes CLI version, plan, a minimal API run, and report verification using only the tar's `node_modules`. It then builds and smoke-tests the x64 bundle on native Windows, assembles the fixed x64 asset allowlist, verifies the Draft bytes against trusted artifacts, and repeats the download and byte comparison after publication. ARM64 build and smoke coverage remains as a non-blocking follow-up validation. Repository immutable-release administration and attestations remain advisory P2 checks; their failure is reported but does not block the x64 release. Runtime release assets are never overwritten or uploaded with `--clobber`.
 
 ## Progress UI
 

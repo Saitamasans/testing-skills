@@ -86,7 +86,7 @@ Do not trigger this Skill merely to generate test cases, clarify requirements, o
 
 ## 八、Runner 固定入口
 
-最终用户必须先使用 GitHub Release 完整安装器。完整安装不提供轻量版或可选浏览器，安装时已交付 portable Node 22.23.1、Runner 1.1.1、Playwright 1.61.1、Chromium 1228、headless shell 1228 和 FFmpeg 1011。无需系统安装 Node.js、npm、Git、Chrome、Excel 或 Python。
+最终用户必须先使用 GitHub Release 完整安装器。完整安装不提供轻量版或可选浏览器，安装时已交付 portable Node 22.23.1、Runner 1.1.2、Playwright 1.61.1、Chromium 1228、headless shell 1228 和 FFmpeg 1011。无需系统安装 Node.js、npm、Git、Chrome、Excel 或 Python。
 
 Windows 只使用已验证的 PowerShell 安全入口：`powershell.exe -NoProfile -ExecutionPolicy Bypass -File <ABSOLUTE_SKILL_ROOT>\scripts\testing-runner.ps1 <Runner args...>`。`.cmd` 桥接器不接收原始 Runner 参数；不要文档化或调用 Node MJS 入口、latest 或本地仓库 Runner。
 

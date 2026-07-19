@@ -100,7 +100,7 @@ class ExecutionSkillContractsTest(unittest.TestCase):
             for phrase in [
                 "GitHub Release 完整安装器",
                 "Node 22.23.1",
-                "Runner 1.1.1",
+                "Runner 1.1.2",
                 "Playwright 1.61.1",
                 "Chromium 1228",
                 "headless shell 1228",

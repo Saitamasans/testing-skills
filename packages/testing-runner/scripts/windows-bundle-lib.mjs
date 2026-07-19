@@ -14,7 +14,7 @@ const EXPECTED = Object.freeze({
   bundleVersion: "1.0.0",
   nodeVersion: "22.23.1",
   runnerName: "@saitamasans/testing-runner",
-  runnerVersion: "1.1.1",
+  runnerVersion: "1.1.2",
   playwrightVersion: "1.61.1",
   chromiumRevision: "1228",
   headlessShellRevision: "1228",

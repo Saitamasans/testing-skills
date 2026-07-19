@@ -32,10 +32,10 @@ test("Windows runtime lock pins the complete released runtime", async () => {
     },
     runner: {
       name: "@saitamasans/testing-runner",
-      version: "1.1.1",
-      download_url: "https://github.com/Saitamasans/testing-skills/releases/download/testing-runner-v1.1.1/saitamasans-testing-runner-1.1.1.tgz",
-      sha256: "c9d6cdafcd8d9b67d4a21bfac6e3efee02b0c0451c47c2da10b81572a4a78311",
-      size_bytes: 22763679,
+      version: "1.1.2",
+      download_url: "https://github.com/Saitamasans/testing-skills/releases/download/testing-runner-v1.1.2/saitamasans-testing-runner-1.1.2.tgz",
+      sha256: "0db2c917eaf786fa9c03bacc9f33a058ef8a9b429bc111772c7833f82c664a07",
+      size_bytes: 22769464,
     },
     playwright: {
       version: "1.61.1",

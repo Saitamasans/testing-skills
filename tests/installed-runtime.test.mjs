@@ -64,7 +64,7 @@ async function installedFixture(options = {}) {
     "runner/dist/cli.js": options.runnerContents ?? "process.exit(0);\n",
     "runner/package.json": JSON.stringify({
       name: "@saitamasans/testing-runner",
-      version: "1.1.1",
+      version: "1.1.2",
       dependencies: { playwright: "1.61.1" },
     }),
     "runner/node_modules/playwright/cli.js": "playwright cli",
@@ -101,7 +101,7 @@ async function installedFixture(options = {}) {
     schema_version: 1,
     ok: true,
     node: { version: "22.23.1", arch: options.architecture ?? "x64" },
-    runner: { version: "1.1.1" },
+    runner: { version: "1.1.2" },
     browser: { visible: true },
     case_id: caseId,
     case_status: passStatus,
@@ -120,7 +120,7 @@ async function installedFixture(options = {}) {
     bundle: { name: skillName, version: "1.0.0", release_tag: "web-api-test-execution-evidence-v1.0.0", os: "windows", arch: options.architecture ?? "x64" },
     components: {
       node: { version: "22.23.1" },
-      runner: { name: "@saitamasans/testing-runner", version: "1.1.1" },
+      runner: { name: "@saitamasans/testing-runner", version: "1.1.2" },
       playwright: { version: "1.61.1", chromium_revision: "1228", chromium_headless_shell_revision: "1228", ffmpeg_revision: "1011" },
       skill: { name: skillName },
     },

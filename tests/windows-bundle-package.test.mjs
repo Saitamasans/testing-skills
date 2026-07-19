@@ -110,15 +110,16 @@ test("root package exposes the locked Windows bundle build entry point", async (
   );
 });
 
-test("release CI builds and smokes each architecture on its native Windows host", async () => {
+test("release CI builds the requested architecture on its native Windows host", async () => {
   const workflow = await readFile(
     path.join(repoRoot, ".github/workflows/build-complete-windows-bundles.yml"),
     "utf8",
   );
-  assert.match(workflow, /os:\s*windows-2025[\s\S]*arch:\s*x64/);
-  assert.match(workflow, /os:\s*windows-11-arm[\s\S]*arch:\s*arm64/);
-  assert.match(workflow, /architecture:\s*\$\{\{ matrix\.arch \}\}/);
-  assert.match(workflow, /build-windows-bundle\.mjs.*matrix\.arch/);
+  assert.match(workflow, /architecture:[\s\S]*required:\s*true[\s\S]*source_commit:/);
+  assert.match(workflow, /runs-on:.*inputs\.architecture.*windows-2025.*windows-11-arm/);
+  assert.match(workflow, /architecture:\s*\$\{\{ inputs\.architecture \}\}/);
+  assert.match(workflow, /build-windows-bundle\.mjs.*inputs\.architecture/);
+  assert.match(workflow, /ref:\s*\$\{\{ inputs\.source_commit \}\}/);
   assert.match(workflow, /node\\node\.exe.*installation-smoke-test\.mjs/);
 });
 
@@ -275,7 +276,7 @@ test("bundle layout locks exact components and requires the local smoke fixture"
     node: { version: "22.23.1" },
     runner: {
       name: "@saitamasans/testing-runner",
-      version: "1.1.1",
+      version: "1.1.2",
       download_url: lock.runner.download_url,
       sha256: lock.runner.sha256,
       size_bytes: lock.runner.size_bytes,
@@ -327,7 +328,7 @@ test("payload manifest inventories every payload file without a self-hash cycle"
   assert.equal(written.sha256, sha256(await readFile(written.path)));
   assert.equal(manifest.schema_version, 1);
   assert.equal(manifest.bundle.arch, "arm64");
-  assert.equal(manifest.components.runner.version, "1.1.1");
+  assert.equal(manifest.components.runner.version, "1.1.2");
   assert.equal(manifest.components.playwright.chromium_revision, "1228");
   assert.equal(manifest.files.some((entry) => entry.path === "bundle-manifest.json"), false);
   assert.equal(manifest.files.some((entry) => entry.path === "smoke/installation-smoke-fixture.html"), true);

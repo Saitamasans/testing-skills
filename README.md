@@ -29,7 +29,9 @@
 
 适合普通功能测试人员。Windows 10/11 自带的 Windows PowerShell 即可，**无需管理员权限**。安装 8 个 Skill 无需安装 Node.js、npm、npx 或 Git。前 7 个 Skill 可以用下方通用安装器安装；其中前 5 个用例生成 Skill 实际生成 `.xlsx` 和 `.html` 文件时，仍需要可用的 Node.js 运行环境。
 
-第 8 个 `web-api-test-execution-evidence` 的最终用户必须使用 GitHub Release 完整安装器。完整安装不提供轻量版、API-only 或可选浏览器模式，安装时已交付 portable Node 22.23.1、Runner 1.1.1、Playwright 1.61.1、Chromium 1228、headless shell 1228 和 FFmpeg 1011；无需系统安装 Node.js、npm、Git、Chrome、Excel 或 Python。安装器完成下载、SHA-256 校验、解压、bundle 清单校验和本地完整 smoke test 后才显示“安装完成，可以执行 Web/API 自动化测试”。
+第 8 个 `web-api-test-execution-evidence` 的最终用户必须使用 GitHub Release 完整安装器。完整安装不提供轻量版、API-only 或可选浏览器模式，安装时已交付 portable Node 22.23.1、Runner 1.1.2、Playwright 1.61.1、Chromium 1228、headless shell 1228 和 FFmpeg 1011；无需系统安装 Node.js、npm、Git、Chrome、Excel 或 Python。安装器完成下载、SHA-256 校验、解压、bundle 清单校验和本地完整 smoke test 后才显示“安装完成，可以执行 Web/API 自动化测试”。
+
+发布状态说明：远端 tag `testing-runner-v1.1.1` 仅为未发布/作废发布目标，不对应可安全公开的 Runner Release，自动化不得再次尝试发布它，也不得删除或移动该 tag。首个可发布目标为 `testing-runner-v1.1.2`。
 
 [![Install All 8 Skills](https://img.shields.io/badge/Install-All_8_Skills-2ea44f?style=for-the-badge&logo=github)](https://github.com/Saitamasans/testing-skills/releases/download/skill-installers-v1/install-all.cmd)
 
@@ -241,7 +243,7 @@ npx skills add Saitamasans/testing-skills@web-api-test-execution-evidence -g -y
 
 ### 运行与安全注意事项
 
-- 先安装 GitHub Release 完整安装器交付的 Node 22.23.1、Runner 1.1.1、Playwright 1.61.1、Chromium 1228、headless shell 1228 和 FFmpeg 1011。正式执行只快速验证安装回执、回执绑定的 bundle 清单、固定组件身份和关键可执行/证据标记，不会下载、安装或修改运行时。
+- 先安装 GitHub Release 完整安装器交付的 Node 22.23.1、Runner 1.1.2、Playwright 1.61.1、Chromium 1228、headless shell 1228 和 FFmpeg 1011。正式执行只快速验证安装回执、回执绑定的 bundle 清单、固定组件身份和关键可执行/证据标记，不会下载、安装或修改运行时。
 - Windows 只通过 `<ABSOLUTE_SKILL_ROOT>\scripts\testing-runner.ps1` 调用内置 runtime；若报告 `installation_incomplete` 或 `installation_corrupt`，重新运行完整安装器并带 `-Repair`。无需 npm 账号，也无需手工安装 Runner。
 - 凭据只放环境变量或 CI Secrets，不写入用例、命令、日志、报告或截图。
 - 非标准 Excel 字段映射需要用户确认，不能静默转换。

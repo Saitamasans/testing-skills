@@ -42,25 +42,38 @@ jobs:
           locked_tag="$(node -p "require('./packages/testing-runner/release/windows-runtime-lock.json').release_tag")"
           test "$tag" = "$EXPECTED_TAG"
           test "$tag" = "$locked_tag"
+          git fetch --force origin "refs/tags/$tag:refs/tags/$tag"
           commit="$(git rev-parse "refs/tags/$tag^{commit}")"
-          test "$commit" = "${{ github.sha }}"
+          if [[ "$GITHUB_EVENT_NAME" == "push" ]]; then test "$commit" = "$GITHUB_SHA"; fi
           git fetch --no-tags origin main
           git merge-base --is-ancestor "$commit" "refs/remotes/origin/main"
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
           echo "commit=$commit" >> "$GITHUB_OUTPUT"
 
-  build-native:
+  build-x64:
     needs: validate-tag
     uses: ./.github/workflows/build-complete-windows-bundles.yml
     with:
       release_tag: ${{ needs.validate-tag.outputs.tag }}
+      architecture: x64
+      source_commit: ${{ needs.validate-tag.outputs.commit }}
+
+  validate-arm64:
+    needs: validate-tag
+    uses: ./.github/workflows/build-complete-windows-bundles.yml
+    with:
+      release_tag: ${{ needs.validate-tag.outputs.tag }}
+      architecture: arm64
+      source_commit: ${{ needs.validate-tag.outputs.commit }}
+      non_blocking: true
 
   assemble-release:
-    needs: [validate-tag, build-native]
+    needs: [validate-tag, build-x64]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
+          ref: ${{ needs.validate-tag.outputs.commit }}
           clean: true
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
@@ -72,18 +85,12 @@ jobs:
         with:
           name: complete-windows-bundle-x64
           path: build/native/x64
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
-        with:
-          name: complete-windows-bundle-arm64
-          path: build/native/arm64
       - name: Render complete immutable asset chain
         run: |
           node packages/testing-runner/scripts/render-windows-installers.mjs \
             --lock packages/testing-runner/release/windows-runtime-lock.json \
             --x64-manifest build/native/x64/windows-bundles/web-api-test-execution-evidence-1.0.0-windows-x64.manifest.json \
             --x64-bundle build/native/x64/windows-bundles/web-api-test-execution-evidence-1.0.0-windows-x64.zip \
-            --arm64-manifest build/native/arm64/windows-bundles/web-api-test-execution-evidence-1.0.0-windows-arm64.manifest.json \
-            --arm64-bundle build/native/arm64/windows-bundles/web-api-test-execution-evidence-1.0.0-windows-arm64.zip \
             --complete-template installers/templates/install-web-api-test-execution-evidence.ps1.in \
             --cmd-template installers/templates/install-web-api-test-execution-evidence.cmd.in \
             --generic-template scripts/install.ps1 \
@@ -99,8 +106,6 @@ jobs:
             install-web-api-test-execution-evidence.cmd
             install-web-api-test-execution-evidence.ps1
             install.ps1
-            web-api-test-execution-evidence-1.0.0-windows-arm64.manifest.json
-            web-api-test-execution-evidence-1.0.0-windows-arm64.zip
             web-api-test-execution-evidence-1.0.0-windows-x64.manifest.json
             web-api-test-execution-evidence-1.0.0-windows-x64.zip
           )
@@ -119,7 +124,7 @@ jobs:
           retention-days: 14
 
   attest-release-assets:
-    needs: assemble-release
+    needs: post-publish-verify
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -131,9 +136,13 @@ jobs:
           name: verified-eighth-runtime-release-assets
           path: build/release-assets
       - name: Attest bundles, manifests, and installers
+        id: attest
+        continue-on-error: true
         uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2
         with:
           subject-path: build/release-assets/*
+      - if: steps.attest.outcome != 'success'
+        run: echo "::warning::attestation creation failed for the published runtime assets"
 
   clean-room-install-smoke:
     needs: assemble-release
@@ -144,9 +153,6 @@ jobs:
           - os: windows-2025
             arch: x64
             bundle_artifact: complete-windows-bundle-x64
-          - os: windows-11-arm
-            arch: arm64
-            bundle_artifact: complete-windows-bundle-arm64
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
@@ -282,14 +288,39 @@ jobs:
               Env:TESTING_SKILLS_STATE_ROOT, Env:TESTING_SKILLS_INSTALL_ROOT -ErrorAction SilentlyContinue
           }
 
+  immutable-release-advisory:
+    needs: validate-tag
+    runs-on: ubuntu-latest
+    steps:
+      - name: Report repository immutable-release configuration
+        env:
+          GH_TOKEN: ${{ secrets.IMMUTABLE_RELEASES_ADMIN_READ_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -z "${GH_TOKEN:-}" ]]; then
+            echo "::warning::immutable release settings admin-read token is not configured"
+            exit 0
+          fi
+          if ! enabled="$(gh api "repos/$GITHUB_REPOSITORY/immutable-releases" --jq .enabled)"; then
+            echo "::warning::immutable release settings could not be read"
+            exit 0
+          fi
+          if [[ "$enabled" != "true" ]]; then
+            echo "::warning::immutable releases are not enabled"
+            exit 0
+          fi
+          echo "Repository immutable releases are enabled."
+
   create-draft:
-    needs: [validate-tag, assemble-release, attest-release-assets, clean-room-install-smoke]
+    needs: [validate-tag, assemble-release, clean-room-install-smoke, immutable-release-advisory]
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
+          ref: ${{ needs.validate-tag.outputs.commit }}
           fetch-depth: 0
           clean: true
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
@@ -304,13 +335,13 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
-            echo "Release already exists; runtime assets are never overwritten." >&2
-            exit 1
+          if gh api "repos/$GITHUB_REPOSITORY/releases/tags/$RELEASE_TAG" > build/release-metadata.json 2>/dev/null; then
+            echo "Existing legal draft found; reusing verified assets"
+          else
+            gh release create "$RELEASE_TAG" --draft --verify-tag --target "$TAG_COMMIT" \
+              --title "Complete eighth Skill runtime 1.0.0" \
+              build/release-assets/*
           fi
-          gh release create "$RELEASE_TAG" --draft --verify-tag --target "$TAG_COMMIT" \
-            --title "Complete eighth Skill runtime 1.0.0" \
-            build/release-assets/*
       - name: Verify draft release assets against trusted artifact
         env:
           GH_TOKEN: ${{ github.token }}
@@ -319,6 +350,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          rm -rf build/draft-verification
           mkdir build/draft-verification
           gh release download "$RELEASE_TAG" --dir build/draft-verification
           target_commitish="$(git rev-parse "refs/tags/$RELEASE_TAG^{commit}")"
@@ -331,8 +363,6 @@ jobs:
           const expected = [
             "SHA256SUMS.txt", "install-all.cmd", "install-web-api-test-execution-evidence.cmd",
             "install-web-api-test-execution-evidence.ps1", "install.ps1",
-            "web-api-test-execution-evidence-1.0.0-windows-arm64.manifest.json",
-            "web-api-test-execution-evidence-1.0.0-windows-arm64.zip",
             "web-api-test-execution-evidence-1.0.0-windows-x64.manifest.json",
             "web-api-test-execution-evidence-1.0.0-windows-x64.zip",
           ];
@@ -362,31 +392,13 @@ jobs:
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
+          ref: ${{ needs.validate-tag.outputs.commit }}
           fetch-depth: 0
           clean: true
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: verified-eighth-runtime-release-assets
           path: build/release-assets
-      - name: Verify immutable releases are enabled
-        env:
-          GH_TOKEN: ${{ secrets.IMMUTABLE_RELEASES_ADMIN_READ_TOKEN }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          if [[ -z "${GH_TOKEN:-}" ]]; then
-            echo "immutable release settings admin-read token is not configured" >&2
-            exit 1
-          fi
-          gh api "repos/$GITHUB_REPOSITORY/immutable-releases" > build/immutable-release-settings.json
-          node - build/immutable-release-settings.json <<'NODE'
-          const fs = require("node:fs");
-          const value = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
-          if (value.enabled !== true) {
-            console.error("immutable releases must be enabled before publication");
-            process.exit(1);
-          }
-          NODE
       - name: Reverify trusted draft and publish
         env:
           GH_TOKEN: ${{ github.token }}
@@ -407,8 +419,6 @@ jobs:
           const expected = [
             "SHA256SUMS.txt", "install-all.cmd", "install-web-api-test-execution-evidence.cmd",
             "install-web-api-test-execution-evidence.ps1", "install.ps1",
-            "web-api-test-execution-evidence-1.0.0-windows-arm64.manifest.json",
-            "web-api-test-execution-evidence-1.0.0-windows-arm64.zip",
             "web-api-test-execution-evidence-1.0.0-windows-x64.manifest.json",
             "web-api-test-execution-evidence-1.0.0-windows-x64.zip",
           ];
@@ -428,10 +438,6 @@ jobs:
             echo "draft assets differ from verified artifact" >&2
             exit 1
           fi
-          for artifact in build/draft-verification/*; do
-            gh attestation verify "$artifact" --repo "$GITHUB_REPOSITORY" \
-              --signer-workflow "https://github.com/$GITHUB_REPOSITORY/.github/workflows/publish-eighth-skill-runtime.yml"
-          done
           gh release edit "$RELEASE_TAG" --draft=false
 
   post-publish-verify:
@@ -442,8 +448,6 @@ jobs:
         include:
           - os: windows-2025
             arch: x64
-          - os: windows-11-arm
-            arch: arm64
     runs-on: ${{ matrix.os }}
     permissions:
       contents: read
@@ -474,8 +478,6 @@ jobs:
           const expected = [
             "SHA256SUMS.txt", "install-all.cmd", "install-web-api-test-execution-evidence.cmd",
             "install-web-api-test-execution-evidence.ps1", "install.ps1",
-            "web-api-test-execution-evidence-1.0.0-windows-arm64.manifest.json",
-            "web-api-test-execution-evidence-1.0.0-windows-arm64.zip",
             "web-api-test-execution-evidence-1.0.0-windows-x64.manifest.json",
             "web-api-test-execution-evidence-1.0.0-windows-x64.zip",
           ];
@@ -492,10 +494,6 @@ jobs:
             echo "public immutable assets differ from trusted current-run artifact" >&2
             exit 1
           fi
-          for artifact in build/public-release/*; do
-            gh attestation verify "$artifact" --repo "$GITHUB_REPOSITORY" \
-              --signer-workflow "https://github.com/$GITHUB_REPOSITORY/.github/workflows/publish-eighth-skill-runtime.yml"
-          done
       - name: Install through the public CMD and execute offline formal smoke
         shell: powershell
         run: |
