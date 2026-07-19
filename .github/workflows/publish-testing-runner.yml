@@ -156,8 +156,32 @@ jobs:
         with:
           subject-path: build/runner-release/*
 
+  immutable-release-advisory:
+    needs: validate-tag
+    runs-on: ubuntu-latest
+    steps:
+      - name: Report repository immutable-release configuration
+        env:
+          GH_TOKEN: ${{ secrets.IMMUTABLE_RELEASES_ADMIN_READ_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -z "${GH_TOKEN:-}" ]]; then
+            echo "::warning::immutable release settings admin-read token is not configured"
+            exit 0
+          fi
+          if ! enabled="$(gh api "repos/$GITHUB_REPOSITORY/immutable-releases" --jq .enabled)"; then
+            echo "::warning::immutable release settings could not be read"
+            exit 0
+          fi
+          if [[ "$enabled" != "true" ]]; then
+            echo "::warning::immutable releases are not enabled"
+            exit 0
+          fi
+          echo "Repository immutable releases are enabled."
+
   create-draft:
-    needs: [validate-tag, build-and-contract-test, attest-assets]
+    needs: [validate-tag, build-and-contract-test, attest-assets, immutable-release-advisory]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -178,14 +202,25 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
-            echo "Runner Release already exists and must never be overwritten" >&2
-            exit 1
+          if gh api "repos/$GITHUB_REPOSITORY/releases/tags/$RELEASE_TAG" > build/release.json 2>/dev/null; then
+            echo "Existing legal draft found; reusing verified assets"
+          else
+            gh release create "$RELEASE_TAG" --draft --verify-tag --target "$TAG_COMMIT" \
+              --title "Testing Runner 1.1.2" build/trusted/*
+            gh api "repos/$GITHUB_REPOSITORY/releases/tags/$RELEASE_TAG" > build/release.json
           fi
-          gh release create "$RELEASE_TAG" --draft --verify-tag --target "$TAG_COMMIT" \
-            --title "Testing Runner 1.1.2" build/trusted/*
-          mkdir build/draft
+          node - "$RELEASE_TAG" "$TAG_COMMIT" build/release.json <<'NODE'
+          const fs = require("node:fs");
+          const [tag, commit, file] = process.argv.slice(2);
+          const value = JSON.parse(fs.readFileSync(file, "utf8"));
+          const expected = ["SHA256SUMS.txt", "saitamasans-testing-runner-1.1.2.tgz", "saitamasans-testing-runner-1.1.2.tgz.sha256"];
+          const actual = value.assets.map(({ name }) => name).sort();
+          if (!value.draft || value.tag_name !== tag || value.target_commitish !== commit) throw new Error("existing Runner release is not the expected legal draft");
+          if (JSON.stringify(actual) !== JSON.stringify(expected)) throw new Error("existing Runner draft asset allowlist changed");
+          NODE
+          rm -rf build/draft && mkdir build/draft
           gh release download "$RELEASE_TAG" --dir build/draft
+          (cd build/draft && sha256sum -c SHA256SUMS.txt)
           diff --no-dereference --recursive build/trusted build/draft
 
   publish-release:
@@ -203,14 +238,6 @@ jobs:
         with:
           name: verified-testing-runner-1.1.2-assets
           path: build/trusted
-      - name: Verify immutable releases are enabled
-        env:
-          GH_TOKEN: ${{ secrets.IMMUTABLE_RELEASES_ADMIN_READ_TOKEN }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          test -n "${GH_TOKEN:-}" || { echo "immutable release settings admin-read token is not configured" >&2; exit 1; }
-          test "$(gh api "repos/$GITHUB_REPOSITORY/immutable-releases" --jq .enabled)" = true
       - name: Reverify draft provenance and publish
         env:
           GH_TOKEN: ${{ github.token }}

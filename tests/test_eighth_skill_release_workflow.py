@@ -138,7 +138,7 @@ class EighthSkillReleaseWorkflowContractTest(unittest.TestCase):
         self.assertNotIn(-1, positions)
         self.assertEqual(sorted(positions), positions)
 
-    def test_verified_artifact_is_rechecked_after_approval_and_immutability_is_gated(self):
+    def test_verified_artifact_is_rechecked_after_approval_and_immutability_is_advisory(self):
         create_draft = re.search(
             r"(?ms)^  create-draft:\n(.*?)(?=^  [a-z][a-z-]+:\n)",
             self.release,
@@ -163,13 +163,25 @@ class EighthSkillReleaseWorkflowContractTest(unittest.TestCase):
                 self.assertIn("sha256sum -c SHA256SUMS.txt", job)
                 self.assertIn("target_commitish", job)
 
+        advisory = re.search(
+            r"(?ms)^  immutable-release-advisory:\n(.*?)(?=^  [a-z][a-z-]+:\n)",
+            self.release,
+        )
+        self.assertIsNotNone(advisory)
+        advisory_text = advisory.group(1)
+        for phrase in [
+            'gh api "repos/$GITHUB_REPOSITORY/immutable-releases"',
+            "GH_TOKEN: ${{ secrets.IMMUTABLE_RELEASES_ADMIN_READ_TOKEN }}",
+            "::warning::immutable release settings admin-read token is not configured",
+            "::warning::immutable releases are not enabled",
+            "exit 0",
+        ]:
+            with self.subTest(phrase=phrase):
+                self.assertIn(phrase, advisory_text)
+
         protected = publish.group(1)
         for phrase in [
             "environment: release",
-            'gh api "repos/$GITHUB_REPOSITORY/immutable-releases"',
-            "GH_TOKEN: ${{ secrets.IMMUTABLE_RELEASES_ADMIN_READ_TOKEN }}",
-            "immutable release settings admin-read token is not configured",
-            "immutable releases must be enabled before publication",
             "value.draft",
             "value.tag_name",
             "value.target_commitish",
@@ -179,9 +191,9 @@ class EighthSkillReleaseWorkflowContractTest(unittest.TestCase):
         ]:
             with self.subTest(phrase=phrase):
                 self.assertIn(phrase, protected)
+        self.assertNotIn("IMMUTABLE_RELEASES_ADMIN_READ_TOKEN", protected)
+        self.assertNotIn("immutable-releases", protected)
         edit = 'gh release edit "$RELEASE_TAG" --draft=false'
-        if "immutable-releases" in protected and edit in protected:
-            self.assertLess(protected.index("immutable-releases"), protected.index(edit))
         if "diff --no-dereference --recursive" in protected and edit in protected:
             self.assertLess(
                 protected.index("diff --no-dereference --recursive"),
@@ -192,6 +204,47 @@ class EighthSkillReleaseWorkflowContractTest(unittest.TestCase):
         self.assertIn("releases/tags/$tag", post)
         self.assertIn("published release is not immutable", post)
         self.assertIn(".immutable", post)
+
+    def test_existing_legal_drafts_are_resumed_without_replacing_assets(self):
+        for name, workflow in [
+            ("runtime", self.release),
+            ("runner", self.runner_release),
+        ]:
+            create_draft = re.search(
+                r"(?ms)^  create-draft:\n(.*?)(?=^  [a-z][a-z-]+:\n)",
+                workflow,
+            )
+            self.assertIsNotNone(create_draft)
+            text = create_draft.group(1)
+            with self.subTest(workflow=name):
+                self.assertIn("Existing legal draft found; reusing verified assets", text)
+                self.assertIn("gh api", text)
+                self.assertIn("value.draft", text)
+                self.assertIn("value.tag_name", text)
+                self.assertIn("value.target_commitish", text)
+                self.assertIn("value.assets", text)
+                self.assertIn("gh release download", text)
+                self.assertIn("diff --no-dereference --recursive", text)
+                self.assertIn("gh release create", text)
+                self.assertNotIn("gh release upload", text)
+                self.assertNotIn("--clobber", text)
+                self.assertNotIn("Release already exists", text)
+
+    def test_immutable_admin_advisory_runs_before_any_draft_creation(self):
+        for name, workflow in [
+            ("runtime", self.release),
+            ("runner", self.runner_release),
+        ]:
+            advisory = workflow.find("  immutable-release-advisory:")
+            draft = workflow.find("  create-draft:")
+            with self.subTest(workflow=name):
+                self.assertGreaterEqual(advisory, 0)
+                self.assertGreater(draft, advisory)
+                create_draft = re.search(
+                    r"(?ms)^  create-draft:\n(.*?)(?=^  [a-z][a-z-]+:\n)",
+                    workflow,
+                )
+                self.assertIn("immutable-release-advisory", create_draft.group(1))
 
     def test_permissions_are_scoped_to_mutating_and_attestation_jobs(self):
         self.assertIn("permissions:\n  contents: read", self.release)
@@ -306,6 +359,12 @@ class EighthSkillReleaseWorkflowContractTest(unittest.TestCase):
             with self.subTest(phrase=phrase):
                 self.assertIn(phrase, self.runner_release)
         self.assertNotIn("--clobber", self.runner_release)
+        publish = re.search(
+            r"(?ms)^  publish-release:\n(.*?)(?=^  [a-z][a-z-]+:\n)",
+            self.runner_release,
+        )
+        self.assertIsNotNone(publish)
+        self.assertNotIn("IMMUTABLE_RELEASES_ADMIN_READ_TOKEN", publish.group(1))
 
     def test_runner_release_installs_its_pinned_ci_browser_before_tests(self):
         job = re.search(

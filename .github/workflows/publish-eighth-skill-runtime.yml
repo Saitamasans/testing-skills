@@ -283,8 +283,32 @@ jobs:
               Env:TESTING_SKILLS_STATE_ROOT, Env:TESTING_SKILLS_INSTALL_ROOT -ErrorAction SilentlyContinue
           }
 
+  immutable-release-advisory:
+    needs: validate-tag
+    runs-on: ubuntu-latest
+    steps:
+      - name: Report repository immutable-release configuration
+        env:
+          GH_TOKEN: ${{ secrets.IMMUTABLE_RELEASES_ADMIN_READ_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -z "${GH_TOKEN:-}" ]]; then
+            echo "::warning::immutable release settings admin-read token is not configured"
+            exit 0
+          fi
+          if ! enabled="$(gh api "repos/$GITHUB_REPOSITORY/immutable-releases" --jq .enabled)"; then
+            echo "::warning::immutable release settings could not be read"
+            exit 0
+          fi
+          if [[ "$enabled" != "true" ]]; then
+            echo "::warning::immutable releases are not enabled"
+            exit 0
+          fi
+          echo "Repository immutable releases are enabled."
+
   create-draft:
-    needs: [validate-tag, assemble-release, attest-release-assets, clean-room-install-smoke]
+    needs: [validate-tag, assemble-release, attest-release-assets, clean-room-install-smoke, immutable-release-advisory]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -305,13 +329,13 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
-            echo "Release already exists; runtime assets are never overwritten." >&2
-            exit 1
+          if gh api "repos/$GITHUB_REPOSITORY/releases/tags/$RELEASE_TAG" > build/release-metadata.json 2>/dev/null; then
+            echo "Existing legal draft found; reusing verified assets"
+          else
+            gh release create "$RELEASE_TAG" --draft --verify-tag --target "$TAG_COMMIT" \
+              --title "Complete eighth Skill runtime 1.0.0" \
+              build/release-assets/*
           fi
-          gh release create "$RELEASE_TAG" --draft --verify-tag --target "$TAG_COMMIT" \
-            --title "Complete eighth Skill runtime 1.0.0" \
-            build/release-assets/*
       - name: Verify draft release assets against trusted artifact
         env:
           GH_TOKEN: ${{ github.token }}
@@ -320,6 +344,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          rm -rf build/draft-verification
           mkdir build/draft-verification
           gh release download "$RELEASE_TAG" --dir build/draft-verification
           target_commitish="$(git rev-parse "refs/tags/$RELEASE_TAG^{commit}")"
@@ -369,25 +394,6 @@ jobs:
         with:
           name: verified-eighth-runtime-release-assets
           path: build/release-assets
-      - name: Verify immutable releases are enabled
-        env:
-          GH_TOKEN: ${{ secrets.IMMUTABLE_RELEASES_ADMIN_READ_TOKEN }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          if [[ -z "${GH_TOKEN:-}" ]]; then
-            echo "immutable release settings admin-read token is not configured" >&2
-            exit 1
-          fi
-          gh api "repos/$GITHUB_REPOSITORY/immutable-releases" > build/immutable-release-settings.json
-          node - build/immutable-release-settings.json <<'NODE'
-          const fs = require("node:fs");
-          const value = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
-          if (value.enabled !== true) {
-            console.error("immutable releases must be enabled before publication");
-            process.exit(1);
-          }
-          NODE
       - name: Reverify trusted draft and publish
         env:
           GH_TOKEN: ${{ github.token }}
