@@ -2,10 +2,10 @@
 setlocal
 set "INSTALL_SELECTOR=-All"
 set "TESTING_SKILLS_REQUIRE_COMPLETE_RUNTIME=1"
-set "GENERIC_INSTALLER_URL=https://raw.githubusercontent.com/Saitamasans/testing-skills/web-api-test-execution-evidence-v1.0.0/scripts/install.ps1"
-set "GENERIC_INSTALLER_SHA256=a6afb52ef54b2ba0494a00fbf89100ca0382fa9bca0a9047abc445538f47eaf7"
-set "COMPLETE_INSTALLER_URL=https://github.com/Saitamasans/testing-skills/releases/download/web-api-test-execution-evidence-v1.0.0/install-web-api-test-execution-evidence.ps1"
-set "COMPLETE_INSTALLER_SHA256=844cf38e7acdfe1d94ef571373493805e718876d8be7930088d413b0565ce22b"
+set "GENERIC_INSTALLER_URL=https://raw.githubusercontent.com/Saitamasans/testing-skills/web-api-test-execution-evidence-v1.0.1/scripts/install.ps1"
+set "GENERIC_INSTALLER_SHA256=5a3b9726f771edcbed8c402c2b8eaa46dbef1972661e144f6ff10a16af99f8e7"
+set "COMPLETE_INSTALLER_URL=https://github.com/Saitamasans/testing-skills/releases/download/web-api-test-execution-evidence-v1.0.1/install-web-api-test-execution-evidence.ps1"
+set "COMPLETE_INSTALLER_SHA256=670759ec9dcd75016d1a755ae77e3127e9f0dbe5bcb4f5810f51364b35360083"
 set "POWERSHELL_EXE=%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe"
 if exist "%POWERSHELL_EXE%" goto powershell_found
 set "POWERSHELL_EXE=%SystemRoot%\Sysnative\WindowsPowerShell\v1.0\powershell.exe"

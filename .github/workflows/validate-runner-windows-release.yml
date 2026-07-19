@@ -119,6 +119,7 @@ jobs:
           $ErrorActionPreference = "Stop"
           python -m unittest -v `
             tests.test_complete_execution_installer.CompleteInstallerTest.test_clean_install_is_path_independent_and_writes_receipt_after_smoke `
+            tests.test_complete_execution_installer.CompleteInstallerTest.test_real_runtime_long_path_installs_through_temporary_short_alias `
             tests.test_complete_execution_installer.CompleteInstallerTest.test_smoke_failure_retains_diagnostics_but_not_receipt `
             tests.test_complete_execution_installer.CompleteInstallerTest.test_activation_failure_removes_staging_and_preserves_previous_install
           if ($LASTEXITCODE -ne 0) { throw "PowerShell 5.1 installer fixture failed" }

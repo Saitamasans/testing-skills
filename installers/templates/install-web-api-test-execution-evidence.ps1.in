@@ -40,15 +40,15 @@ $ErrorActionPreference = "Stop"
 [Console]::OutputEncoding = New-Object System.Text.UTF8Encoding($false)
 
 $script:SkillName = "web-api-test-execution-evidence"
-$script:BundleVersion = "1.0.0"
-$script:ReleaseTag = "web-api-test-execution-evidence-v1.0.0"
+$script:BundleVersion = "1.0.1"
+$script:ReleaseTag = "web-api-test-execution-evidence-v1.0.1"
 $script:PinnedManifests = @{
     x64 = @{
-        Uri = "https://github.com/Saitamasans/testing-skills/releases/download/web-api-test-execution-evidence-v1.0.0/web-api-test-execution-evidence-1.0.0-windows-x64.manifest.json"
+        Uri = "https://github.com/Saitamasans/testing-skills/releases/download/web-api-test-execution-evidence-v1.0.1/web-api-test-execution-evidence-1.0.1-windows-x64.manifest.json"
         Sha256 = "__X64_COMPANION_MANIFEST_SHA256__"
     }
     arm64 = @{
-        Uri = "https://github.com/Saitamasans/testing-skills/releases/download/web-api-test-execution-evidence-v1.0.0/web-api-test-execution-evidence-1.0.0-windows-arm64.manifest.json"
+        Uri = "https://github.com/Saitamasans/testing-skills/releases/download/web-api-test-execution-evidence-v1.0.1/web-api-test-execution-evidence-1.0.1-windows-arm64.manifest.json"
         Sha256 = "__ARM64_COMPANION_MANIFEST_SHA256__"
     }
 }
@@ -396,6 +396,59 @@ function Assert-Preflight {
     }
 }
 
+function New-TemporaryStatePathAlias {
+    param([Parameter(Mandatory = $true)][string]$StateRootPath)
+
+    $stateRoot = Get-RootPreservingFullPath -Path $StateRootPath
+    $root = [IO.Path]::GetPathRoot($stateRoot)
+    if ($root -notmatch "^[A-Za-z]:\\$") {
+        throw "运行时短路径映射仅支持本地 Windows 卷：$StateRootPath"
+    }
+    $physicalStateRoot = Resolve-PhysicalInstallRoot -InstallRoot $stateRoot
+    if ($physicalStateRoot -cne $stateRoot.ToUpperInvariant()) {
+        throw "状态目录不得位于重解析路径下：$StateRootPath"
+    }
+    $subst = Join-Path $env:SystemRoot "System32\subst.exe"
+    if (-not (Test-Path -LiteralPath $subst -PathType Leaf)) {
+        throw "找不到 Windows 短路径映射工具：$subst"
+    }
+
+    foreach ($letter in [char[]]"ZYXWVUTSRQPONMLKJIHGFED") {
+        $drive = ([string]$letter + ":")
+        $aliasRoot = $drive + "\"
+        if (Test-Path -LiteralPath $aliasRoot) { continue }
+        & $subst $drive $stateRoot | Out-Null
+        if ($LASTEXITCODE -ne 0) { continue }
+        try {
+            $aliasPhysical = Resolve-PhysicalInstallRoot -InstallRoot $aliasRoot
+            if ($aliasPhysical -cne $physicalStateRoot) {
+                throw "临时短路径映射未指向请求的状态目录。"
+            }
+            Write-Host "当前阶段=启用临时短路径；映射=$aliasRoot；物理=$stateRoot"
+            return [pscustomobject]@{
+                Drive = $drive
+                Root = $aliasRoot
+                Subst = $subst
+            }
+        }
+        catch {
+            & $subst /D $drive | Out-Null
+            throw
+        }
+    }
+    throw "没有可用于安全解压的临时短盘符。"
+}
+
+function Remove-TemporaryStatePathAlias {
+    param([Parameter(Mandatory = $true)]$Alias)
+
+    & ([string]$Alias.Subst) /D ([string]$Alias.Drive) | Out-Null
+    if (Test-Path -LiteralPath ([string]$Alias.Root)) {
+        throw "无法清理临时短路径映射：$([string]$Alias.Root)"
+    }
+    Write-Host "当前阶段=清理临时短路径；映射=$([string]$Alias.Root)"
+}
+
 function New-HttpRequest {
     param(
         [Parameter(Mandatory = $true)][Uri]$Uri,
@@ -407,7 +460,7 @@ function New-HttpRequest {
     $request.Method = "GET"
     $request.AllowAutoRedirect = $false
     $request.AutomaticDecompression = [Net.DecompressionMethods]::GZip -bor [Net.DecompressionMethods]::Deflate
-    $request.UserAgent = "testing-skills-complete-installer/1.0.0"
+    $request.UserAgent = "testing-skills-complete-installer/1.0.1"
     $request.Timeout = 30000
     $request.ReadWriteTimeout = 30000
     $request.Proxy = [Net.WebRequest]::DefaultWebProxy
@@ -1113,7 +1166,9 @@ function Test-SmokeEvidenceReference {
         $absolute = [IO.Path]::GetFullPath((Join-Path $root $relative.Replace("/", "\")))
         if (-not $absolute.StartsWith($root + "\", [StringComparison]::OrdinalIgnoreCase)) { return $false }
         if (-not (Test-Path -LiteralPath $absolute -PathType Leaf)) { return $false }
-        if (-not (Test-PhysicalPathIdentity -Path $absolute)) { return $false }
+        $physicalRoot = Resolve-PhysicalInstallRoot -InstallRoot $root
+        $expectedPhysical = Join-Path $physicalRoot $relative.Replace("/", "\")
+        if (-not (Test-PhysicalPathMatches -Path $absolute -ExpectedPhysicalPath $expectedPhysical)) { return $false }
         $item = Get-Item -LiteralPath $absolute -Force
         if (($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0 -or
             $item.Length -ne [long]$Reference.size_bytes -or
@@ -1136,19 +1191,38 @@ function Test-PhysicalPathIdentity {
     catch { return $false }
 }
 
+function Test-PhysicalPathMatches {
+    param(
+        [Parameter(Mandatory = $true)][string]$Path,
+        [Parameter(Mandatory = $true)][string]$ExpectedPhysicalPath
+    )
+
+    try {
+        $expected = (Get-RootPreservingFullPath -Path $ExpectedPhysicalPath).ToUpperInvariant()
+        $physical = Resolve-PhysicalInstallRoot -InstallRoot $Path
+        return $physical -ceq $expected
+    }
+    catch { return $false }
+}
+
 function Test-ExistingSmokeDiagnostics {
     param(
         [Parameter(Mandatory = $true)]$Receipt,
         [Parameter(Mandatory = $true)][string]$SelectedArchitecture,
-        [Parameter(Mandatory = $true)][string]$RequestedStateRoot
+        [Parameter(Mandatory = $true)][string]$RequestedStateRoot,
+        [Parameter(Mandatory = $true)][string]$StateRootIoPath
     )
 
     try {
-        $diagnostics = [IO.Path]::GetFullPath([string]$Receipt.diagnostics_path)
+        $diagnosticsCanonical = [IO.Path]::GetFullPath([string]$Receipt.diagnostics_path)
+        $canonicalStateRoot = [IO.Path]::GetFullPath($RequestedStateRoot).TrimEnd("\")
+        $ioStateRoot = [IO.Path]::GetFullPath($StateRootIoPath).TrimEnd("\")
         $prefix = [IO.Path]::GetFullPath((Join-Path $RequestedStateRoot "diagnostics\$script:SkillName")).TrimEnd("\") + "\"
-        if (-not $diagnostics.StartsWith($prefix, [StringComparison]::OrdinalIgnoreCase) -or
+        if (-not $diagnosticsCanonical.StartsWith($prefix, [StringComparison]::OrdinalIgnoreCase)) { return $false }
+        $relativeDiagnostics = $diagnosticsCanonical.Substring($canonicalStateRoot.Length).TrimStart("\")
+        $diagnostics = [IO.Path]::GetFullPath((Join-Path $ioStateRoot $relativeDiagnostics))
+        if (-not (Test-PhysicalPathMatches -Path $diagnostics -ExpectedPhysicalPath $diagnosticsCanonical) -or
             -not (Test-Path -LiteralPath $diagnostics -PathType Container)) { return $false }
-        if (-not (Test-PhysicalPathIdentity -Path $diagnostics)) { return $false }
         $diagnosticsItem = Get-Item -LiteralPath $diagnostics -Force
         if (($diagnosticsItem.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) { return $false }
         $resultPath = Join-Path $diagnostics "smoke-result.json"
@@ -1184,6 +1258,7 @@ function Test-ExistingReceipt {
         [Parameter(Mandatory = $true)][string]$SelectedArchitecture,
         [Parameter(Mandatory = $true)][string]$RequestedInstallRoot,
         [Parameter(Mandatory = $true)][string]$RequestedStateRoot,
+        [Parameter(Mandatory = $true)][string]$StateRootIoPath,
         [Parameter(Mandatory = $true)]$Companion
     )
 
@@ -1194,7 +1269,9 @@ function Test-ExistingReceipt {
         $receipt = Get-Content -LiteralPath $Path -Raw -Encoding UTF8 | ConvertFrom-Json
         $expectedSkill = [IO.Path]::GetFullPath((Join-Path $RequestedInstallRoot $script:SkillName))
         $actualSkill = [IO.Path]::GetFullPath([string]$receipt.skill_path)
-        $runtime = [IO.Path]::GetFullPath([string]$receipt.runtime_path)
+        $runtimeCanonical = [IO.Path]::GetFullPath([string]$receipt.runtime_path)
+        $canonicalStateRoot = [IO.Path]::GetFullPath($RequestedStateRoot).TrimEnd("\")
+        $ioStateRoot = [IO.Path]::GetFullPath($StateRootIoPath).TrimEnd("\")
         $runtimePrefix = [IO.Path]::GetFullPath((Join-Path $RequestedStateRoot "runtime\$script:SkillName")).TrimEnd("\") + "\"
         if ($receipt.schema_version -ne 1 -or
             $receipt.bundle_version -cne $script:BundleVersion -or
@@ -1202,14 +1279,16 @@ function Test-ExistingReceipt {
             $receipt.archive_sha256 -cne [string]$Companion.archive.sha256 -or
             $receipt.payload_manifest_sha256 -cne [string]$Companion.payload_manifest.sha256 -or
             $actualSkill -cne $expectedSkill -or
-            -not $runtime.StartsWith($runtimePrefix, [StringComparison]::OrdinalIgnoreCase) -or
-            -not (Test-Path -LiteralPath $runtime -PathType Container)) {
+            -not $runtimeCanonical.StartsWith($runtimePrefix, [StringComparison]::OrdinalIgnoreCase)) {
             return $false
         }
-        if (-not (Test-PhysicalPathIdentity -Path $runtime) -or
+        $relativeRuntime = $runtimeCanonical.Substring($canonicalStateRoot.Length).TrimStart("\")
+        $runtime = [IO.Path]::GetFullPath((Join-Path $ioStateRoot $relativeRuntime))
+        if (-not (Test-Path -LiteralPath $runtime -PathType Container) -or
+            -not (Test-PhysicalPathMatches -Path $runtime -ExpectedPhysicalPath $runtimeCanonical) -or
             -not (Test-PhysicalPathIdentity -Path $actualSkill)) { return $false }
         if (-not (Test-ExistingSmokeDiagnostics -Receipt $receipt -SelectedArchitecture $SelectedArchitecture `
-            -RequestedStateRoot $RequestedStateRoot)) { return $false }
+            -RequestedStateRoot $RequestedStateRoot -StateRootIoPath $StateRootIoPath)) { return $false }
         Assert-PayloadManifest -BundleRoot $runtime -Companion $Companion -SelectedArchitecture $SelectedArchitecture | Out-Null
         return (Test-DirectoryInventoryMatches `
             -ExpectedRoot (Join-Path $runtime "skill\$script:SkillName") `
@@ -1243,9 +1322,11 @@ function Install-VerifiedBundleAtomically {
     param(
         [Parameter(Mandatory = $true)][string]$StagedRuntime,
         [Parameter(Mandatory = $true)][string]$RuntimeParent,
+        [Parameter(Mandatory = $true)][string]$RecordedRuntimeParent,
         [Parameter(Mandatory = $true)][string]$SkillTarget,
         [Parameter(Mandatory = $true)][string]$ReceiptPath,
         [Parameter(Mandatory = $true)][string]$DiagnosticsRoot,
+        [Parameter(Mandatory = $true)][string]$RecordedDiagnosticsRoot,
         [Parameter(Mandatory = $true)]$Companion,
         [Parameter(Mandatory = $true)][string]$SelectedArchitecture,
         [string]$FailurePoint,
@@ -1254,7 +1335,9 @@ function Install-VerifiedBundleAtomically {
 
     $identifier = [Guid]::NewGuid().ToString("N")
     $archiveMarker = ([string]$Companion.archive.sha256).Substring(0, 12)
-    $runtimeTarget = Join-Path $RuntimeParent ("$script:BundleVersion-$archiveMarker-$identifier")
+    $runtimeLeaf = "$script:BundleVersion-$archiveMarker-$identifier"
+    $runtimeTarget = Join-Path $RuntimeParent $runtimeLeaf
+    $recordedRuntimeTarget = Join-Path $RecordedRuntimeParent $runtimeLeaf
     $skillParent = Split-Path -Parent $SkillTarget
     $skillCandidate = Join-Path $skillParent (".stage-skill-$identifier")
     $skillBackup = Join-Path $skillParent (".retained-$script:SkillName-$identifier")
@@ -1271,6 +1354,9 @@ function Install-VerifiedBundleAtomically {
     try {
         Move-Item -LiteralPath $StagedRuntime -Destination $runtimeTarget
         $runtimeActivated = $true
+        if (-not (Test-PhysicalPathMatches -Path $runtimeTarget -ExpectedPhysicalPath $recordedRuntimeTarget)) {
+            throw "激活后的运行时物理路径与请求状态目录不一致。"
+        }
         Invoke-ActivationFailure -Point "AfterRuntime" -ConfiguredPoint $FailurePoint -AllowLocal:$AllowLocal
 
         if (-not $reuseSkill) {
@@ -1292,9 +1378,9 @@ function Install-VerifiedBundleAtomically {
             installed_at_utc = [DateTime]::UtcNow.ToString("o")
             archive_sha256 = [string]$Companion.archive.sha256
             payload_manifest_sha256 = [string]$Companion.payload_manifest.sha256
-            runtime_path = $runtimeTarget
+            runtime_path = $recordedRuntimeTarget
             skill_path = $SkillTarget
-            diagnostics_path = $DiagnosticsRoot
+            diagnostics_path = $RecordedDiagnosticsRoot
         }
         Write-AtomicReceipt -Path $ReceiptPath -Receipt $receipt -InjectFailure:($FailurePoint -ceq "ReceiptWrite")
         $receiptCommitted = $true
@@ -1360,6 +1446,7 @@ function Invoke-CompleteExecutionInstaller {
     $installRootFull = [IO.Path]::GetFullPath($InstallRootPath)
     $stateRootFull = [IO.Path]::GetFullPath($StateRootPath)
     $lock = $null
+    $stateAlias = $null
     $stagedRuntime = $null
     try {
         $lock = Enter-InstallerLock -InstallRoot $installRootFull -SkillName $script:SkillName
@@ -1375,10 +1462,15 @@ function Invoke-CompleteExecutionInstaller {
 
         $requiredBytes = [long]$manifest.archive.size_bytes * 2 + [long]$manifest.installed_size_bytes * 2 + $SpaceMargin
         Assert-Preflight -InstallRootPath $installRootFull -StateRootPath $stateRootFull -RequiredBytes $requiredBytes -AvailableBytesOverride $AvailableBytesOverride
-        $receiptPath = Join-Path $stateRootFull "installations\web-api-test-execution-evidence.json"
+        $stateAlias = New-TemporaryStatePathAlias -StateRootPath $stateRootFull
+        $stateRootIo = [string]$stateAlias.Root
+        $receiptPath = Join-Path $stateRootIo "installations\web-api-test-execution-evidence.json"
         if (-not $RepairInstall -and -not $ForceInstall -and (Test-ExistingReceipt `
             -Path $receiptPath -SelectedArchitecture $SelectedArchitecture `
-            -RequestedInstallRoot $installRootFull -RequestedStateRoot $stateRootFull -Companion $manifest)) {
+            -RequestedInstallRoot $installRootFull -RequestedStateRoot $stateRootFull `
+            -StateRootIoPath $stateRootIo -Companion $manifest)) {
+            Remove-TemporaryStatePathAlias -Alias $stateAlias
+            $stateAlias = $null
             Write-InstallerSuccess
             return
         }
@@ -1386,13 +1478,14 @@ function Invoke-CompleteExecutionInstaller {
             throw "现有安装不完整或损坏，请使用 -Repair。"
         }
 
-        $cacheRoot = Join-Path $stateRootFull "downloads\$script:SkillName\$script:BundleVersion\$SelectedArchitecture"
+        $cacheRoot = Join-Path $stateRootIo "downloads\$script:SkillName\$script:BundleVersion\$SelectedArchitecture"
         $partialPath = Join-Path $cacheRoot ($manifest.archive.file_name + ".part")
         Receive-VerifiedArtifact -Uri $manifest.archive.download_url -Destination $partialPath `
             -ExpectedSize ([long]$manifest.archive.size_bytes) -ExpectedSha256 ([string]$manifest.archive.sha256) `
             -ArtifactName ([string]$manifest.archive.file_name) -Retries $Retries -RetryDelay $RetryDelay -AllowLocal:$AllowLocal | Out-Null
 
-        $runtimeParent = Join-Path $stateRootFull "runtime\$script:SkillName"
+        $runtimeParent = Join-Path $stateRootIo "runtime\$script:SkillName"
+        $recordedRuntimeParent = Join-Path $stateRootFull "runtime\$script:SkillName"
         New-Item -ItemType Directory -Path $runtimeParent -Force | Out-Null
         $stagedRuntime = Join-Path $runtimeParent (".stage-" + [Guid]::NewGuid().ToString("N"))
         if ([IO.Path]::GetPathRoot($stagedRuntime) -cne [IO.Path]::GetPathRoot($runtimeParent)) {
@@ -1402,23 +1495,39 @@ function Invoke-CompleteExecutionInstaller {
         Expand-ValidatedZip -ArchivePath $partialPath -DestinationRoot $stagedRuntime -ExpectedExpandedBytes ([long]$manifest.installed_size_bytes)
         Assert-PayloadManifest -BundleRoot $stagedRuntime -Companion $manifest -SelectedArchitecture $SelectedArchitecture | Out-Null
 
-        $diagnosticsRoot = Join-Path $stateRootFull ("diagnostics\$script:SkillName\$script:BundleVersion-" + [DateTime]::UtcNow.ToString("yyyyMMddTHHmmssfffZ"))
+        $diagnosticsLeaf = "$script:BundleVersion-" + [DateTime]::UtcNow.ToString("yyyyMMddTHHmmssfffZ")
+        $diagnosticsRoot = Join-Path $stateRootIo ("diagnostics\$script:SkillName\" + $diagnosticsLeaf)
+        $recordedDiagnosticsRoot = Join-Path $stateRootFull ("diagnostics\$script:SkillName\" + $diagnosticsLeaf)
         Invoke-InstallationSmoke -BundleRoot $stagedRuntime -DiagnosticsRoot $diagnosticsRoot -FixtureScript $FixtureSmokeScript -AllowLocal:$AllowLocal
 
         $skillTarget = Join-Path $installRootFull $script:SkillName
         Install-VerifiedBundleAtomically -StagedRuntime $stagedRuntime -RuntimeParent $runtimeParent `
-            -SkillTarget $skillTarget -ReceiptPath $receiptPath -DiagnosticsRoot $diagnosticsRoot `
+            -RecordedRuntimeParent $recordedRuntimeParent -SkillTarget $skillTarget `
+            -ReceiptPath $receiptPath -DiagnosticsRoot $diagnosticsRoot -RecordedDiagnosticsRoot $recordedDiagnosticsRoot `
             -Companion $manifest -SelectedArchitecture $SelectedArchitecture -FailurePoint $FailurePoint -AllowLocal:$AllowLocal
         $stagedRuntime = $null
+        Remove-TemporaryStatePathAlias -Alias $stateAlias
+        $stateAlias = $null
         Write-InstallerSuccess
     }
     finally {
-        if ($stagedRuntime -and (Test-Path -LiteralPath $stagedRuntime)) {
-            Remove-Item -LiteralPath $stagedRuntime -Recurse -Force -ErrorAction SilentlyContinue
+        try {
+            if ($stagedRuntime -and (Test-Path -LiteralPath $stagedRuntime)) {
+                Remove-Item -LiteralPath $stagedRuntime -Recurse -Force -ErrorAction SilentlyContinue
+            }
         }
-        if ($lock) {
-            $lock.ReleaseMutex()
-            $lock.Dispose()
+        finally {
+            try {
+                if ($stateAlias) {
+                    Remove-TemporaryStatePathAlias -Alias $stateAlias
+                }
+            }
+            finally {
+                if ($lock) {
+                    $lock.ReleaseMutex()
+                    $lock.Dispose()
+                }
+            }
         }
     }
 }

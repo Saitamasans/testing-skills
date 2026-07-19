@@ -5,8 +5,8 @@ import os from "node:os";
 import path from "node:path";
 
 const SKILL = "web-api-test-execution-evidence";
-const BUNDLE_VERSION = "1.0.0";
-const RELEASE_TAG = "web-api-test-execution-evidence-v1.0.0";
+const BUNDLE_VERSION = "1.0.1";
+const RELEASE_TAG = "web-api-test-execution-evidence-v1.0.1";
 const PASS_STATUS = "\u901a\u8fc7";
 const RUN_ID = "run-bundle-smoke";
 const CASE_ID = "BUNDLE-SMOKE-001";

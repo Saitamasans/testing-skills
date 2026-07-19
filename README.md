@@ -17,7 +17,7 @@
 | 正式服验证<br>`production-verification-test` | 为上线后、灰度或生产环境设计低影响验证和安全门禁。 | [![Install](https://img.shields.io/badge/Install-2ea44f)](https://github.com/Saitamasans/testing-skills/releases/download/skill-installers-v1/install-production-verification-test.cmd) |
 | 用例质量审计<br>`test-case-quality-audit` | 审计已有用例的可执行性、需求一致性、遗漏风险和冗余。 | [![Install](https://img.shields.io/badge/Install-2ea44f)](https://github.com/Saitamasans/testing-skills/releases/download/skill-installers-v1/install-test-case-quality-audit.cmd) |
 | 需求澄清<br>`requirement-clarification-test` | 在写用例前找出需求缺口并判断是否具备开测条件。 | [![Install](https://img.shields.io/badge/Install-2ea44f)](https://github.com/Saitamasans/testing-skills/releases/download/skill-installers-v1/install-requirement-clarification-test.cmd) |
-| 自动执行与证据回填<br>`web-api-test-execution-evidence` | 自动执行已有 Web/API 正式用例并回填 Excel、HTML 和证据。 | [![Install](https://img.shields.io/badge/Install-2ea44f)](https://github.com/Saitamasans/testing-skills/releases/download/web-api-test-execution-evidence-v1.0.0/install-web-api-test-execution-evidence.cmd) |
+| 自动执行与证据回填<br>`web-api-test-execution-evidence` | 自动执行已有 Web/API 正式用例并回填 Excel、HTML 和证据。 | [![Install](https://img.shields.io/badge/Install-2ea44f)](https://github.com/Saitamasans/testing-skills/releases/download/web-api-test-execution-evidence-v1.0.1/install-web-api-test-execution-evidence.cmd) |
 
 选择时以当前交付目标为准：一个任务只选择一个主 Skill，最多建议一个辅助 Skill；调用辅助 Skill 前先说明分工并等待确认，最终只生成一套结果。
 
@@ -39,15 +39,15 @@
 
 ### Windows x64 三步使用
 
-1. 下载并双击 [install-web-api-test-execution-evidence.cmd](https://github.com/Saitamasans/testing-skills/releases/download/web-api-test-execution-evidence-v1.0.0/install-web-api-test-execution-evidence.cmd)。安装阶段会下载一次完整 Runtime，并校验 SHA-256、清单和本地 smoke；无需管理员权限或系统 Node、npm、Git、Chrome。
+1. 下载并双击 [install-web-api-test-execution-evidence.cmd](https://github.com/Saitamasans/testing-skills/releases/download/web-api-test-execution-evidence-v1.0.1/install-web-api-test-execution-evidence.cmd)。安装阶段会下载一次完整 Runtime，并校验 SHA-256、清单和本地 smoke；无需管理员权限或系统 Node、npm、Git、Chrome。
 2. 安装完成后重启 Codex。
 3. 上传十列 Excel 测试用例并输入：`调用第八个 Skill 执行`。
 
-正常执行阶段不会下载 Node、Runner、Playwright 或 Chromium，也不会访问 GitHub Release、npm 或浏览器下载源获取运行依赖。完整离线/审计包可下载 [web-api-test-execution-evidence-1.0.0-windows-x64.zip](https://github.com/Saitamasans/testing-skills/releases/download/web-api-test-execution-evidence-v1.0.0/web-api-test-execution-evidence-1.0.0-windows-x64.zip)，公开校验值见 [SHA256SUMS.txt](https://github.com/Saitamasans/testing-skills/releases/download/web-api-test-execution-evidence-v1.0.0/SHA256SUMS.txt)。
+正常执行阶段不会下载 Node、Runner、Playwright 或 Chromium，也不会访问 GitHub Release、npm 或浏览器下载源获取运行依赖。完整离线/审计包可下载 [web-api-test-execution-evidence-1.0.1-windows-x64.zip](https://github.com/Saitamasans/testing-skills/releases/download/web-api-test-execution-evidence-v1.0.1/web-api-test-execution-evidence-1.0.1-windows-x64.zip)，公开校验值见 [SHA256SUMS.txt](https://github.com/Saitamasans/testing-skills/releases/download/web-api-test-execution-evidence-v1.0.1/SHA256SUMS.txt)。
 
 安装损坏时，下载同一 Release 中的 `install-web-api-test-execution-evidence.ps1`，在其所在目录运行 `powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\install-web-api-test-execution-evidence.ps1 -Repair`。默认 receipt 位于 `%USERPROFILE%\.testing-skills\installations\web-api-test-execution-evidence.json`，诊断目录位于 `%USERPROFILE%\.testing-skills\diagnostics\web-api-test-execution-evidence`。
 
-点击按钮会下载纯文本 `.cmd` 启动器；下载后双击并完成 Windows 安全确认即可安装。GitHub 不能静默执行访问者电脑上的程序，也不会绕过浏览器或 Windows 的确认步骤。前 7 个和全部安装按钮从固定的 `skill-installers-v1` Release 提供；第 8 个执行就绪按钮只从不可变的 `web-api-test-execution-evidence-v1.0.0` Release 提供。Release 资产发布后按钮才生效；如果下载返回 404，请使用下面的命令兜底。
+点击按钮会下载纯文本 `.cmd` 启动器；下载后双击并完成 Windows 安全确认即可安装。GitHub 不能静默执行访问者电脑上的程序，也不会绕过浏览器或 Windows 的确认步骤。前 7 个和全部安装按钮从固定的 `skill-installers-v1` Release 提供；第 8 个执行就绪按钮只从不可变的 `web-api-test-execution-evidence-v1.0.1` Release 提供。Release 资产发布后按钮才生效；如果下载返回 404，请使用下面的命令兜底。
 
 `.cmd` 可以先在 GitHub 查看，或下载后右键用文本编辑器检查。Windows 可能显示“来自互联网”或 SmartScreen 提示，这是正常安全机制。启动器只读取本仓库的 HTTPS 安装脚本，默认写入当前用户的 `.agents\skills`，不写系统目录。
 
@@ -58,7 +58,7 @@
 安装全部 8 个 Skill：
 
 ```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "$url='https://github.com/Saitamasans/testing-skills/releases/download/web-api-test-execution-evidence-v1.0.0/install-all.cmd'; $installer=Join-Path ([IO.Path]::GetTempPath()) ('testing-skills-'+[guid]::NewGuid().ToString('N')+'.cmd'); $exitCode=1; try { Invoke-WebRequest -UseBasicParsing -Uri $url -OutFile $installer; $env:TESTING_SKILLS_NO_PAUSE='1'; & $env:ComSpec /d /c ('call '+[char]34+$installer+[char]34); $exitCode=$LASTEXITCODE } finally { Remove-Item -LiteralPath $installer -Force -ErrorAction SilentlyContinue }; exit $exitCode"
+powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "$url='https://github.com/Saitamasans/testing-skills/releases/download/web-api-test-execution-evidence-v1.0.1/install-all.cmd'; $installer=Join-Path ([IO.Path]::GetTempPath()) ('testing-skills-'+[guid]::NewGuid().ToString('N')+'.cmd'); $exitCode=1; try { Invoke-WebRequest -UseBasicParsing -Uri $url -OutFile $installer; $env:TESTING_SKILLS_NO_PAUSE='1'; & $env:ComSpec /d /c ('call '+[char]34+$installer+[char]34); $exitCode=$LASTEXITCODE } finally { Remove-Item -LiteralPath $installer -Force -ErrorAction SilentlyContinue }; exit $exitCode"
 ```
 
 只安装“需求测试工作台”：
@@ -70,7 +70,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "& ([scriptblock]::Cr
 把命令末尾的名称换成总览中的 Package 即可安装前 7 个单个 Skill。`web-api-test-execution-evidence` 需要其专用 GitHub Release 完整安装器，通用安装器不提供执行所需的 Node、Runner 或 Chromium。
 
 ```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "$url='https://github.com/Saitamasans/testing-skills/releases/download/web-api-test-execution-evidence-v1.0.0/install-web-api-test-execution-evidence.cmd'; $installer=Join-Path ([IO.Path]::GetTempPath()) ('testing-skills-'+[guid]::NewGuid().ToString('N')+'.cmd'); $exitCode=1; try { Invoke-WebRequest -UseBasicParsing -Uri $url -OutFile $installer; $env:TESTING_SKILLS_NO_PAUSE='1'; & $env:ComSpec /d /c ('call '+[char]34+$installer+[char]34); $exitCode=$LASTEXITCODE } finally { Remove-Item -LiteralPath $installer -Force -ErrorAction SilentlyContinue }; exit $exitCode"
+powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "$url='https://github.com/Saitamasans/testing-skills/releases/download/web-api-test-execution-evidence-v1.0.1/install-web-api-test-execution-evidence.cmd'; $installer=Join-Path ([IO.Path]::GetTempPath()) ('testing-skills-'+[guid]::NewGuid().ToString('N')+'.cmd'); $exitCode=1; try { Invoke-WebRequest -UseBasicParsing -Uri $url -OutFile $installer; $env:TESTING_SKILLS_NO_PAUSE='1'; & $env:ComSpec /d /c ('call '+[char]34+$installer+[char]34); $exitCode=$LASTEXITCODE } finally { Remove-Item -LiteralPath $installer -Force -ErrorAction SilentlyContinue }; exit $exitCode"
 ```
 
 默认安装到当前用户的 `.agents\skills`。目标 Skill 已存在时会保留原文件并提示跳过；确认需要替换时，在命令末尾增加 `-Force`。从仓库的 Source ZIP 或 npx 安装第 8 个 Skill 仅供开发者检查和修改源代码，不能执行 Web/API 自动化测试。

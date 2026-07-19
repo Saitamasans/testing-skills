@@ -186,7 +186,7 @@ class WindowsCmdLauncherStaticTest(unittest.TestCase):
     def test_eighth_launcher_anchors_versioned_installer_url_and_sha256(self):
         launcher = (INSTALLERS / "install-web-api-test-execution-evidence.cmd").read_text(encoding="utf-8")
         self.assertIn(
-            "/releases/download/web-api-test-execution-evidence-v1.0.0/"
+            "/releases/download/web-api-test-execution-evidence-v1.0.1/"
             "install-web-api-test-execution-evidence.ps1",
             launcher,
         )
@@ -194,6 +194,10 @@ class WindowsCmdLauncherStaticTest(unittest.TestCase):
         self.assertIn("Get-FileHash", launcher)
         self.assertNotIn("TESTING_SKILLS_INSTALLER_SCRIPT", launcher)
         self.assertNotIn("/main/scripts/install.ps1", launcher)
+        self.assertIn(
+            "installer_sha256=670759ec9dcd75016d1a755ae77e3127e9f0dbe5bcb4f5810f51364b35360083",
+            launcher.lower(),
+        )
 
     def test_complete_launchers_configure_tls_and_proxy_before_network(self):
         for name in (
@@ -212,11 +216,19 @@ class WindowsCmdLauncherStaticTest(unittest.TestCase):
         launcher = (INSTALLERS / "install-all.cmd").read_text(encoding="utf-8")
         self.assertIn('set "INSTALL_SELECTOR=-All"', launcher)
         self.assertNotIn("TESTING_SKILLS_INSTALLER_SCRIPT", launcher)
-        self.assertIn("web-api-test-execution-evidence-v1.0.0/scripts/install.ps1", launcher)
+        self.assertIn("web-api-test-execution-evidence-v1.0.1/scripts/install.ps1", launcher)
         self.assertIn("install-web-api-test-execution-evidence.ps1", launcher)
         self.assertGreaterEqual(len(re.findall(r"(?i)SHA256=[a-f0-9]{64}", launcher)), 2)
         self.assertGreaterEqual(launcher.count("Get-FileHash"), 2)
         self.assertNotIn("/main/scripts/install.ps1", launcher)
+        self.assertIn(
+            "GENERIC_INSTALLER_SHA256=5a3b9726f771edcbed8c402c2b8eaa46dbef1972661e144f6ff10a16af99f8e7",
+            launcher,
+        )
+        self.assertIn(
+            "COMPLETE_INSTALLER_SHA256=670759ec9dcd75016d1a755ae77e3127e9f0dbe5bcb4f5810f51364b35360083",
+            launcher,
+        )
 
 
 if __name__ == "__main__":

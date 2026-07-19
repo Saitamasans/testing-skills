@@ -14,7 +14,7 @@ RELEASE_BASE = (
 )
 RUNTIME_RELEASE_BASE = (
     "https://github.com/Saitamasans/testing-skills/releases/download/"
-    "web-api-test-execution-evidence-v1.0.0/"
+    "web-api-test-execution-evidence-v1.0.1/"
 )
 RAW_INSTALLER = (
     "https://raw.githubusercontent.com/Saitamasans/testing-skills/"
@@ -70,7 +70,7 @@ class GitHubInstallLauncherTest(unittest.TestCase):
         if immutable:
             self.assertNotIn("TESTING_SKILLS_INSTALLER_SCRIPT", text)
             self.assertNotIn(RAW_INSTALLER, text)
-            self.assertIn("web-api-test-execution-evidence-v1.0.0", text)
+            self.assertIn("web-api-test-execution-evidence-v1.0.1", text)
             self.assertIn("Get-FileHash", text)
             self.assertRegex(text, r"(?i)SHA256=[a-f0-9]{64}")
         else:
@@ -310,7 +310,7 @@ class GitHubInstallerReleaseWorkflowTest(unittest.TestCase):
             "gh release upload skill-installers-v1",
             "--clobber",
             "GH_TOKEN: ${{ github.token }}",
-            "web-api-test-execution-evidence-v1.0.0",
+            "web-api-test-execution-evidence-v1.0.1",
             "gh release download",
             "install-all.cmd",
             "SHA256SUMS.txt",
@@ -340,7 +340,7 @@ class GitHubInstallerReleaseWorkflowTest(unittest.TestCase):
         for phrase in [
             "Windows x64 三步使用",
             "install-web-api-test-execution-evidence.cmd",
-            "web-api-test-execution-evidence-1.0.0-windows-x64.zip",
+            "web-api-test-execution-evidence-1.0.1-windows-x64.zip",
             "SHA256SUMS.txt",
             "调用第八个 Skill 执行",
             "-Repair",

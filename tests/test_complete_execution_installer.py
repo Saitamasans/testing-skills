@@ -44,7 +44,8 @@ class Fixture:
 
 
 def build_fixture(*, arch="x64", unsafe_entry=None, duplicate_case=False,
-                  installed_size_adjustment=0, content_marker="v1"):
+                  installed_size_adjustment=0, content_marker="v1",
+                  include_real_chromium_long_path=False):
     files = {
         "node/node.exe": b"fixture-node",
         "runner/dist/cli.js": b"fixture-runner",
@@ -59,12 +60,18 @@ def build_fixture(*, arch="x64", unsafe_entry=None, duplicate_case=False,
         "chrome-headless-shell-win64/chrome-headless-shell.exe": b"headless",
         "browser-cache/ffmpeg-1011/ffmpeg-win64.exe": b"ffmpeg",
     }
+    if include_real_chromium_long_path:
+        files[
+            "browser-cache/chromium_headless_shell-1228/"
+            "chrome-headless-shell-win64/PrivacySandboxAttestationsPreloaded/"
+            "privacy-sandbox-attestations.dat"
+        ] = b"privacy-sandbox-attestations"
     payload = {
         "schema_version": 1,
         "bundle": {
             "name": SKILL,
-            "version": "1.0.0",
-            "release_tag": "web-api-test-execution-evidence-v1.0.0",
+            "version": "1.0.1",
+            "release_tag": "web-api-test-execution-evidence-v1.0.1",
             "os": "windows",
             "arch": arch,
         },
@@ -103,7 +110,7 @@ def build_fixture(*, arch="x64", unsafe_entry=None, duplicate_case=False,
                     bundle.writestr("NODE/node.exe", b"duplicate")
         archive_file.seek(0)
         archive = archive_file.read()
-    archive_name = f"{SKILL}-1.0.0-windows-{arch}.zip"
+    archive_name = f"{SKILL}-1.0.1-windows-{arch}.zip"
     companion = {
         "schema_version": 1,
         "bundle": payload["bundle"],
@@ -337,7 +344,7 @@ class CompleteInstallerTest(unittest.TestCase):
         return self.state_root / "installations" / f"{SKILL}.json"
 
     def cache_paths(self, fixture):
-        parent = self.state_root / "downloads" / SKILL / "1.0.0" / "x64"
+        parent = self.state_root / "downloads" / SKILL / "1.0.1" / "x64"
         return parent / (fixture.archive_name + ".part"), parent / (
             fixture.archive_name + ".part.meta.json"
         )
@@ -672,6 +679,45 @@ class CompleteInstallerTest(unittest.TestCase):
             result = self.run_installer(server)
         self.assertNotEqual(0, result.returncode, self.output(result))
         self.assertIn("路径过长", self.output(result))
+
+    def test_real_runtime_long_path_installs_through_temporary_short_alias(self):
+        fixture = build_fixture(include_real_chromium_long_path=True)
+        with FixtureServer(fixture) as server:
+            result = self.run_installer(server)
+
+        output = self.output(result)
+        self.assertEqual(0, result.returncode, output)
+        self.assertIn("当前阶段=启用临时短路径", output)
+        self.assertIn("当前阶段=清理临时短路径", output)
+        mapping = re.search(r"映射=([A-Z]:\\)", output)
+        self.assertIsNotNone(mapping, output)
+        self.assertFalse(Path(mapping.group(1)).exists(), output)
+        receipt = json.loads(self.receipt_path().read_text(encoding="utf-8-sig"))
+        runtime = Path(receipt["runtime_path"])
+        runtime_real = os.path.normcase(os.path.realpath(runtime))
+        state_root_real = os.path.normcase(os.path.realpath(self.state_root))
+        self.assertEqual(
+            state_root_real,
+            os.path.commonpath([runtime_real, state_root_real]),
+            f"runtime={runtime_real} state_root={state_root_real}",
+        )
+        self.assertTrue(
+            (
+                runtime
+                / "browser-cache"
+                / "chromium_headless_shell-1228"
+                / "chrome-headless-shell-win64"
+                / "PrivacySandboxAttestationsPreloaded"
+                / "privacy-sandbox-attestations.dat"
+            ).is_file()
+        )
+
+        with FixtureServer(fixture) as server:
+            repeated = self.run_installer(server)
+        repeated_output = self.output(repeated)
+        self.assertEqual(0, repeated.returncode, repeated_output)
+        self.assertEqual(1, repeated_output.count(SUCCESS), repeated_output)
+        self.assertIn("当前阶段=清理临时短路径", repeated_output)
 
     def test_activation_failure_removes_staging_and_preserves_previous_install(self):
         first_fixture = build_fixture(content_marker="old")

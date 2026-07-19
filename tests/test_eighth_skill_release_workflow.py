@@ -13,8 +13,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 NODE = os.environ.get("TESTING_NODE") or shutil.which("node")
 RENDERER = ROOT / "packages/testing-runner/scripts/render-windows-installers.mjs"
-TAG = "web-api-test-execution-evidence-v1.0.0"
-VERSION = "1.0.0"
+TAG = "web-api-test-execution-evidence-v1.0.1"
+VERSION = "1.0.1"
 
 
 def sha256(path):
@@ -403,8 +403,8 @@ class EighthSkillReleaseWorkflowContractTest(unittest.TestCase):
 
     def test_release_contract_has_exact_assets_and_placeholder_gate(self):
         for name in [
-            "web-api-test-execution-evidence-1.0.0-windows-x64.zip",
-            "web-api-test-execution-evidence-1.0.0-windows-x64.manifest.json",
+            "web-api-test-execution-evidence-1.0.1-windows-x64.zip",
+            "web-api-test-execution-evidence-1.0.1-windows-x64.manifest.json",
             "install-web-api-test-execution-evidence.ps1",
             "install-web-api-test-execution-evidence.cmd",
             "install.ps1",
@@ -414,8 +414,8 @@ class EighthSkillReleaseWorkflowContractTest(unittest.TestCase):
             with self.subTest(name=name):
                 self.assertIn(name, self.release)
         for name in [
-            "web-api-test-execution-evidence-1.0.0-windows-arm64.zip",
-            "web-api-test-execution-evidence-1.0.0-windows-arm64.manifest.json",
+            "web-api-test-execution-evidence-1.0.1-windows-arm64.zip",
+            "web-api-test-execution-evidence-1.0.1-windows-arm64.manifest.json",
         ]:
             with self.subTest(excluded=name):
                 assemble = re.search(
@@ -582,6 +582,15 @@ class EighthSkillReleaseWorkflowContractTest(unittest.TestCase):
             with self.subTest(phrase=phrase):
                 self.assertIn(phrase, workflow)
         self.assertNotIn("contents: write", workflow)
+
+    def test_windows_x64_pr_ci_executes_the_real_runtime_long_path_installer_fixture(self):
+        workflow = (ROOT / ".github/workflows/validate-runner-windows-release.yml").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn(
+            "CompleteInstallerTest.test_real_runtime_long_path_installs_through_temporary_short_alias",
+            workflow,
+        )
         self.assertNotIn("gh release", workflow)
         release_docs = "\n".join(
             path.read_text(encoding="utf-8")
@@ -678,9 +687,10 @@ class EighthSkillReleaseWorkflowContractTest(unittest.TestCase):
 
     def test_runtime_public_release_recovery_is_explicit_and_read_only(self):
         self.assertIn("public_release_id:", self.release)
-        self.assertIn('EXPECTED_PUBLIC_RELEASE_ID: "356413719"', self.release)
         self.assertIn('RECOVERY_RELEASE_ID: ${{ inputs.public_release_id }}', self.release)
-        self.assertIn('"$RECOVERY_RELEASE_ID" != "$EXPECTED_PUBLIC_RELEASE_ID"', self.release)
+        self.assertNotIn("EXPECTED_PUBLIC_RELEASE_ID", self.release)
+        self.assertNotIn("356413719", self.release)
+        self.assertIn('[[ ! "$RECOVERY_RELEASE_ID" =~ ^[0-9]+$ ]]', self.release)
 
         create_draft = re.search(
             r"(?ms)^  create-draft:\n(.*?)(?=^  [a-z][a-z0-9-]+:\n)",
@@ -760,10 +770,10 @@ class EighthSkillReleaseWorkflowContractTest(unittest.TestCase):
         self.assertNotIn("windows-arm64", text)
 
     def test_mutable_installer_gate_uses_the_x64_p0_runtime_allowlist(self):
-        self.assertIn("web-api-test-execution-evidence-1.0.0-windows-x64.zip", self.publish_installers)
-        self.assertIn("web-api-test-execution-evidence-1.0.0-windows-x64.manifest.json", self.publish_installers)
-        self.assertNotIn("web-api-test-execution-evidence-1.0.0-windows-arm64.zip", self.publish_installers)
-        self.assertNotIn("web-api-test-execution-evidence-1.0.0-windows-arm64.manifest.json", self.publish_installers)
+        self.assertIn("web-api-test-execution-evidence-1.0.1-windows-x64.zip", self.publish_installers)
+        self.assertIn("web-api-test-execution-evidence-1.0.1-windows-x64.manifest.json", self.publish_installers)
+        self.assertNotIn("web-api-test-execution-evidence-1.0.1-windows-arm64.zip", self.publish_installers)
+        self.assertNotIn("web-api-test-execution-evidence-1.0.1-windows-arm64.manifest.json", self.publish_installers)
 
     def test_renderer_declares_its_zip_parser_dependency(self):
         package = json.loads((ROOT / "package.json").read_text(encoding="utf-8"))
