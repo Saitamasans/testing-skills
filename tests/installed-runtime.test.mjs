@@ -509,6 +509,29 @@ windowsRuntimeTest("PowerShell forwards direct argument arrays without CMD inter
   assert.deepEqual(JSON.parse(await readFile(argsOutput, "utf8")), args);
 });
 
+windowsRuntimeTest("PowerShell forwards Runner option names that prefix PowerShell common parameters", async () => {
+  const argsOutput = path.join(await mkdtemp(path.join(os.tmpdir(), "ps-common-args-")), "args.json");
+  const state = await installedFixture({
+    nodeContents: await readFile(process.execPath),
+    runnerContents: "require('node:fs').writeFileSync(process.env.TEST_ARGS_FILE, JSON.stringify(process.argv.slice(2)));\n",
+  });
+  const args = [
+    "approve",
+    "--manifest",
+    "run-manifest.json",
+    "--out",
+    "approval.json",
+    "--confirmed-by",
+    "reviewer",
+  ];
+  const result = await runPowerShell(path.join(sourceScripts, "testing-runner.ps1"), args, {
+    ...fixtureEnv(state), PATH: "", SystemRoot: process.env.SystemRoot, WINDIR: process.env.WINDIR,
+    TEST_ARGS_FILE: argsOutput,
+  });
+  assert.equal(result.code, 0, result.stderr);
+  assert.deepEqual(JSON.parse(await readFile(argsOutput, "utf8")), args);
+});
+
 windowsRuntimeTest("CMD reads normal Runner arguments only from the Base64 JSON environment contract", async () => {
   const argsOutput = path.join(await mkdtemp(path.join(os.tmpdir(), "cmd-b64-args-")), "args.json");
   const state = await installedFixture({

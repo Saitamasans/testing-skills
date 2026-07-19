@@ -1,11 +1,6 @@
-[CmdletBinding()]
-param(
-    [Parameter(ValueFromRemainingArguments = $true)]
-    [string[]]$RunnerArgs
-)
-
 $ErrorActionPreference = "Stop"
 $skillName = "web-api-test-execution-evidence"
+$RunnerArgs = @($args)
 
 function Throw-InstallationError {
     param([Parameter(Mandatory = $true)][string]$Code, [Parameter(Mandatory = $true)][string]$Message)
