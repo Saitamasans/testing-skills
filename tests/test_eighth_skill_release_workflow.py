@@ -351,7 +351,7 @@ class EighthSkillReleaseWorkflowContractTest(unittest.TestCase):
                 )
                 self.assertNotIn(name, assemble.group(1))
         self.assertIn("unresolved placeholder", self.release)
-        self.assertIn("github.sha", self.release)
+        self.assertIn("GITHUB_SHA", self.release)
         self.assertIn("target_commitish", self.release)
         self.assertIn("npm ci --ignore-scripts", self.release)
 
@@ -371,6 +371,26 @@ class EighthSkillReleaseWorkflowContractTest(unittest.TestCase):
         if fetch in text and ancestry in text:
             self.assertLess(text.index(fetch), text.index(ancestry))
             self.assertLess(text.index('commit="$(git rev-parse'), text.index(ancestry))
+
+    def test_runtime_dispatch_resolves_tag_without_matching_workflow_ref_sha(self):
+        validate = re.search(
+            r"(?ms)^  validate-tag:\n(.*?)(?=^  [a-z][a-z0-9-]+:\n)",
+            self.release,
+        )
+        self.assertIsNotNone(validate)
+        text = validate.group(1)
+        equality = 'if [[ "$GITHUB_EVENT_NAME" == "push" ]]; then test "$commit" = "$GITHUB_SHA"; fi'
+        self.assertIn(equality, text)
+        self.assertNotIn('test "$commit" = "${{ github.sha }}"', text)
+
+        self.assertIn("source_commit:", self.bundle)
+        self.assertIn("ref: ${{ inputs.source_commit }}", self.bundle)
+        for phrase in [
+            "source_commit: ${{ needs.validate-tag.outputs.commit }}",
+            "ref: ${{ needs.validate-tag.outputs.commit }}",
+        ]:
+            with self.subTest(phrase=phrase):
+                self.assertIn(phrase, self.release)
 
     def test_manual_release_workflows_fetch_the_reviewed_tag_before_resolving_it(self):
         for name, workflow in [

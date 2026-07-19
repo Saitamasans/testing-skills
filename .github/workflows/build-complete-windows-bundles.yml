@@ -9,6 +9,9 @@ on:
       architecture:
         required: true
         type: string
+      source_commit:
+        required: true
+        type: string
       non_blocking:
         required: false
         default: false
@@ -35,6 +38,7 @@ jobs:
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
+          ref: ${{ inputs.source_commit }}
           clean: true
 
       - name: Prove native Windows host prerequisites
