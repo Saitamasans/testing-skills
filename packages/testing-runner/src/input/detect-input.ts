@@ -27,6 +27,11 @@ export const ELEVEN_COLUMNS = [
   ...TEN_COLUMNS.slice(8),
 ] as const;
 
+export const COMPACT_COLUMNS = [
+  TEN_COLUMNS[0], TEN_COLUMNS[1], TEN_COLUMNS[2], TEN_COLUMNS[4],
+  TEN_COLUMNS[5], TEN_COLUMNS[6], TEN_COLUMNS[7], TEN_COLUMNS[8],
+] as const;
+
 const OLE_COMPOUND_FILE_SIGNATURE = Buffer.from("d0cf11e0a1b11ae1", "hex");
 const SUPPORTED_INPUT_MESSAGE =
   "仅支持符合 report.schema.json 的 JSON 报告或标准十列 .xlsx 工作簿";
@@ -101,7 +106,7 @@ function headerValues(sheet: ExcelJS.Worksheet): string[] {
 }
 
 export function isSupportedCaseColumns(headers: readonly string[]): boolean {
-  return [TEN_COLUMNS, ELEVEN_COLUMNS].some((expected) =>
+  return [COMPACT_COLUMNS, TEN_COLUMNS, ELEVEN_COLUMNS].some((expected) =>
     headers.length === expected.length &&
     headers.every((header, index) => header === expected[index]),
   );
@@ -181,3 +186,4 @@ export function worksheetCaseColumns(sheet: ExcelJS.Worksheet): string[] | undef
   const headers = headerValues(sheet);
   return isSupportedCaseColumns(headers) ? headers : undefined;
 }
+
