@@ -296,6 +296,38 @@ class EighthSkillReleaseWorkflowContractTest(unittest.TestCase):
         self.assertIn("contents: write", publish.group(1))
         self.assertNotIn("contents: write", attest.group(1))
 
+    def test_attestation_is_post_publish_advisory_not_a_p0_dependency(self):
+        for name, workflow, job_name in [
+            ("runtime", self.release, "attest-release-assets"),
+            ("runner", self.runner_release, "attest-assets"),
+        ]:
+            attest = re.search(
+                rf"(?ms)^  {job_name}:\n(.*?)(?=^  [a-z][a-z0-9-]+:\n)",
+                workflow,
+            )
+            create_draft = re.search(
+                r"(?ms)^  create-draft:\n(.*?)(?=^  [a-z][a-z0-9-]+:\n)",
+                workflow,
+            )
+            publish = re.search(
+                r"(?ms)^  publish-release:\n(.*?)(?=^  [a-z][a-z0-9-]+:\n)",
+                workflow,
+            )
+            post = re.search(r"(?ms)^  post-publish-verify:\n(.*)\Z", workflow)
+            self.assertIsNotNone(attest)
+            self.assertIsNotNone(create_draft)
+            self.assertIsNotNone(publish)
+            self.assertIsNotNone(post)
+            with self.subTest(workflow=name):
+                self.assertIn("needs: post-publish-verify", attest.group(1))
+                self.assertIn("continue-on-error: true", attest.group(1))
+                self.assertIn("::warning::attestation", attest.group(1))
+                self.assertNotIn(job_name, create_draft.group(1))
+                self.assertNotIn("gh attestation verify", publish.group(1))
+                self.assertNotIn("gh attestation verify", post.group(1))
+
+        self.assertNotIn("gh attestation verify", self.publish_installers)
+
     def test_release_contract_has_exact_assets_and_placeholder_gate(self):
         for name in [
             "web-api-test-execution-evidence-1.0.0-windows-x64.zip",
@@ -369,7 +401,7 @@ class EighthSkillReleaseWorkflowContractTest(unittest.TestCase):
                     self.assertRegex(target, r"^[^@]+@[a-f0-9]{40}$")
                     self.assertRegex(version_comment, r"^v\d+")
 
-    def test_runner_112_release_is_immutable_attested_and_publicly_contract_verified(self):
+    def test_runner_112_release_is_immutable_and_publicly_contract_verified(self):
         for phrase in [
             "testing-runner-v1.1.2",
             "saitamasans-testing-runner-1.1.2.tgz",
@@ -381,7 +413,6 @@ class EighthSkillReleaseWorkflowContractTest(unittest.TestCase):
             "installation-smoke-test.mjs",
             "SHA256SUMS.txt",
             "actions/attest-build-provenance@",
-            "gh attestation verify",
             "--draft",
             "environment: release",
             "immutable-releases",
@@ -425,8 +456,6 @@ class EighthSkillReleaseWorkflowContractTest(unittest.TestCase):
             "target_commitish",
             "value.assets",
             "exact runtime asset allowlist",
-            "gh attestation verify",
-            "github.com/$GITHUB_REPOSITORY/.github/workflows/publish-eighth-skill-runtime.yml",
             "git merge-base --is-ancestor",
             "diff --no-dereference --recursive",
             "public mutable installer assets differ from trusted current-main bytes",

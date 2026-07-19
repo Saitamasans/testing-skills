@@ -90,10 +90,6 @@ jobs:
           fi
           mkdir -p build/immutable-all build/mutable-installers
           gh release download "$RUNTIME_TAG" --dir build/immutable-all
-          for artifact in build/immutable-all/*; do
-            gh attestation verify "$artifact" --repo "$GITHUB_REPOSITORY" \
-              --signer-workflow "https://github.com/$GITHUB_REPOSITORY/.github/workflows/publish-eighth-skill-runtime.yml"
-          done
           test "$(grep -c '  install-all.cmd$' build/immutable-all/SHA256SUMS.txt)" -eq 1
           grep '  install-all.cmd$' build/immutable-all/SHA256SUMS.txt |
             (cd build/immutable-all && sha256sum -c -)

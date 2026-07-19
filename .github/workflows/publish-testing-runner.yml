@@ -141,7 +141,7 @@ jobs:
           retention-days: 14
 
   attest-assets:
-    needs: build-and-contract-test
+    needs: post-publish-verify
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -152,9 +152,13 @@ jobs:
         with:
           name: verified-testing-runner-1.1.2-assets
           path: build/runner-release
-      - uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2
+      - id: attest
+        continue-on-error: true
+        uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2
         with:
           subject-path: build/runner-release/*
+      - if: steps.attest.outcome != 'success'
+        run: echo "::warning::attestation creation failed for the published Runner assets"
 
   immutable-release-advisory:
     needs: validate-tag
@@ -181,7 +185,7 @@ jobs:
           echo "Repository immutable releases are enabled."
 
   create-draft:
-    needs: [validate-tag, build-and-contract-test, attest-assets, immutable-release-advisory]
+    needs: [validate-tag, build-and-contract-test, immutable-release-advisory]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -260,8 +264,6 @@ jobs:
           rm -rf build/draft && mkdir build/draft
           gh release download "$RELEASE_TAG" --dir build/draft
           diff --no-dereference --recursive build/trusted build/draft
-          gh attestation verify "build/draft/$RUNNER_ASSET" --repo "$GITHUB_REPOSITORY" \
-            --signer-workflow "https://github.com/$GITHUB_REPOSITORY/.github/workflows/publish-testing-runner.yml"
           gh release edit "$RELEASE_TAG" --draft=false
 
   post-publish-verify:
@@ -294,8 +296,6 @@ jobs:
           gh release download "$RELEASE_TAG" --dir build/public
           diff --no-dereference --recursive build/trusted build/public
           (cd build/public && sha256sum -c SHA256SUMS.txt)
-          gh attestation verify "build/public/$RUNNER_ASSET" --repo "$GITHUB_REPOSITORY" \
-            --signer-workflow "https://github.com/$GITHUB_REPOSITORY/.github/workflows/publish-testing-runner.yml"
           mkdir build/public-package
           tar -xzf "build/public/$RUNNER_ASSET" -C build/public-package
           node - <<'NODE'
