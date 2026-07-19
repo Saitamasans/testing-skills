@@ -15,8 +15,8 @@ test("Windows runtime lock pins the complete released runtime", async () => {
 
   assert.deepEqual(lock, {
     schema_version: 1,
-    bundle_version: "1.0.1",
-    release_tag: "web-api-test-execution-evidence-v1.0.1",
+    bundle_version: "1.0.2",
+    release_tag: "web-api-test-execution-evidence-v1.0.2",
     node: {
       version: "22.23.1",
       windows: {

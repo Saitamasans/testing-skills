@@ -11,7 +11,7 @@ import path from "node:path";
 const SHA256 = /^[a-f0-9]{64}$/;
 const ARCHITECTURES = new Set(["x64", "arm64"]);
 const EXPECTED = Object.freeze({
-  bundleVersion: "1.0.1",
+  bundleVersion: "1.0.2",
   nodeVersion: "22.23.1",
   runnerName: "@saitamasans/testing-runner",
   runnerVersion: "1.1.2",

@@ -1,11 +1,6 @@
-[CmdletBinding()]
-param(
-    [Parameter(ValueFromRemainingArguments = $true)]
-    [string[]]$RunnerArgs
-)
-
 $ErrorActionPreference = "Stop"
 $skillName = "web-api-test-execution-evidence"
+$RunnerArgs = @($args)
 
 function Throw-InstallationError {
     param([Parameter(Mandatory = $true)][string]$Code, [Parameter(Mandatory = $true)][string]$Message)
@@ -115,7 +110,7 @@ try {
     if (
         $receipt.schema_version -ne 1 -or
         $receipt.skill -cne $skillName -or
-        $receipt.bundle_version -cne "1.0.1" -or
+        $receipt.bundle_version -cne "1.0.2" -or
         [string]$receipt.payload_manifest_sha256 -cnotmatch "^[a-f0-9]{64}$"
     ) {
         Throw-Corrupt "canonical installation receipt schema is invalid."

@@ -279,8 +279,8 @@ test("bundle layout locks exact components and requires the local smoke fixture"
   const layout = await validateBundleLayout(root, lock, "x64");
 
   assert.deepEqual(layout, {
-    bundle_version: "1.0.1",
-    release_tag: "web-api-test-execution-evidence-v1.0.1",
+    bundle_version: "1.0.2",
+    release_tag: "web-api-test-execution-evidence-v1.0.2",
     os: "windows",
     arch: "x64",
     node: { version: "22.23.1" },
@@ -526,13 +526,13 @@ test("builder consumes only locked release assets and binds companion to payload
     ), "utf8"),
     "chromium",
   );
-  assert.equal(result.fileName, "web-api-test-execution-evidence-1.0.1-windows-x64.zip");
+  assert.equal(result.fileName, "web-api-test-execution-evidence-1.0.2-windows-x64.zip");
   const companion = await readJson(result.companionManifestPath);
   const payloadBytes = await readFile(path.join(result.stagingRoot, "bundle-manifest.json"));
   assert.equal(companion.archive.sha256, sha256(await readFile(result.archivePath)));
   assert.equal(companion.payload_manifest.sha256, sha256(payloadBytes));
   assert.equal(companion.payload_manifest.path, "bundle-manifest.json");
-  assert.match(companion.archive.download_url, /web-api-test-execution-evidence-v1\.0\.1/);
+  assert.match(companion.archive.download_url, /web-api-test-execution-evidence-v1\.0\.2/);
   assert.match(await readFile(result.checksumPath, "utf8"), new RegExp(companion.archive.sha256));
 });
 
@@ -579,7 +579,7 @@ test("ARM64 fake builder consumes the ARM64 Node asset on an ARM64 host", async 
     lock.playwright.archives.windows.chromium_headless_shell.download_url,
     lock.playwright.archives.windows.ffmpeg.download_url,
   ]);
-  assert.equal(result.fileName, "web-api-test-execution-evidence-1.0.1-windows-arm64.zip");
+  assert.equal(result.fileName, "web-api-test-execution-evidence-1.0.2-windows-arm64.zip");
 });
 
 test("builder rejects a verified browser ZIP that attempts path traversal before extraction", async () => {
