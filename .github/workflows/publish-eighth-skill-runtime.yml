@@ -9,7 +9,7 @@ on:
       tag:
         description: Existing immutable runtime tag to publish
         required: true
-        default: web-api-test-execution-evidence-v1.0.0
+        default: web-api-test-execution-evidence-v1.0.1
         type: string
       public_release_id:
         description: Existing public Release ID for read-only verification recovery
@@ -25,8 +25,7 @@ permissions:
   contents: read
 
 env:
-  EXPECTED_TAG: web-api-test-execution-evidence-v1.0.0
-  EXPECTED_PUBLIC_RELEASE_ID: "356413719"
+  EXPECTED_TAG: web-api-test-execution-evidence-v1.0.1
 
 jobs:
   validate-tag:
@@ -57,10 +56,6 @@ jobs:
             fi
             if [[ ! "$RECOVERY_RELEASE_ID" =~ ^[0-9]+$ ]]; then
               echo "public Release recovery ID must be numeric" >&2
-              exit 1
-            fi
-            if [[ "$RECOVERY_RELEASE_ID" != "$EXPECTED_PUBLIC_RELEASE_ID" ]]; then
-              echo "public Release recovery ID is not the locked Runtime Release" >&2
               exit 1
             fi
           fi
@@ -111,8 +106,8 @@ jobs:
         run: |
           node packages/testing-runner/scripts/render-windows-installers.mjs \
             --lock packages/testing-runner/release/windows-runtime-lock.json \
-            --x64-manifest build/native/x64/windows-bundles/web-api-test-execution-evidence-1.0.0-windows-x64.manifest.json \
-            --x64-bundle build/native/x64/windows-bundles/web-api-test-execution-evidence-1.0.0-windows-x64.zip \
+            --x64-manifest build/native/x64/windows-bundles/web-api-test-execution-evidence-1.0.1-windows-x64.manifest.json \
+            --x64-bundle build/native/x64/windows-bundles/web-api-test-execution-evidence-1.0.1-windows-x64.zip \
             --complete-template installers/templates/install-web-api-test-execution-evidence.ps1.in \
             --cmd-template installers/templates/install-web-api-test-execution-evidence.cmd.in \
             --generic-template scripts/install.ps1 \
@@ -128,8 +123,8 @@ jobs:
             install-web-api-test-execution-evidence.cmd
             install-web-api-test-execution-evidence.ps1
             install.ps1
-            web-api-test-execution-evidence-1.0.0-windows-x64.manifest.json
-            web-api-test-execution-evidence-1.0.0-windows-x64.zip
+            web-api-test-execution-evidence-1.0.1-windows-x64.manifest.json
+            web-api-test-execution-evidence-1.0.1-windows-x64.zip
           )
           mapfile -t actual < <(find build/release-assets -maxdepth 1 -type f -printf '%f\n' | sort)
           test "${actual[*]}" = "${expected[*]}"
@@ -197,8 +192,8 @@ jobs:
             throw "clean-room installer requires Windows PowerShell 5.1"
           }
           $releaseRoot = Join-Path $PWD "build/release-assets"
-          $bundleName = "web-api-test-execution-evidence-1.0.0-windows-${{ matrix.arch }}.zip"
-          $manifestName = "web-api-test-execution-evidence-1.0.0-windows-${{ matrix.arch }}.manifest.json"
+          $bundleName = "web-api-test-execution-evidence-1.0.1-windows-${{ matrix.arch }}.zip"
+          $manifestName = "web-api-test-execution-evidence-1.0.1-windows-${{ matrix.arch }}.manifest.json"
           $releaseBundle = Join-Path $releaseRoot $bundleName
           $releaseManifest = Join-Path $releaseRoot $manifestName
           $nativeBundle = @(Get-ChildItem -LiteralPath build/native-artifact -Recurse -File -Filter $bundleName)
@@ -371,7 +366,7 @@ jobs:
           set -euo pipefail
           node packages/testing-runner/scripts/release-draft-lifecycle.mjs prepare \
             --tag "$RELEASE_TAG" --target "$TAG_COMMIT" \
-            --title "Complete eighth Skill runtime 1.0.0" \
+            --title "Complete eighth Skill runtime 1.0.1" \
             --assets-dir build/release-assets
       - name: Verify draft release assets against trusted artifact
         env:

@@ -36,7 +36,7 @@ jobs:
       - name: Validate and publish ordinary and verified all-Skills launchers
         env:
           GH_TOKEN: ${{ github.token }}
-          RUNTIME_TAG: web-api-test-execution-evidence-v1.0.0
+          RUNTIME_TAG: web-api-test-execution-evidence-v1.0.1
         shell: bash
         run: |
           set -euo pipefail
@@ -64,8 +64,8 @@ jobs:
           const expected = [
             "SHA256SUMS.txt", "install-all.cmd", "install-web-api-test-execution-evidence.cmd",
             "install-web-api-test-execution-evidence.ps1", "install.ps1",
-            "web-api-test-execution-evidence-1.0.0-windows-x64.manifest.json",
-            "web-api-test-execution-evidence-1.0.0-windows-x64.zip",
+            "web-api-test-execution-evidence-1.0.1-windows-x64.manifest.json",
+            "web-api-test-execution-evidence-1.0.1-windows-x64.zip",
           ];
           const actual = value.assets.map(({ name }) => name).sort();
           if (value.tag_name !== tag || value.target_commitish !== commit || value.draft !== false || value.immutable !== true) {

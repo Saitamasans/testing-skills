@@ -115,7 +115,7 @@ try {
     if (
         $receipt.schema_version -ne 1 -or
         $receipt.skill -cne $skillName -or
-        $receipt.bundle_version -cne "1.0.0" -or
+        $receipt.bundle_version -cne "1.0.1" -or
         [string]$receipt.payload_manifest_sha256 -cnotmatch "^[a-f0-9]{64}$"
     ) {
         Throw-Corrupt "canonical installation receipt schema is invalid."

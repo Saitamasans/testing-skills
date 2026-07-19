@@ -100,7 +100,7 @@ function Invoke-CompleteEighthSkillInstaller {
         $completeDownloadRoot = Join-Path ([IO.Path]::GetTempPath()) ("testing-skills-complete-installer-" + [Guid]::NewGuid().ToString("N"))
         New-Item -ItemType Directory -Path $completeDownloadRoot | Out-Null
         $completeScript = Join-Path $completeDownloadRoot "install-web-api-test-execution-evidence.ps1"
-        $completeUrl = "https://github.com/Saitamasans/testing-skills/releases/download/web-api-test-execution-evidence-v1.0.0/install-web-api-test-execution-evidence.ps1"
+        $completeUrl = "https://github.com/Saitamasans/testing-skills/releases/download/web-api-test-execution-evidence-v1.0.1/install-web-api-test-execution-evidence.ps1"
         Invoke-WebRequest -UseBasicParsing -Uri $completeUrl -OutFile $completeScript
     }
     if (-not (Test-Path -LiteralPath $completeScript -PathType Leaf) -or
