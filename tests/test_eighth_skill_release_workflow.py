@@ -676,6 +676,60 @@ class EighthSkillReleaseWorkflowContractTest(unittest.TestCase):
             with self.subTest(phrase=phrase):
                 self.assertIn(phrase, self.publish_installers)
 
+    def test_runtime_public_release_recovery_is_explicit_and_read_only(self):
+        self.assertIn("public_release_id:", self.release)
+        self.assertIn('EXPECTED_PUBLIC_RELEASE_ID: "356413719"', self.release)
+        self.assertIn('RECOVERY_RELEASE_ID: ${{ inputs.public_release_id }}', self.release)
+        self.assertIn('"$RECOVERY_RELEASE_ID" != "$EXPECTED_PUBLIC_RELEASE_ID"', self.release)
+
+        create_draft = re.search(
+            r"(?ms)^  create-draft:\n(.*?)(?=^  [a-z][a-z0-9-]+:\n)",
+            self.release,
+        )
+        publish = re.search(
+            r"(?ms)^  publish-release:\n(.*?)(?=^  [a-z][a-z0-9-]+:\n)",
+            self.release,
+        )
+        post = re.search(r"(?ms)^  post-publish-verify:\n(.*)\Z", self.release)
+        self.assertIsNotNone(create_draft)
+        self.assertIsNotNone(publish)
+        self.assertIsNotNone(post)
+
+        for job in [create_draft.group(1), publish.group(1)]:
+            self.assertIn("inputs.public_release_id == ''", job)
+        self.assertIn("assemble-release", post.group(1))
+        self.assertIn("clean-room-install-smoke", post.group(1))
+        self.assertIn("needs.create-draft.result == 'skipped'", post.group(1))
+        self.assertIn("needs.publish-release.result == 'skipped'", post.group(1))
+        self.assertIn(
+            "inputs.public_release_id || needs.create-draft.outputs.release_id",
+            post.group(1),
+        )
+        self.assertIn("release-draft-lifecycle.mjs verify-public", post.group(1))
+        self.assertNotIn("release-draft-lifecycle.mjs prepare", post.group(1))
+        self.assertNotIn("release-draft-lifecycle.mjs publish", post.group(1))
+        self.assertNotIn("gh release upload", post.group(1))
+        self.assertNotIn("--clobber", post.group(1))
+
+    def test_post_public_verification_uses_short_volume_root_and_cleans_it(self):
+        job = re.search(r"(?ms)^  post-publish-verify:\n(.*)\Z", self.release)
+        self.assertIsNotNone(job)
+        text = job.group(1)
+        self.assertIn("$volumeRoot = [IO.Path]::GetPathRoot($env:RUNNER_TEMP)", text)
+        self.assertIn(
+            '$isolated = Join-Path $volumeRoot ("r-" + [Guid]::NewGuid().ToString("N").Substring(0, 8))',
+            text,
+        )
+        self.assertNotIn(
+            '$isolated = Join-Path $PWD "build/public-install-${{ matrix.arch }}"',
+            text,
+        )
+        self.assertIn("try {", text)
+        self.assertIn("finally {", text)
+        self.assertIn("public-install-paths.json", text)
+        self.assertIn("dependency_network_attempted", text)
+        self.assertIn("Remove-Item -LiteralPath $isolated -Recurse -Force", text)
+
     def test_post_public_verification_installs_through_public_cmd_on_native_x64(self):
         job = re.search(r"(?ms)^  post-publish-verify:\n(.*)\Z", self.release)
         self.assertIsNotNone(job)
