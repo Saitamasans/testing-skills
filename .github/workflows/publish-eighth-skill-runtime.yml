@@ -315,6 +315,10 @@ jobs:
   create-draft:
     needs: [validate-tag, assemble-release, clean-room-install-smoke, immutable-release-advisory]
     runs-on: ubuntu-latest
+    outputs:
+      release_id: ${{ steps.draft.outputs.release_id }}
+      release_url: ${{ steps.draft.outputs.release_url }}
+      created_or_reused: ${{ steps.draft.outputs.created_or_reused }}
     permissions:
       contents: write
     steps:
@@ -327,7 +331,8 @@ jobs:
         with:
           name: verified-eighth-runtime-release-assets
           path: build/release-assets
-      - name: Create immutable draft release
+      - id: draft
+        name: Discover or create one non-overwritable runtime draft
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ needs.validate-tag.outputs.tag }}
@@ -335,47 +340,26 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          if gh api "repos/$GITHUB_REPOSITORY/releases/tags/$RELEASE_TAG" > build/release-metadata.json 2>/dev/null; then
-            echo "Existing legal draft found; reusing verified assets"
-          else
-            gh release create "$RELEASE_TAG" --draft --verify-tag --target "$TAG_COMMIT" \
-              --title "Complete eighth Skill runtime 1.0.0" \
-              build/release-assets/*
-          fi
+          node packages/testing-runner/scripts/release-draft-lifecycle.mjs prepare \
+            --tag "$RELEASE_TAG" --target "$TAG_COMMIT" \
+            --title "Complete eighth Skill runtime 1.0.0" \
+            --assets-dir build/release-assets
       - name: Verify draft release assets against trusted artifact
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ needs.validate-tag.outputs.tag }}
           TAG_COMMIT: ${{ needs.validate-tag.outputs.commit }}
+          RELEASE_ID: ${{ steps.draft.outputs.release_id }}
         shell: bash
         run: |
           set -euo pipefail
           rm -rf build/draft-verification
           mkdir build/draft-verification
-          gh release download "$RELEASE_TAG" --dir build/draft-verification
           target_commitish="$(git rev-parse "refs/tags/$RELEASE_TAG^{commit}")"
           test "$target_commitish" = "$TAG_COMMIT"
-          gh api "repos/$GITHUB_REPOSITORY/releases/tags/$RELEASE_TAG" > build/release-metadata.json
-          node - "$RELEASE_TAG" "$TAG_COMMIT" build/release-metadata.json <<'NODE'
-          const fs = require("node:fs");
-          const [tag, commit, file] = process.argv.slice(2);
-          const value = JSON.parse(fs.readFileSync(file, "utf8"));
-          const expected = [
-            "SHA256SUMS.txt", "install-all.cmd", "install-web-api-test-execution-evidence.cmd",
-            "install-web-api-test-execution-evidence.ps1", "install.ps1",
-            "web-api-test-execution-evidence-1.0.0-windows-x64.manifest.json",
-            "web-api-test-execution-evidence-1.0.0-windows-x64.zip",
-          ];
-          const actual = value.assets.map(({ name }) => name).sort();
-          if (!value.draft || value.tag_name !== tag || value.target_commitish !== commit) {
-            console.error("draft tag, commit, or state does not match the verified workflow input");
-            process.exit(1);
-          }
-          if (JSON.stringify(actual) !== JSON.stringify(expected)) {
-            console.error("draft release asset names do not match the exact contract");
-            process.exit(1);
-          }
-          NODE
+          node packages/testing-runner/scripts/release-draft-lifecycle.mjs download \
+            --release-id "$RELEASE_ID" --tag "$RELEASE_TAG" --target "$TAG_COMMIT" \
+            --trusted-dir build/release-assets --output-dir build/draft-verification
           (cd build/release-assets && sha256sum -c SHA256SUMS.txt)
           (cd build/draft-verification && sha256sum -c SHA256SUMS.txt)
           if ! diff --no-dereference --recursive build/release-assets build/draft-verification; then
@@ -404,44 +388,29 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ needs.validate-tag.outputs.tag }}
           TAG_COMMIT: ${{ needs.validate-tag.outputs.commit }}
+          RELEASE_ID: ${{ needs.create-draft.outputs.release_id }}
         shell: bash
         run: |
           set -euo pipefail
+          rm -rf build/draft-verification
           mkdir -p build/draft-verification
-          gh release download "$RELEASE_TAG" --dir build/draft-verification
           target_commitish="$(git rev-parse "refs/tags/$RELEASE_TAG^{commit}")"
           test "$target_commitish" = "$TAG_COMMIT"
-          gh api "repos/$GITHUB_REPOSITORY/releases/tags/$RELEASE_TAG" > build/release-metadata.json
-          node - "$RELEASE_TAG" "$TAG_COMMIT" build/release-metadata.json <<'NODE'
-          const fs = require("node:fs");
-          const [tag, commit, file] = process.argv.slice(2);
-          const value = JSON.parse(fs.readFileSync(file, "utf8"));
-          const expected = [
-            "SHA256SUMS.txt", "install-all.cmd", "install-web-api-test-execution-evidence.cmd",
-            "install-web-api-test-execution-evidence.ps1", "install.ps1",
-            "web-api-test-execution-evidence-1.0.0-windows-x64.manifest.json",
-            "web-api-test-execution-evidence-1.0.0-windows-x64.zip",
-          ];
-          const actual = value.assets.map(({ name }) => name).sort();
-          if (!value.draft || value.tag_name !== tag || value.target_commitish !== commit) {
-            console.error("draft tag, commit, or state changed after approval");
-            process.exit(1);
-          }
-          if (JSON.stringify(actual) !== JSON.stringify(expected)) {
-            console.error("draft release asset names changed after approval");
-            process.exit(1);
-          }
-          NODE
+          node packages/testing-runner/scripts/release-draft-lifecycle.mjs download \
+            --release-id "$RELEASE_ID" --tag "$RELEASE_TAG" --target "$TAG_COMMIT" \
+            --trusted-dir build/release-assets --output-dir build/draft-verification
           (cd build/release-assets && sha256sum -c SHA256SUMS.txt)
           (cd build/draft-verification && sha256sum -c SHA256SUMS.txt)
           if ! diff --no-dereference --recursive build/release-assets build/draft-verification; then
             echo "draft assets differ from verified artifact" >&2
             exit 1
           fi
-          gh release edit "$RELEASE_TAG" --draft=false
+          node packages/testing-runner/scripts/release-draft-lifecycle.mjs publish \
+            --release-id "$RELEASE_ID" --tag "$RELEASE_TAG" --target "$TAG_COMMIT" \
+            --trusted-dir build/release-assets
 
   post-publish-verify:
-    needs: [validate-tag, publish-release]
+    needs: [validate-tag, create-draft, publish-release]
     strategy:
       fail-fast: false
       matrix:
@@ -452,6 +421,10 @@ jobs:
     permissions:
       contents: read
     steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          ref: ${{ needs.validate-tag.outputs.commit }}
+          clean: true
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: "22.23.1"
@@ -464,31 +437,18 @@ jobs:
         env:
           RELEASE_TAG: ${{ needs.validate-tag.outputs.tag }}
           TAG_COMMIT: ${{ needs.validate-tag.outputs.commit }}
+          RELEASE_ID: ${{ needs.create-draft.outputs.release_id }}
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           tag="$RELEASE_TAG"
           base="https://github.com/Saitamasans/testing-skills/releases/download/$tag"
           test -n "$base"
-          gh api "repos/$GITHUB_REPOSITORY/releases/tags/$tag" > build/public-release.json
-          node - "$tag" "$TAG_COMMIT" build/public-release.json <<'NODE'
-          const fs = require("node:fs");
-          const [tag, commit, file] = process.argv.slice(2);
-          const release = JSON.parse(fs.readFileSync(file, "utf8"));
-          const expected = [
-            "SHA256SUMS.txt", "install-all.cmd", "install-web-api-test-execution-evidence.cmd",
-            "install-web-api-test-execution-evidence.ps1", "install.ps1",
-            "web-api-test-execution-evidence-1.0.0-windows-x64.manifest.json",
-            "web-api-test-execution-evidence-1.0.0-windows-x64.zip",
-          ];
-          const actual = release.assets.map(({ name }) => name).sort();
-          if (release.immutable !== true) throw new Error("published release is not immutable");
-          if (release.draft || release.tag_name !== tag || release.target_commitish !== commit) throw new Error("published release identity is invalid");
-          if (JSON.stringify(actual) !== JSON.stringify(expected)) throw new Error("published release asset allowlist is invalid");
-          NODE
           rm -rf build/public-release
           mkdir build/public-release
-          gh release download "$tag" --dir build/public-release
+          node packages/testing-runner/scripts/release-draft-lifecycle.mjs verify-public \
+            --release-id "$RELEASE_ID" --tag "$tag" --target "$TAG_COMMIT" \
+            --trusted-dir build/trusted-release --output-dir build/public-release
           (cd build/public-release && sha256sum -c SHA256SUMS.txt)
           if ! diff --no-dereference --recursive build/trusted-release build/public-release; then
             echo "public immutable assets differ from trusted current-run artifact" >&2

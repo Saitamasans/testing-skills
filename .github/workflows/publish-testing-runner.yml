@@ -225,6 +225,10 @@ jobs:
   create-draft:
     needs: [validate-tag, build-and-contract-test, immutable-release-advisory]
     runs-on: ubuntu-latest
+    outputs:
+      release_id: ${{ steps.draft.outputs.release_id }}
+      release_url: ${{ steps.draft.outputs.release_url }}
+      created_or_reused: ${{ steps.draft.outputs.created_or_reused }}
     permissions:
       contents: write
     steps:
@@ -236,7 +240,8 @@ jobs:
         with:
           name: verified-testing-runner-1.1.2-assets
           path: build/trusted
-      - name: Create non-overwritable Runner draft
+      - id: draft
+        name: Discover or create one non-overwritable Runner draft
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ needs.validate-tag.outputs.tag }}
@@ -244,24 +249,23 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          if gh api "repos/$GITHUB_REPOSITORY/releases/tags/$RELEASE_TAG" > build/release.json 2>/dev/null; then
-            echo "Existing legal draft found; reusing verified assets"
-          else
-            gh release create "$RELEASE_TAG" --draft --verify-tag --target "$TAG_COMMIT" \
-              --title "Testing Runner 1.1.2" build/trusted/*
-            gh api "repos/$GITHUB_REPOSITORY/releases/tags/$RELEASE_TAG" > build/release.json
-          fi
-          node - "$RELEASE_TAG" "$TAG_COMMIT" build/release.json <<'NODE'
-          const fs = require("node:fs");
-          const [tag, commit, file] = process.argv.slice(2);
-          const value = JSON.parse(fs.readFileSync(file, "utf8"));
-          const expected = ["SHA256SUMS.txt", "saitamasans-testing-runner-1.1.2.tgz", "saitamasans-testing-runner-1.1.2.tgz.sha256"];
-          const actual = value.assets.map(({ name }) => name).sort();
-          if (!value.draft || value.tag_name !== tag || value.target_commitish !== commit) throw new Error("existing Runner release is not the expected legal draft");
-          if (JSON.stringify(actual) !== JSON.stringify(expected)) throw new Error("existing Runner draft asset allowlist changed");
-          NODE
+          node packages/testing-runner/scripts/release-draft-lifecycle.mjs prepare \
+            --tag "$RELEASE_TAG" --target "$TAG_COMMIT" \
+            --title "Testing Runner 1.1.2" --assets-dir build/trusted
+      - name: Verify the selected Runner draft by Release ID
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ needs.validate-tag.outputs.tag }}
+          TAG_COMMIT: ${{ needs.validate-tag.outputs.commit }}
+          RELEASE_ID: ${{ steps.draft.outputs.release_id }}
+        shell: bash
+        run: |
+          set -euo pipefail
           rm -rf build/draft && mkdir build/draft
-          gh release download "$RELEASE_TAG" --dir build/draft
+          node packages/testing-runner/scripts/release-draft-lifecycle.mjs download \
+            --release-id "$RELEASE_ID" --tag "$RELEASE_TAG" --target "$TAG_COMMIT" \
+            --trusted-dir build/trusted --output-dir build/draft
+          (cd build/trusted && sha256sum -c SHA256SUMS.txt)
           (cd build/draft && sha256sum -c SHA256SUMS.txt)
           diff --no-dereference --recursive build/trusted build/draft
 
@@ -285,31 +289,31 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ needs.validate-tag.outputs.tag }}
           TAG_COMMIT: ${{ needs.validate-tag.outputs.commit }}
+          RELEASE_ID: ${{ needs.create-draft.outputs.release_id }}
         shell: bash
         run: |
           set -euo pipefail
           test "$(git rev-parse "refs/tags/$RELEASE_TAG^{commit}")" = "$TAG_COMMIT"
-          gh api "repos/$GITHUB_REPOSITORY/releases/tags/$RELEASE_TAG" > build/release.json
-          node - "$RELEASE_TAG" "$TAG_COMMIT" build/release.json <<'NODE'
-          const fs = require("node:fs");
-          const [tag, commit, file] = process.argv.slice(2);
-          const release = JSON.parse(fs.readFileSync(file, "utf8"));
-          const expected = ["SHA256SUMS.txt", "saitamasans-testing-runner-1.1.2.tgz", "saitamasans-testing-runner-1.1.2.tgz.sha256"];
-          const actual = release.assets.map(({ name }) => name).sort();
-          if (!release.draft || release.tag_name !== tag || release.target_commitish !== commit) throw new Error("Runner draft identity changed");
-          if (JSON.stringify(actual) !== JSON.stringify(expected)) throw new Error("Runner draft asset allowlist changed");
-          NODE
           rm -rf build/draft && mkdir build/draft
-          gh release download "$RELEASE_TAG" --dir build/draft
+          node packages/testing-runner/scripts/release-draft-lifecycle.mjs download \
+            --release-id "$RELEASE_ID" --tag "$RELEASE_TAG" --target "$TAG_COMMIT" \
+            --trusted-dir build/trusted --output-dir build/draft
+          (cd build/trusted && sha256sum -c SHA256SUMS.txt)
+          (cd build/draft && sha256sum -c SHA256SUMS.txt)
           diff --no-dereference --recursive build/trusted build/draft
-          gh release edit "$RELEASE_TAG" --draft=false
+          node packages/testing-runner/scripts/release-draft-lifecycle.mjs publish \
+            --release-id "$RELEASE_ID" --tag "$RELEASE_TAG" --target "$TAG_COMMIT" \
+            --trusted-dir build/trusted
 
   post-publish-verify:
-    needs: [validate-tag, publish-release]
+    needs: [validate-tag, create-draft, publish-release]
     runs-on: ubuntu-latest
     permissions:
       contents: read
     steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          clean: true
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: verified-testing-runner-1.1.2-assets
@@ -319,19 +323,14 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ needs.validate-tag.outputs.tag }}
           TAG_COMMIT: ${{ needs.validate-tag.outputs.commit }}
+          RELEASE_ID: ${{ needs.create-draft.outputs.release_id }}
         shell: bash
         run: |
           set -euo pipefail
-          gh api "repos/$GITHUB_REPOSITORY/releases/tags/$RELEASE_TAG" > build/public-release.json
-          node - "$RELEASE_TAG" "$TAG_COMMIT" build/public-release.json <<'NODE'
-          const fs = require("node:fs");
-          const [tag, commit, file] = process.argv.slice(2);
-          const release = JSON.parse(fs.readFileSync(file, "utf8"));
-          if (release.immutable !== true) throw new Error("published Runner release is not immutable");
-          if (release.draft || release.tag_name !== tag || release.target_commitish !== commit) throw new Error("published Runner release identity is invalid");
-          NODE
-          mkdir build/public
-          gh release download "$RELEASE_TAG" --dir build/public
+          rm -rf build/public && mkdir build/public
+          node packages/testing-runner/scripts/release-draft-lifecycle.mjs verify-public \
+            --release-id "$RELEASE_ID" --tag "$RELEASE_TAG" --target "$TAG_COMMIT" \
+            --trusted-dir build/trusted --output-dir build/public
           diff --no-dereference --recursive build/trusted build/public
           (cd build/public && sha256sum -c SHA256SUMS.txt)
           mkdir build/public-package
