@@ -75,6 +75,11 @@ class EighthSkillReleaseWorkflowContractTest(unittest.TestCase):
         self.assertIn("inputs.release_tag", self.bundle)
         self.assertRegex(self.bundle, r"(?s)inputs\.release_tag.*runtime lock release tag")
 
+    def test_native_windows_build_forces_utf8_for_python_generation(self):
+        job = re.search(r"(?ms)^  build-and-smoke:\n(.*)\Z", self.bundle)
+        self.assertIsNotNone(job)
+        self.assertRegex(job.group(1), r'env:\n\s+PYTHONUTF8: "1"')
+
     def test_x64_release_path_is_independent_from_arm64_validation(self):
         build_x64 = re.search(
             r"(?ms)^  build-x64:\n(.*?)(?=^  [a-z][a-z0-9-]+:\n)",
