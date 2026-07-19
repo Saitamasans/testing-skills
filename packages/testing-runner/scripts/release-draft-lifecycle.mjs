@@ -17,6 +17,19 @@ async function readError(response) {
   }
 }
 
+function classifyGitHubStatus(response) {
+  if (response.status === 401) return "authentication";
+  if (response.status === 403) {
+    return response.headers?.get?.("x-ratelimit-remaining") === "0" ? "rate_limited" : "forbidden";
+  }
+  if (response.status === 404) return "not_found";
+  if (response.status === 409) return "conflict";
+  if (response.status === 422) return "validation";
+  if (response.status === 429) return "rate_limited";
+  if (response.status >= 500) return "server_error";
+  return "unexpected";
+}
+
 export function createGitHubReleaseClient({ repository, token, fetchImpl = globalThis.fetch }) {
   if (!repository || !repository.includes("/")) throw new Error("repository must be owner/name");
   if (!token) throw new Error("GitHub token is required");
@@ -36,7 +49,15 @@ export function createGitHubReleaseClient({ repository, token, fetchImpl = globa
       body: body === undefined || Buffer.isBuffer(body) ? body : JSON.stringify(body),
       redirect: "follow",
     });
-    if (!response.ok) throw new Error(`GitHub API ${method} ${url} failed: ${await readError(response)}`);
+    if (!response.ok) {
+      const category = classifyGitHubStatus(response);
+      const error = new Error(`GitHub API ${category} HTTP ${response.status} ${method} ${url} failed: ${await readError(response)}`);
+      error.name = "GitHubApiError";
+      error.status = response.status;
+      error.category = category;
+      error.retryable = category === "rate_limited" || category === "server_error";
+      throw error;
+    }
     if (binary) return Buffer.from(await response.arrayBuffer());
     return response.json();
   }
@@ -130,16 +151,16 @@ export function validateDraft({ release, tag, targetCommitish, expectedAssetName
 }
 
 export async function prepareDraft({ client, tag, targetCommitish, title, assets }) {
-  const { drafts, publicReleases } = await discoverReleases({ client, tag });
-  if (publicReleases.length > 0) {
-    throw new Error(`public release already exists for ${tag}: ${publicReleases.map(({ id }) => id).join(", ")}`);
-  }
-  if (drafts.length > 1) {
-    throw new Error(`multiple draft releases exist for ${tag}: ${drafts.map(({ id }) => id).join(", ")}`);
-  }
-
   const expectedAssetNames = assets.map(({ name }) => name);
-  if (drafts.length === 1) {
+  async function discoverExistingDraft() {
+    const { drafts, publicReleases } = await discoverReleases({ client, tag });
+    if (publicReleases.length > 0) {
+      throw new Error(`public release already exists for ${tag}: ${publicReleases.map(({ id }) => id).join(", ")}`);
+    }
+    if (drafts.length > 1) {
+      throw new Error(`multiple draft releases exist for ${tag}: ${drafts.map(({ id }) => id).join(", ")}`);
+    }
+    if (drafts.length === 0) return null;
     const release = await client.getRelease(drafts[0].id);
     validateDraft({ release, tag, targetCommitish, expectedAssetNames });
     return {
@@ -148,6 +169,11 @@ export async function prepareDraft({ client, tag, targetCommitish, title, assets
       createdOrReused: "reused",
     };
   }
+
+  const existing = await discoverExistingDraft();
+  if (existing) return existing;
+  const appearedBeforeCreate = await discoverExistingDraft();
+  if (appearedBeforeCreate) return appearedBeforeCreate;
 
   const created = await client.createDraft({ tag, targetCommitish, title });
   for (const asset of assets) {
@@ -176,6 +202,12 @@ function validateAssetMetadata(asset, expected) {
   }
 }
 
+function validateReleaseAssetMetadata(release, expectedAssets) {
+  const expectedByName = expectedAssetMap(expectedAssets);
+  for (const asset of release.assets) validateAssetMetadata(asset, expectedByName.get(asset.name));
+  return expectedByName;
+}
+
 function verifyDownloadedBytes(asset, expected, actualBytes) {
   const actual = Buffer.from(actualBytes);
   if (actual.length !== asset.size) {
@@ -198,11 +230,10 @@ export async function downloadAndVerifyDraft({ client, releaseId, tag, targetCom
     targetCommitish,
     expectedAssetNames: expectedAssets.map(({ name }) => name),
   });
-  const expectedByName = expectedAssetMap(expectedAssets);
+  const expectedByName = validateReleaseAssetMetadata(release, expectedAssets);
   const assets = [];
   for (const asset of release.assets) {
     const expected = expectedByName.get(asset.name);
-    validateAssetMetadata(asset, expected);
     const bytes = verifyDownloadedBytes(asset, expected, await client.downloadAsset(asset.id));
     assets.push({ name: asset.name, bytes });
   }
@@ -229,11 +260,15 @@ function validatePublicRelease({ release, releaseId, tag, targetCommitish, expec
   return release;
 }
 
-export async function publishDraft({ client, releaseId, tag, targetCommitish, expectedAssetNames }) {
+export async function publishDraft({ client, releaseId, tag, targetCommitish, expectedAssets }) {
+  const expectedAssetNames = expectedAssets.map(({ name }) => name);
   const draft = await client.getRelease(releaseId);
   validateDraft({ release: draft, tag, targetCommitish, expectedAssetNames });
+  validateReleaseAssetMetadata(draft, expectedAssets);
   const published = await client.publishRelease(releaseId);
-  return validatePublicRelease({ release: published, releaseId, tag, targetCommitish, expectedAssetNames });
+  validatePublicRelease({ release: published, releaseId, tag, targetCommitish, expectedAssetNames });
+  validateReleaseAssetMetadata(published, expectedAssets);
+  return published;
 }
 
 export async function verifyPublicRelease({
@@ -362,7 +397,7 @@ export async function runLifecycleCommand(argv, env = process.env) {
       releaseId,
       tag,
       targetCommitish,
-      expectedAssetNames: expectedAssets.map(({ name }) => name),
+      expectedAssets,
     });
     return { releaseId: release.id, published: true };
   }

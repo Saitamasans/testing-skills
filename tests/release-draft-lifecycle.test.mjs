@@ -125,13 +125,44 @@ test("creates one draft and keeps the release id from the create response", asyn
   assert.equal(result.releaseId, 42);
   assert.equal(result.releaseUrl, "https://github.test/releases/42");
   assert.equal(result.createdOrReused, "created");
-  assert.equal(calls.filter((call) => call === "list").length, 1);
+  assert.equal(calls.filter((call) => call === "list").length, 2);
   assert.equal(calls.filter((call) => call.create).length, 1);
   assert.deepEqual(
     calls.filter((call) => call.upload).map((call) => call.upload),
     [[42, "SHA256SUMS.txt"], [42, "runner.tgz"]],
   );
   assert.deepEqual(calls.filter((call) => call.get), [{ get: 42 }]);
+});
+
+test("rechecks discovery immediately before creation and reuses a draft that appeared", async () => {
+  let discoveries = 0;
+  let createCalls = 0;
+  const client = {
+    async listReleases() {
+      discoveries += 1;
+      return discoveries === 1 ? [] : [legalDraft(73)];
+    },
+    async getRelease(releaseId) {
+      assert.equal(releaseId, 73);
+      return legalDraft(73);
+    },
+    async createDraft() {
+      createCalls += 1;
+    },
+  };
+
+  const result = await prepareDraft({
+    client,
+    tag: TAG,
+    targetCommitish: COMMIT,
+    title: "Testing Runner 1.1.2",
+    assets: ASSETS,
+  });
+
+  assert.equal(discoveries, 2);
+  assert.equal(createCalls, 0);
+  assert.equal(result.releaseId, 73);
+  assert.equal(result.createdOrReused, "reused");
 });
 
 test("reuses one legal draft without creating or uploading assets", async () => {
@@ -291,12 +322,41 @@ test("publishes the validated draft by release id", async () => {
     releaseId: 81,
     tag: TAG,
     targetCommitish: COMMIT,
-    expectedAssetNames: ASSETS.map(({ name }) => name),
+    expectedAssets: ASSETS,
   });
 
   assert.equal(release.id, 81);
   assert.equal(release.draft, false);
   assert.deepEqual(calls, [{ get: 81 }, { publish: 81 }]);
+});
+
+test("refuses to publish when final draft asset size or SHA-256 metadata drifted", async () => {
+  for (const release of [
+    { ...legalDraft(82), assets: legalDraft(82).assets.map((asset, index) => index === 0 ? { ...asset, size: 999 } : asset) },
+    { ...legalDraft(83), assets: legalDraft(83).assets.map((asset, index) => index === 0 ? { ...asset, digest: "sha256:deadbeef" } : asset) },
+  ]) {
+    let publishCalls = 0;
+    const client = {
+      async getRelease() {
+        return release;
+      },
+      async publishRelease() {
+        publishCalls += 1;
+      },
+    };
+
+    await assert.rejects(
+      publishDraft({
+        client,
+        releaseId: release.id,
+        tag: TAG,
+        targetCommitish: COMMIT,
+        expectedAssets: ASSETS,
+      }),
+      /size|sha-256/i,
+    );
+    assert.equal(publishCalls, 0);
+  }
 });
 
 test("warns for false or missing public immutability without weakening identity or bytes", async () => {
@@ -374,7 +434,13 @@ test("keeps public release id, tag, commit, allowlist, size, SHA-256, and bytes 
 test("GitHub client uses release and asset ids for every draft operation", async () => {
   const calls = [];
   const fetchImpl = async (url, options = {}) => {
-    calls.push({ url, method: options.method ?? "GET", accept: options.headers?.Accept });
+    calls.push({
+      url,
+      method: options.method ?? "GET",
+      accept: options.headers?.Accept,
+      authorization: options.headers?.Authorization,
+      redirect: options.redirect,
+    });
     const payload = url.includes("/assets/900") ? Buffer.from("asset") : Buffer.from("{}");
     return {
       ok: true,
@@ -391,10 +457,41 @@ test("GitHub client uses release and asset ids for every draft operation", async
   await client.publishRelease(42);
 
   assert.deepEqual(calls, [
-    { url: "https://api.github.com/repos/owner/repo/releases/42", method: "GET", accept: "application/vnd.github+json" },
-    { url: "https://api.github.com/repos/owner/repo/releases/assets/900", method: "GET", accept: "application/octet-stream" },
-    { url: "https://api.github.com/repos/owner/repo/releases/42", method: "PATCH", accept: "application/vnd.github+json" },
+    { url: "https://api.github.com/repos/owner/repo/releases/42", method: "GET", accept: "application/vnd.github+json", authorization: "Bearer token", redirect: "follow" },
+    { url: "https://api.github.com/repos/owner/repo/releases/assets/900", method: "GET", accept: "application/octet-stream", authorization: "Bearer token", redirect: "follow" },
+    { url: "https://api.github.com/repos/owner/repo/releases/42", method: "PATCH", accept: "application/vnd.github+json", authorization: "Bearer token", redirect: "follow" },
   ]);
+});
+
+test("classifies GitHub API failures without treating them as an absent release", async () => {
+  const cases = [
+    [401, "authentication"],
+    [403, "forbidden"],
+    [404, "not_found"],
+    [409, "conflict"],
+    [422, "validation"],
+    [429, "rate_limited"],
+    [503, "server_error"],
+  ];
+
+  for (const [status, category] of cases) {
+    const client = createGitHubReleaseClient({
+      repository: "owner/repo",
+      token: "token",
+      fetchImpl: async () => ({
+        ok: false,
+        status,
+        async json() { return { message: `failure-${status}` }; },
+      }),
+    });
+
+    await assert.rejects(
+      client.listReleases(1, 100),
+      (error) => error.status === status
+        && error.category === category
+        && error.message.includes(`HTTP ${status}`),
+    );
+  }
 });
 
 test("prepare command writes the create response id and uploads each trusted asset once", async () => {
