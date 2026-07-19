@@ -38,6 +38,10 @@ class EighthSkillReleaseWorkflowContractTest(unittest.TestCase):
             if runner_release_path.exists()
             else ""
         )
+        windows_release_ci = ROOT / ".github/workflows/validate-runner-windows-release.yml"
+        cls.windows_release_ci = windows_release_ci.read_text(encoding="utf-8") if windows_release_ci.exists() else ""
+        packaged_smoke = ROOT / "packages/testing-runner/scripts/verify-release-tarball.mjs"
+        cls.packaged_smoke = packaged_smoke.read_text(encoding="utf-8") if packaged_smoke.exists() else ""
 
     def test_native_build_proves_host_image_ps51_and_space_before_bundle(self):
         for phrase in [
@@ -410,6 +414,7 @@ class EighthSkillReleaseWorkflowContractTest(unittest.TestCase):
             "runtime": self.release,
             "runner": self.runner_release,
             "installers": self.publish_installers,
+            "windows-release-ci": self.windows_release_ci,
         }
         action_use = re.compile(r"(?m)^\s*-?\s*uses:\s*([^\s#]+)(?:\s+#\s*(v\d+[^\r\n]*))?$")
         for workflow, text in workflows.items():
@@ -467,6 +472,63 @@ class EighthSkillReleaseWorkflowContractTest(unittest.TestCase):
         self.assertNotIn("sha256sum", text)
         self.assertIn("SHA256SUMS.txt", text)
         self.assertLess(text.index(install), text.index(test))
+
+    def test_windows_x64_pr_ci_builds_twice_and_executes_the_packaged_tar(self):
+        workflow = self.windows_release_ci
+        for phrase in [
+            "pull_request:",
+            "permissions:\n  contents: read",
+            "runs-on: windows-2025",
+            'node-version: "22.23.1"',
+            'npm --version) -cne "10.9.8"',
+            "packages/testing-runner/release/package-lock.json",
+            "build/release-a",
+            "build/release-b",
+            "Get-FileHash",
+            "windows-runtime-lock.json",
+            "verify-release-tarball.mjs",
+            "CompleteInstallerTest.test_clean_install_is_path_independent_and_writes_receipt_after_smoke",
+            "CompleteInstallerTest.test_smoke_failure_retains_diagnostics_but_not_receipt",
+            "CompleteInstallerTest.test_activation_failure_removes_staging_and_preserves_previous_install",
+            "windows-x64-release-evidence",
+        ]:
+            with self.subTest(phrase=phrase):
+                self.assertIn(phrase, workflow)
+        self.assertNotIn("contents: write", workflow)
+        self.assertNotIn("gh release", workflow)
+        release_docs = "\n".join(
+            path.read_text(encoding="utf-8")
+            for path in (ROOT / "docs/superpowers").rglob("*.md")
+        )
+        self.assertIn("Windows x64 is the P0 release path", release_docs)
+        self.assertNotIn("publish only when both architectures pass", release_docs)
+        self.assertNotIn("Publication is rejected if either architecture", release_docs)
+
+    def test_packaged_tar_smoke_blocks_downloads_and_root_dependencies(self):
+        for phrase in [
+            "package/node_modules",
+            "dependency resolved outside packaged node_modules",
+            '"--version"',
+            '"plan"',
+            '"run"',
+            '"verify-report"',
+            "PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD",
+            "blocked external network request",
+            "blocked package manager invocation",
+            "https://github.com/Saitamasans/testing-skills/releases/download/",
+            "https://cdn.playwright.dev/",
+            "network_events",
+            "package_manager_invocations",
+            "empty-path",
+        ]:
+            with self.subTest(phrase=phrase):
+                self.assertIn(phrase, self.packaged_smoke)
+        build = re.search(
+            r"(?ms)^  build-and-contract-test:\n(.*?)(?=^  [a-z][a-z0-9-]+:\n)",
+            self.runner_release,
+        )
+        self.assertIsNotNone(build)
+        self.assertIn("verify-release-tarball.mjs", build.group(1))
 
     def test_runner_111_is_retired_and_112_is_the_only_publishable_target(self):
         retired = "testing-runner-v1.1.1"

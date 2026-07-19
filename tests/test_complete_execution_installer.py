@@ -371,7 +371,12 @@ class CompleteInstallerTest(unittest.TestCase):
         self.assertEqual("x64", receipt["architecture"])
         self.assertTrue((runtime / "node" / "node.exe").is_file())
         self.assertTrue((skill / "SKILL.md").is_file())
-        self.assertTrue((Path(receipt["diagnostics_path"]) / "smoke-result.json").is_file())
+        smoke_result = Path(receipt["diagnostics_path"]) / "smoke-result.json"
+        self.assertTrue(smoke_result.is_file())
+        receipt_mtime = self.receipt_path().stat().st_mtime_ns
+        self.assertGreaterEqual(receipt_mtime, smoke_result.stat().st_mtime_ns)
+        self.assertGreaterEqual(receipt_mtime, (runtime / "node" / "node.exe").stat().st_mtime_ns)
+        self.assertGreaterEqual(receipt_mtime, (skill / "SKILL.md").stat().st_mtime_ns)
         for field in ("当前文件", "总字节", "已下载", "百分比", "字节/秒", "ETA", "重试", "续传偏移"):
             self.assertIn(field, output)
 
@@ -724,6 +729,7 @@ class CompleteInstallerTest(unittest.TestCase):
             result = self.run_installer(server)
         self.assertNotEqual(0, result.returncode, self.output(result))
         self.assertFalse(self.receipt_path().exists())
+        self.assertFalse((self.install_root / SKILL).exists())
         self.assertTrue(list((self.state_root / "diagnostics").rglob("failure.txt")))
         self.assertFalse(list(self.state_root.rglob(".stage-*")))
 

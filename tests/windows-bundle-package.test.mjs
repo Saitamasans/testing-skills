@@ -110,15 +110,16 @@ test("root package exposes the locked Windows bundle build entry point", async (
   );
 });
 
-test("release CI builds and smokes each architecture on its native Windows host", async () => {
+test("release CI builds the requested architecture on its native Windows host", async () => {
   const workflow = await readFile(
     path.join(repoRoot, ".github/workflows/build-complete-windows-bundles.yml"),
     "utf8",
   );
-  assert.match(workflow, /os:\s*windows-2025[\s\S]*arch:\s*x64/);
-  assert.match(workflow, /os:\s*windows-11-arm[\s\S]*arch:\s*arm64/);
-  assert.match(workflow, /architecture:\s*\$\{\{ matrix\.arch \}\}/);
-  assert.match(workflow, /build-windows-bundle\.mjs.*matrix\.arch/);
+  assert.match(workflow, /architecture:[\s\S]*required:\s*true[\s\S]*source_commit:/);
+  assert.match(workflow, /runs-on:.*inputs\.architecture.*windows-2025.*windows-11-arm/);
+  assert.match(workflow, /architecture:\s*\$\{\{ inputs\.architecture \}\}/);
+  assert.match(workflow, /build-windows-bundle\.mjs.*inputs\.architecture/);
+  assert.match(workflow, /ref:\s*\$\{\{ inputs\.source_commit \}\}/);
   assert.match(workflow, /node\\node\.exe.*installation-smoke-test\.mjs/);
 });
 

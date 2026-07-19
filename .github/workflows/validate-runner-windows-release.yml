@@ -1,0 +1,111 @@
+name: Validate packaged Runner on Windows x64
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  windows-x64-release:
+    runs-on: windows-2025
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          clean: true
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: "22.23.1"
+          cache: npm
+
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.12"
+          architecture: x64
+
+      - name: Pin and prove the release toolchain
+        shell: powershell
+        run: |
+          $ErrorActionPreference = "Stop"
+          npm install --global npm@10.9.8 --ignore-scripts --no-audit --no-fund
+          if ((node --version) -cne "v22.23.1") { throw "Node version mismatch" }
+          if ((node -p process.arch) -cne "x64") { throw "Node architecture mismatch" }
+          if ((npm --version) -cne "10.9.8") { throw "npm version mismatch" }
+          if (-not (Test-Path -LiteralPath packages/testing-runner/release/package-lock.json -PathType Leaf)) {
+            throw "committed Runner release package-lock is missing"
+          }
+
+      - name: Install build dependencies without lifecycle scripts
+        run: npm ci --ignore-scripts
+
+      - name: Build two independent locked Runner tarballs
+        shell: powershell
+        run: |
+          $ErrorActionPreference = "Stop"
+          npm run pack:runner-release -- build/release-a
+          if ($LASTEXITCODE -ne 0) { throw "first Runner build failed" }
+          npm run pack:runner-release -- build/release-b
+          if ($LASTEXITCODE -ne 0) { throw "second Runner build failed" }
+
+      - name: Compare size and SHA-256 with each other and the runtime lock
+        shell: powershell
+        run: |
+          $ErrorActionPreference = "Stop"
+          $name = "saitamasans-testing-runner-1.1.2.tgz"
+          $first = Get-Item -LiteralPath (Join-Path "build/release-a" $name)
+          $second = Get-Item -LiteralPath (Join-Path "build/release-b" $name)
+          $firstSha = (Get-FileHash -LiteralPath $first.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+          $secondSha = (Get-FileHash -LiteralPath $second.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+          $lock = Get-Content -LiteralPath packages/testing-runner/release/windows-runtime-lock.json -Raw | ConvertFrom-Json
+          if ($first.Length -ne $second.Length -or $firstSha -cne $secondSha) {
+            throw "independent Runner builds differ"
+          }
+          if ($first.Length -ne [long]$lock.runner.size_bytes -or $firstSha -cne [string]$lock.runner.sha256) {
+            throw "Runner build differs from windows-runtime-lock.json"
+          }
+          New-Item -ItemType Directory -Path build/windows-x64-release-evidence -Force | Out-Null
+          [ordered]@{
+            schema_version = 1
+            node = (node --version)
+            npm = (npm --version)
+            architecture = (node -p process.arch)
+            first = @{ path = $first.FullName; size_bytes = $first.Length; sha256 = $firstSha }
+            second = @{ path = $second.FullName; size_bytes = $second.Length; sha256 = $secondSha }
+            runtime_lock_match = $true
+          } | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath build/windows-x64-release-evidence/builds.json -Encoding UTF8
+          Write-Output "RUNNER_BUILD_A size=$($first.Length) sha256=$firstSha"
+          Write-Output "RUNNER_BUILD_B size=$($second.Length) sha256=$secondSha"
+
+      - name: Execute CLI, plan, API run, and report verification from the tar only
+        shell: powershell
+        run: |
+          $ErrorActionPreference = "Stop"
+          node packages/testing-runner/scripts/verify-release-tarball.mjs `
+            build/release-a/saitamasans-testing-runner-1.1.2.tgz `
+            build/windows-x64-release-evidence/packaged-tar
+          if ($LASTEXITCODE -ne 0) { throw "packaged Runner smoke failed" }
+
+      - name: Execute Windows PowerShell 5.1 empty-PATH installer fixtures
+        shell: powershell
+        run: |
+          $ErrorActionPreference = "Stop"
+          python -m unittest -v `
+            tests.test_complete_execution_installer.CompleteInstallerTest.test_clean_install_is_path_independent_and_writes_receipt_after_smoke `
+            tests.test_complete_execution_installer.CompleteInstallerTest.test_smoke_failure_retains_diagnostics_but_not_receipt `
+            tests.test_complete_execution_installer.CompleteInstallerTest.test_activation_failure_removes_staging_and_preserves_previous_install
+          if ($LASTEXITCODE -ne 0) { throw "PowerShell 5.1 installer fixture failed" }
+
+      - name: Upload review evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: windows-x64-release-evidence
+          if-no-files-found: error
+          retention-days: 14
+          path: |
+            build/windows-x64-release-evidence/**
+            build/release-a/saitamasans-testing-runner-1.1.2.tgz
+            build/release-b/saitamasans-testing-runner-1.1.2.tgz

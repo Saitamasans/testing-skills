@@ -130,6 +130,19 @@ jobs:
           NODE
           grep -F "installation-smoke-test.mjs" packages/testing-runner/scripts/build-windows-bundle.mjs
           grep -F "1.1.2" packages/testing-runner/scripts/installation-smoke-test.mjs
+      - name: Execute the packaged production dependency combination
+        shell: powershell
+        run: |
+          $ErrorActionPreference = "Stop"
+          node packages/testing-runner/scripts/verify-release-tarball.mjs `
+            "build/releases/$env:RUNNER_ASSET" build/packaged-tar-verification
+          if ($LASTEXITCODE -ne 0) { throw "packaged Runner execution failed" }
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: testing-runner-1.1.2-execution-evidence
+          path: build/packaged-tar-verification/**
+          if-no-files-found: error
+          retention-days: 14
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: verified-testing-runner-1.1.2-assets

@@ -260,7 +260,7 @@ Run: `python -m unittest tests.test_eighth_skill_release_workflow tests.test_git
 
 - [ ] **Step 3: Add Windows bundle publication workflow**
 
-Use the mandatory native matrix `windows-2025` for x64 and `windows-11-arm` for ARM64. Verify `process.arch`, OS image, and free space in each job. Build from a clean checkout, install exact dependencies from `package-lock.json`, package the exact browser set, execute the installed-bundle smoke test, render the public installer with fixed script/manifest hashes, then publish only when both architectures pass. Create a new draft `web-api-test-execution-evidence-v1.0.0` release, verify its tag commit and complete asset set, then publish it under a protected release environment. Never use `--clobber` for runtime release assets.
+Use native `windows-2025` x64 as the P0 release gate; retain `windows-11-arm` as a non-blocking follow-up validation. Verify `process.arch`, OS image, and free space in each job. Build from a clean checkout, install exact dependencies from `package-lock.json`, package the exact browser set, execute the x64 installed-bundle smoke test, and render the public installer with fixed script/manifest hashes. Create or resume the legal draft `web-api-test-execution-evidence-v1.0.0`, verify its tag commit and exact x64 asset set, then publish it under a protected release environment. Never use `--clobber` for runtime release assets. Run immutable-release administration and attestation checks as advisory P2 jobs.
 
 - [ ] **Step 4: Make launcher publication depend on complete assets**
 
