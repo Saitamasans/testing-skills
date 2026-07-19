@@ -670,7 +670,7 @@ class EighthSkillReleaseWorkflowContractTest(unittest.TestCase):
         self.assertIn('tags:\n      - "testing-runner-v1.1.2"', self.runner_release)
         self.assertNotIn('tags:\n      - "testing-runner-v1.1.1"', self.runner_release)
 
-    def test_mutable_installer_publication_reverifies_provenance_and_exact_public_bytes(self):
+    def test_installer_entry_reverifies_runtime_and_frozen_release_without_mutation(self):
         for phrase in [
             "concurrency:",
             "cancel-in-progress: false",
@@ -679,11 +679,23 @@ class EighthSkillReleaseWorkflowContractTest(unittest.TestCase):
             "value.assets",
             "exact runtime asset allowlist",
             "git merge-base --is-ancestor",
-            "diff --no-dereference --recursive",
-            "public mutable installer assets differ from trusted current-main bytes",
+            'refs/tags/skill-installers-v1^{commit}',
+            "skill-installers-v1 is not the expected frozen public release",
+            "frozen installer asset allowlist does not match",
+            "sha256sum -c SHA256SUMS.txt",
+            "frozen skill-installers-v1 remains unchanged",
         ]:
             with self.subTest(phrase=phrase):
                 self.assertIn(phrase, self.publish_installers)
+        for forbidden in [
+            "contents: write",
+            "gh release delete-asset",
+            "gh release upload",
+            "gh release edit",
+            "--clobber",
+        ]:
+            with self.subTest(forbidden=forbidden):
+                self.assertNotIn(forbidden, self.publish_installers)
 
     def test_runtime_public_release_recovery_is_explicit_and_read_only(self):
         self.assertIn("public_release_id:", self.release)

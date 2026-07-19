@@ -33,7 +33,7 @@
 
 发布状态说明：远端 tag `testing-runner-v1.1.1` 仅为未发布/作废发布目标，不对应可安全公开的 Runner Release，自动化不得再次尝试发布它，也不得删除或移动该 tag。首个可发布目标为 `testing-runner-v1.1.2`。
 
-[![Install All 8 Skills](https://img.shields.io/badge/Install-All_8_Skills-2ea44f?style=for-the-badge&logo=github)](https://github.com/Saitamasans/testing-skills/releases/download/skill-installers-v1/install-all.cmd)
+[![Install All 8 Skills](https://img.shields.io/badge/Install-All_8_Skills-2ea44f?style=for-the-badge&logo=github)](https://github.com/Saitamasans/testing-skills/releases/download/web-api-test-execution-evidence-v1.0.1/install-all.cmd)
 
 第 8 个 Skill 的执行就绪安装器：`install-web-api-test-execution-evidence.cmd` 或 `install-web-api-test-execution-evidence.ps1`。它使用固定版本的 GitHub Release 完整安装器，显示下载进度、速度、ETA、重试、续传、校验、解压和 smoke test；安装已损坏或不完整时，用同一安装器加 `-Repair`，不要在执行过程中下载或替换任何组件。
 
