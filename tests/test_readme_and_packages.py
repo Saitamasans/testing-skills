@@ -78,6 +78,26 @@ class ReadmeAndPackagesTest(unittest.TestCase):
             self.assertIn(phrase, install_section)
         self.assertNotIn("首次运行下载", install_section)
 
+    def test_readme_has_windows_x64_three_step_execution_delivery(self):
+        readme = (ROOT / "README.md").read_text(encoding="utf-8")
+        install_section = readme.split('<a id="install"></a>', 1)[1].split(
+            '<a id="usage-guides"></a>', 1
+        )[0]
+        for phrase in [
+            "Windows x64 三步使用",
+            "install-web-api-test-execution-evidence.cmd",
+            "web-api-test-execution-evidence-1.0.0-windows-x64.zip",
+            "SHA256SUMS.txt",
+            "重启 Codex",
+            "调用第八个 Skill 执行",
+            "-Repair",
+            r"%USERPROFILE%\.testing-skills\installations\web-api-test-execution-evidence.json",
+            r"%USERPROFILE%\.testing-skills\diagnostics\web-api-test-execution-evidence",
+            "正常执行阶段不会下载 Node、Runner、Playwright 或 Chromium",
+        ]:
+            with self.subTest(phrase=phrase):
+                self.assertIn(phrase, install_section)
+
     def test_first_seven_skill_usage_guides_are_complete(self):
         readme = (ROOT / "README.md").read_text(encoding="utf-8")
         start_marker = '<a id="usage-guides"></a>'

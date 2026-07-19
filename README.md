@@ -37,6 +37,16 @@
 
 第 8 个 Skill 的执行就绪安装器：`install-web-api-test-execution-evidence.cmd` 或 `install-web-api-test-execution-evidence.ps1`。它使用固定版本的 GitHub Release 完整安装器，显示下载进度、速度、ETA、重试、续传、校验、解压和 smoke test；安装已损坏或不完整时，用同一安装器加 `-Repair`，不要在执行过程中下载或替换任何组件。
 
+### Windows x64 三步使用
+
+1. 下载并双击 [install-web-api-test-execution-evidence.cmd](https://github.com/Saitamasans/testing-skills/releases/download/web-api-test-execution-evidence-v1.0.0/install-web-api-test-execution-evidence.cmd)。安装阶段会下载一次完整 Runtime，并校验 SHA-256、清单和本地 smoke；无需管理员权限或系统 Node、npm、Git、Chrome。
+2. 安装完成后重启 Codex。
+3. 上传十列 Excel 测试用例并输入：`调用第八个 Skill 执行`。
+
+正常执行阶段不会下载 Node、Runner、Playwright 或 Chromium，也不会访问 GitHub Release、npm 或浏览器下载源获取运行依赖。完整离线/审计包可下载 [web-api-test-execution-evidence-1.0.0-windows-x64.zip](https://github.com/Saitamasans/testing-skills/releases/download/web-api-test-execution-evidence-v1.0.0/web-api-test-execution-evidence-1.0.0-windows-x64.zip)，公开校验值见 [SHA256SUMS.txt](https://github.com/Saitamasans/testing-skills/releases/download/web-api-test-execution-evidence-v1.0.0/SHA256SUMS.txt)。
+
+安装损坏时，下载同一 Release 中的 `install-web-api-test-execution-evidence.ps1`，在其所在目录运行 `powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\install-web-api-test-execution-evidence.ps1 -Repair`。默认 receipt 位于 `%USERPROFILE%\.testing-skills\installations\web-api-test-execution-evidence.json`，诊断目录位于 `%USERPROFILE%\.testing-skills\diagnostics\web-api-test-execution-evidence`。
+
 点击按钮会下载纯文本 `.cmd` 启动器；下载后双击并完成 Windows 安全确认即可安装。GitHub 不能静默执行访问者电脑上的程序，也不会绕过浏览器或 Windows 的确认步骤。前 7 个和全部安装按钮从固定的 `skill-installers-v1` Release 提供；第 8 个执行就绪按钮只从不可变的 `web-api-test-execution-evidence-v1.0.0` Release 提供。Release 资产发布后按钮才生效；如果下载返回 404，请使用下面的命令兜底。
 
 `.cmd` 可以先在 GitHub 查看，或下载后右键用文本编辑器检查。Windows 可能显示“来自互联网”或 SmartScreen 提示，这是正常安全机制。启动器只读取本仓库的 HTTPS 安装脚本，默认写入当前用户的 `.agents\skills`，不写系统目录。
