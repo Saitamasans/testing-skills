@@ -42,6 +42,7 @@ jobs:
           locked_tag="$(node -p "require('./packages/testing-runner/release/windows-runtime-lock.json').release_tag")"
           test "$tag" = "$EXPECTED_TAG"
           test "$tag" = "$locked_tag"
+          git fetch --force origin "refs/tags/$tag:refs/tags/$tag"
           commit="$(git rev-parse "refs/tags/$tag^{commit}")"
           test "$commit" = "${{ github.sha }}"
           git fetch --no-tags origin main

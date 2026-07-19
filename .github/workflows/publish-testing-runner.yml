@@ -43,6 +43,7 @@ jobs:
           tag="${{ github.event.inputs.tag || github.ref_name }}"
           test "$tag" = "$EXPECTED_TAG"
           test "$(node -p "require('./packages/testing-runner/package.json').version")" = "$EXPECTED_VERSION"
+          git fetch --force origin "refs/tags/$tag:refs/tags/$tag"
           commit="$(git rev-parse "refs/tags/$tag^{commit}")"
           if [[ "$GITHUB_EVENT_NAME" == "push" ]]; then test "$commit" = "$GITHUB_SHA"; fi
           git fetch --no-tags origin main

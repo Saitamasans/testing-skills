@@ -51,12 +51,12 @@ jobs:
 
           mkdir -p build
           runtime_release_ready=false
-          git fetch --force origin "refs/tags/$RUNTIME_TAG:refs/tags/$RUNTIME_TAG"
-          runtime_tag_commit="$(git rev-parse "refs/tags/$RUNTIME_TAG^{commit}")"
-          git merge-base --is-ancestor "$runtime_tag_commit" "refs/remotes/origin/main"
-          if gh api "repos/$GITHUB_REPOSITORY/releases/tags/$RUNTIME_TAG" \
-            > build/runtime-release-metadata.json 2>/dev/null; then
-            if node - "$RUNTIME_TAG" "$runtime_tag_commit" build/runtime-release-metadata.json <<'NODE'
+          if git fetch --force origin "refs/tags/$RUNTIME_TAG:refs/tags/$RUNTIME_TAG"; then
+            runtime_tag_commit="$(git rev-parse "refs/tags/$RUNTIME_TAG^{commit}")"
+            if git merge-base --is-ancestor "$runtime_tag_commit" "refs/remotes/origin/main" && \
+              gh api "repos/$GITHUB_REPOSITORY/releases/tags/$RUNTIME_TAG" \
+                > build/runtime-release-metadata.json 2>/dev/null; then
+              if node - "$RUNTIME_TAG" "$runtime_tag_commit" build/runtime-release-metadata.json <<'NODE'
           const fs = require("node:fs");
           const [tag, commit, file] = process.argv.slice(2);
           const value = JSON.parse(fs.readFileSync(file, "utf8"));
@@ -77,8 +77,9 @@ jobs:
             process.exit(1);
           }
           NODE
-            then
-              runtime_release_ready=true
+              then
+                runtime_release_ready=true
+              fi
             fi
           fi
           if [[ "$runtime_release_ready" != "true" ]]; then

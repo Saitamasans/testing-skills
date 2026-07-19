@@ -254,6 +254,18 @@ class EighthSkillReleaseWorkflowContractTest(unittest.TestCase):
             self.assertLess(text.index(fetch), text.index(ancestry))
             self.assertLess(text.index('commit="$(git rev-parse'), text.index(ancestry))
 
+    def test_manual_release_workflows_fetch_the_reviewed_tag_before_resolving_it(self):
+        for name, workflow in [
+            ("runtime", self.release),
+            ("runner", self.runner_release),
+        ]:
+            with self.subTest(workflow=name):
+                fetch = 'git fetch --force origin "refs/tags/$tag:refs/tags/$tag"'
+                resolve = 'commit="$(git rev-parse "refs/tags/$tag^{commit}")"'
+                self.assertIn(fetch, workflow)
+                self.assertIn(resolve, workflow)
+                self.assertLess(workflow.index(fetch), workflow.index(resolve))
+
     def test_release_workflows_pin_every_third_party_action_to_a_full_commit(self):
         workflows = {
             "bundle": self.bundle,

@@ -354,6 +354,10 @@ class GitHubInstallerReleaseWorkflowTest(unittest.TestCase):
         ]
 
         self.assertIn(metadata_query, workflow)
+        self.assertIn(
+            'if git fetch --force origin "refs/tags/$RUNTIME_TAG:refs/tags/$RUNTIME_TAG"; then',
+            workflow,
+        )
         for phrase in readiness_checks:
             with self.subTest(phrase=phrase):
                 self.assertIn(phrase, workflow)
