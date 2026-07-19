@@ -694,7 +694,13 @@ class CompleteInstallerTest(unittest.TestCase):
         self.assertFalse(Path(mapping.group(1)).exists(), output)
         receipt = json.loads(self.receipt_path().read_text(encoding="utf-8-sig"))
         runtime = Path(receipt["runtime_path"])
-        self.assertTrue(str(runtime).startswith(str(self.state_root)))
+        runtime_real = os.path.normcase(os.path.realpath(runtime))
+        state_root_real = os.path.normcase(os.path.realpath(self.state_root))
+        self.assertEqual(
+            state_root_real,
+            os.path.commonpath([runtime_real, state_root_real]),
+            f"runtime={runtime_real} state_root={state_root_real}",
+        )
         self.assertTrue(
             (
                 runtime
