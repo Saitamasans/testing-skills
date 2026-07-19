@@ -42,6 +42,8 @@ class EighthSkillReleaseWorkflowContractTest(unittest.TestCase):
         cls.windows_release_ci = windows_release_ci.read_text(encoding="utf-8") if windows_release_ci.exists() else ""
         packaged_smoke = ROOT / "packages/testing-runner/scripts/verify-release-tarball.mjs"
         cls.packaged_smoke = packaged_smoke.read_text(encoding="utf-8") if packaged_smoke.exists() else ""
+        lifecycle = ROOT / "packages/testing-runner/scripts/release-draft-lifecycle.mjs"
+        cls.release_lifecycle = lifecycle.read_text(encoding="utf-8") if lifecycle.exists() else ""
 
     def test_native_build_proves_host_image_ps51_and_space_before_bundle(self):
         for phrase in [
@@ -143,14 +145,12 @@ class EighthSkillReleaseWorkflowContractTest(unittest.TestCase):
             "needs: validate-tag",
             "uses: ./.github/workflows/build-complete-windows-bundles.yml",
             "render-windows-installers.mjs",
-            "gh release create",
-            "--draft",
-            "--verify-tag",
+            "release-draft-lifecycle.mjs prepare",
+            "release-draft-lifecycle.mjs publish",
+            "release_id",
             "Verify draft release assets",
             'refs/tags/$RELEASE_TAG^{commit}',
             "environment: release",
-            "gh release edit",
-            "--draft=false",
             "Post-publish immutable URL verification",
             "releases/download/$tag",
         ]:
@@ -158,7 +158,7 @@ class EighthSkillReleaseWorkflowContractTest(unittest.TestCase):
                 self.assertIn(phrase, self.release)
         self.assertNotIn("--clobber", self.release)
         ordered = [
-            "gh release create",
+            "release-draft-lifecycle.mjs prepare",
             "Verify draft release assets",
             "environment: release",
             "Post-publish immutable URL verification",
@@ -187,10 +187,10 @@ class EighthSkillReleaseWorkflowContractTest(unittest.TestCase):
         for job in [create_draft.group(1), publish.group(1)]:
             with self.subTest(job=job[:40]):
                 self.assertIn("verified-eighth-runtime-release-assets", job)
-                self.assertIn("gh release download", job)
+                self.assertIn("release-draft-lifecycle.mjs download", job)
                 self.assertIn("diff --no-dereference --recursive", job)
                 self.assertIn("sha256sum -c SHA256SUMS.txt", job)
-                self.assertIn("target_commitish", job)
+                self.assertIn("TAG_COMMIT", job)
 
         advisory = re.search(
             r"(?ms)^  immutable-release-advisory:\n(.*?)(?=^  [a-z][a-z-]+:\n)",
@@ -211,28 +211,29 @@ class EighthSkillReleaseWorkflowContractTest(unittest.TestCase):
         protected = publish.group(1)
         for phrase in [
             "environment: release",
-            "value.draft",
-            "value.tag_name",
-            "value.target_commitish",
-            "value.assets",
+            "needs.create-draft.outputs.release_id",
+            "release-draft-lifecycle.mjs download",
+            "release-draft-lifecycle.mjs publish",
             "draft assets differ from verified artifact",
-            'gh release edit "$RELEASE_TAG" --draft=false',
         ]:
             with self.subTest(phrase=phrase):
                 self.assertIn(phrase, protected)
         self.assertNotIn("IMMUTABLE_RELEASES_ADMIN_READ_TOKEN", protected)
         self.assertNotIn("immutable-releases", protected)
-        edit = 'gh release edit "$RELEASE_TAG" --draft=false'
-        if "diff --no-dereference --recursive" in protected and edit in protected:
-            self.assertLess(
-                protected.index("diff --no-dereference --recursive"),
-                protected.index(edit),
-            )
+        self.assertLess(
+            protected.index("diff --no-dereference --recursive"),
+            protected.index("release-draft-lifecycle.mjs publish"),
+        )
 
         post = post_publish.group(1)
-        self.assertIn("releases/tags/$tag", post)
-        self.assertIn("published release is not immutable", post)
-        self.assertIn(".immutable", post)
+        self.assertIn("release-draft-lifecycle.mjs verify-public", post)
+        self.assertIn("needs.create-draft.outputs.release_id", post)
+        self.assertIn("release.immutable !== true", self.release_lifecycle)
+        self.assertIn("::warning::", self.release_lifecycle)
+        self.assertNotRegex(
+            self.release_lifecycle,
+            r"immutable\s*!==\s*true\).*throw new Error",
+        )
 
     def test_existing_legal_drafts_are_resumed_without_replacing_assets(self):
         for name, workflow in [
@@ -246,18 +247,62 @@ class EighthSkillReleaseWorkflowContractTest(unittest.TestCase):
             self.assertIsNotNone(create_draft)
             text = create_draft.group(1)
             with self.subTest(workflow=name):
-                self.assertIn("Existing legal draft found; reusing verified assets", text)
-                self.assertIn("gh api", text)
-                self.assertIn("value.draft", text)
-                self.assertIn("value.tag_name", text)
-                self.assertIn("value.target_commitish", text)
-                self.assertIn("value.assets", text)
-                self.assertIn("gh release download", text)
+                self.assertIn("release_id", text)
+                self.assertIn("created_or_reused", text)
+                self.assertIn("release-draft-lifecycle.mjs prepare", text)
+                self.assertIn("release-draft-lifecycle.mjs download", text)
+                self.assertIn("steps.draft.outputs.release_id", text)
                 self.assertIn("diff --no-dereference --recursive", text)
-                self.assertIn("gh release create", text)
+                self.assertNotIn("releases/tags/", text)
+                self.assertNotIn("gh release download", text)
                 self.assertNotIn("gh release upload", text)
                 self.assertNotIn("--clobber", text)
                 self.assertNotIn("Release already exists", text)
+
+    def test_runner_and_runtime_use_release_id_for_the_entire_draft_lifecycle(self):
+        helper = "packages/testing-runner/scripts/release-draft-lifecycle.mjs"
+        for name, workflow in [
+            ("runtime", self.release),
+            ("runner", self.runner_release),
+        ]:
+            create_draft = re.search(
+                r"(?ms)^  create-draft:\n(.*?)(?=^  [a-z][a-z-]+:\n)",
+                workflow,
+            )
+            publish = re.search(
+                r"(?ms)^  publish-release:\n(.*?)(?=^  [a-z][a-z-]+:\n)",
+                workflow,
+            )
+            post_publish = re.search(
+                r"(?ms)^  post-publish-verify:\n(.*?)(?=^  [a-z][a-z-]+:\n|\Z)",
+                workflow,
+            )
+            self.assertIsNotNone(create_draft)
+            self.assertIsNotNone(publish)
+            self.assertIsNotNone(post_publish)
+            create_text = create_draft.group(1)
+            publish_text = publish.group(1)
+            post_text = post_publish.group(1)
+            with self.subTest(workflow=name):
+                for output in ["release_id", "release_url", "created_or_reused"]:
+                    self.assertIn(output, create_text)
+                self.assertIn(f"node {helper} prepare", create_text)
+                self.assertIn(f"node {helper} download", create_text)
+                self.assertIn("steps.draft.outputs.release_id", create_text)
+                self.assertIn(f"node {helper} download", publish_text)
+                self.assertIn(f"node {helper} publish", publish_text)
+                self.assertIn("needs.create-draft.outputs.release_id", publish_text)
+                self.assertIn(f"node {helper} verify-public", post_text)
+                self.assertIn("needs.create-draft.outputs.release_id", post_text)
+                for draft_job in [create_text, publish_text]:
+                    self.assertNotIn("releases/tags/", draft_job)
+                    self.assertNotIn("gh release download", draft_job)
+                    self.assertNotIn("gh release edit", draft_job)
+                    self.assertNotIn("--clobber", draft_job)
+                self.assertNotRegex(
+                    post_text,
+                    r"immutable\s*!==\s*true\).*throw new Error",
+                )
 
     def test_immutable_admin_advisory_runs_before_any_draft_creation(self):
         for name, workflow in [
@@ -438,12 +483,13 @@ class EighthSkillReleaseWorkflowContractTest(unittest.TestCase):
             "installation-smoke-test.mjs",
             "SHA256SUMS.txt",
             "actions/attest-build-provenance@",
-            "--draft",
             "environment: release",
             "immutable-releases",
-            "--draft=false",
-            "published Runner release is not immutable",
-            "gh release download",
+            "release-draft-lifecycle.mjs prepare",
+            "release-draft-lifecycle.mjs download",
+            "release-draft-lifecycle.mjs publish",
+            "release-draft-lifecycle.mjs verify-public",
+            "release_id",
         ]:
             with self.subTest(phrase=phrase):
                 self.assertIn(phrase, self.runner_release)
@@ -454,6 +500,8 @@ class EighthSkillReleaseWorkflowContractTest(unittest.TestCase):
         )
         self.assertIsNotNone(publish)
         self.assertNotIn("IMMUTABLE_RELEASES_ADMIN_READ_TOKEN", publish.group(1))
+        self.assertIn("release.immutable !== true", self.release_lifecycle)
+        self.assertIn("is not reported as immutable", self.release_lifecycle)
 
     def test_runner_release_uses_the_dynamic_installation_smoke_version_contract(self):
         self.assertNotIn(
