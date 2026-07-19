@@ -455,6 +455,21 @@ class EighthSkillReleaseWorkflowContractTest(unittest.TestCase):
         self.assertIsNotNone(publish)
         self.assertNotIn("IMMUTABLE_RELEASES_ADMIN_READ_TOKEN", publish.group(1))
 
+    def test_runner_release_uses_the_dynamic_installation_smoke_version_contract(self):
+        self.assertNotIn(
+            'grep -F "1.1.2" packages/testing-runner/scripts/installation-smoke-test.mjs',
+            self.runner_release,
+        )
+        for fixed_contract in [
+            'EXPECTED_VERSION: 1.1.2',
+            'RUNNER_ASSET: saitamasans-testing-runner-1.1.2.tgz',
+            'pkg.version !== "1.1.2"',
+            'cli.includes("1.1.2")',
+            '["chromium", "1228"]',
+        ]:
+            with self.subTest(fixed_contract=fixed_contract):
+                self.assertIn(fixed_contract, self.runner_release)
+
     def test_runner_release_installs_its_pinned_ci_browser_before_tests(self):
         job = re.search(
             r"(?ms)^  build-and-contract-test:\n(.*?)(?=^  [a-z][a-z-]+:\n)",

@@ -110,6 +110,16 @@ test("root package exposes the locked Windows bundle build entry point", async (
   );
 });
 
+test("installation smoke compares the Runner CLI version with the bundle manifest dynamically", async () => {
+  const smoke = await import("../packages/testing-runner/scripts/installation-smoke-test.mjs");
+  assert.equal(typeof smoke.assertRunnerVersionMatchesManifest, "function");
+  assert.doesNotThrow(() => smoke.assertRunnerVersionMatchesManifest("7.8.9", "7.8.9"));
+  assert.throws(
+    () => smoke.assertRunnerVersionMatchesManifest("7.8.8", "7.8.9"),
+    /Runner CLI version does not match payload manifest/,
+  );
+});
+
 test("release CI builds the requested architecture on its native Windows host", async () => {
   const workflow = await readFile(
     path.join(repoRoot, ".github/workflows/build-complete-windows-bundles.yml"),
