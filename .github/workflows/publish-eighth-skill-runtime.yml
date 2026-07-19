@@ -11,6 +11,11 @@ on:
         required: true
         default: web-api-test-execution-evidence-v1.0.0
         type: string
+      public_release_id:
+        description: Existing public Release ID for read-only verification recovery
+        required: false
+        default: ""
+        type: string
 
 concurrency:
   group: eighth-runtime-${{ github.repository }}-${{ github.event.inputs.tag || github.ref_name }}
@@ -21,6 +26,7 @@ permissions:
 
 env:
   EXPECTED_TAG: web-api-test-execution-evidence-v1.0.0
+  EXPECTED_PUBLIC_RELEASE_ID: "356413719"
 
 jobs:
   validate-tag:
@@ -35,6 +41,8 @@ jobs:
           clean: true
       - id: tag
         name: Verify tag, runtime lock, and workflow commit
+        env:
+          RECOVERY_RELEASE_ID: ${{ inputs.public_release_id }}
         shell: bash
         run: |
           set -euo pipefail
@@ -42,6 +50,20 @@ jobs:
           locked_tag="$(node -p "require('./packages/testing-runner/release/windows-runtime-lock.json').release_tag")"
           test "$tag" = "$EXPECTED_TAG"
           test "$tag" = "$locked_tag"
+          if [[ -n "${RECOVERY_RELEASE_ID:-}" ]]; then
+            if [[ "$GITHUB_EVENT_NAME" != "workflow_dispatch" ]]; then
+              echo "public Release recovery is only allowed through workflow_dispatch" >&2
+              exit 1
+            fi
+            if [[ ! "$RECOVERY_RELEASE_ID" =~ ^[0-9]+$ ]]; then
+              echo "public Release recovery ID must be numeric" >&2
+              exit 1
+            fi
+            if [[ "$RECOVERY_RELEASE_ID" != "$EXPECTED_PUBLIC_RELEASE_ID" ]]; then
+              echo "public Release recovery ID is not the locked Runtime Release" >&2
+              exit 1
+            fi
+          fi
           git fetch --force origin "refs/tags/$tag:refs/tags/$tag"
           commit="$(git rev-parse "refs/tags/$tag^{commit}")"
           if [[ "$GITHUB_EVENT_NAME" == "push" ]]; then test "$commit" = "$GITHUB_SHA"; fi
@@ -319,6 +341,7 @@ jobs:
           echo "Repository immutable releases are enabled."
 
   create-draft:
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.public_release_id == '' }}
     needs: [validate-tag, assemble-release, clean-room-install-smoke, immutable-release-advisory]
     runs-on: ubuntu-latest
     outputs:
@@ -374,6 +397,7 @@ jobs:
           fi
 
   publish-release:
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.public_release_id == '' }}
     needs: [validate-tag, create-draft]
     runs-on: ubuntu-latest
     environment: release
@@ -416,7 +440,22 @@ jobs:
             --trusted-dir build/release-assets
 
   post-publish-verify:
-    needs: [validate-tag, create-draft, publish-release]
+    needs: [validate-tag, assemble-release, clean-room-install-smoke, create-draft, publish-release]
+    if: >-
+      ${{
+        always() &&
+        needs.validate-tag.result == 'success' &&
+        needs.assemble-release.result == 'success' &&
+        needs.clean-room-install-smoke.result == 'success' &&
+        (
+          (inputs.public_release_id != '' &&
+           needs.create-draft.result == 'skipped' &&
+           needs.publish-release.result == 'skipped') ||
+          (inputs.public_release_id == '' &&
+           needs.create-draft.result == 'success' &&
+           needs.publish-release.result == 'success')
+        )
+      }}
     strategy:
       fail-fast: false
       matrix:
@@ -443,7 +482,7 @@ jobs:
         env:
           RELEASE_TAG: ${{ needs.validate-tag.outputs.tag }}
           TAG_COMMIT: ${{ needs.validate-tag.outputs.commit }}
-          RELEASE_ID: ${{ needs.create-draft.outputs.release_id }}
+          RELEASE_ID: ${{ inputs.public_release_id || needs.create-draft.outputs.release_id }}
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
@@ -469,55 +508,106 @@ jobs:
           Write-Output "PROCESSOR_ARCHITECTURE=$env:PROCESSOR_ARCHITECTURE RuntimeInformation=$runtimeArch"
           if ($runtimeArch -cne $expectedArch) { throw "native host architecture mismatch" }
 
-          $isolated = Join-Path $PWD "build/public-install-${{ matrix.arch }}"
+          $volumeRoot = [IO.Path]::GetPathRoot($env:RUNNER_TEMP)
+          $isolated = Join-Path $volumeRoot ("r-" + [Guid]::NewGuid().ToString("N").Substring(0, 8))
           $installRoot = Join-Path $isolated "skills"
           $stateRoot = Join-Path $isolated "state"
-          New-Item -ItemType Directory -Path $installRoot, $stateRoot -Force | Out-Null
-          $env:TESTING_SKILLS_INSTALL_ROOT = $installRoot
-          $env:TESTING_SKILLS_STATE_ROOT = $stateRoot
-          $env:TESTING_SKILLS_NO_PAUSE = "1"
-          $publicCmd = Join-Path $PWD "build/public-release/install-web-api-test-execution-evidence.cmd"
-          & $env:ComSpec /d /c ('"' + $publicCmd + '"')
-          if ($LASTEXITCODE -ne 0) { throw "public CMD installation failed: $LASTEXITCODE" }
-
-          $installationReceipt = Join-Path $stateRoot "installations/web-api-test-execution-evidence.json"
-          if (-not (Test-Path -LiteralPath $installationReceipt -PathType Leaf)) { throw "installation-receipt is missing" }
-          $receipt = Get-Content -LiteralPath $installationReceipt -Raw -Encoding UTF8 | ConvertFrom-Json
-          $diagnostics = [string]$receipt.diagnostics_path
-          if (-not (Test-Path -LiteralPath (Join-Path $diagnostics "smoke-result.json") -PathType Leaf)) { throw "smoke-result.json is missing" }
-          foreach ($pattern in @("*.png", "playwright-trace.zip", "*.xlsx", "*.html", "run-result.json", "*.jsonl")) {
-            if (-not (Get-ChildItem -LiteralPath $diagnostics -Recurse -File -Filter $pattern | Select-Object -First 1)) {
-              throw "public installation diagnostic is missing: $pattern"
-            }
-          }
-
-          $networkSentinel = New-Object Net.Sockets.TcpListener([Net.IPAddress]::Loopback, 0)
-          $networkSentinel.Start()
-          $proxyPort = ([Net.IPEndPoint]$networkSentinel.LocalEndpoint).Port
-          $connectionAttempt = $networkSentinel.AcceptTcpClientAsync()
-          $env:HTTP_PROXY = "http://127.0.0.1:$proxyPort"
-          $env:HTTPS_PROXY = "http://127.0.0.1:$proxyPort"
-          $env:ALL_PROXY = "http://127.0.0.1:$proxyPort"
+          $evidenceRoot = Join-Path $PWD "build/public-install-evidence-${{ matrix.arch }}"
+          $installationReceipt = $null
+          $diagnostics = $null
+          $offlineDiagnostics = $null
+          $dependencyNetworkAttempted = $null
+          New-Item -ItemType Directory -Path $evidenceRoot -Force | Out-Null
           try {
-            $installedLauncher = Join-Path $installRoot "web-api-test-execution-evidence/scripts/testing-runner.ps1"
-            & $installedLauncher --version
-            if ($LASTEXITCODE -ne 0) { throw "installed launcher verification failed: $LASTEXITCODE" }
-            $runtimePath = [string]$receipt.runtime_path
-            $bundledNode = Join-Path $runtimePath "node/node.exe"
-            $smokeScript = Join-Path $runtimePath "smoke/installation-smoke-test.mjs"
-            $offlineDiagnostics = Join-Path $isolated "offline-formal-execution"
-            & $bundledNode $smokeScript $offlineDiagnostics
-            if ($LASTEXITCODE -ne 0) { throw "offline formal execution failed: $LASTEXITCODE" }
-            Start-Sleep -Milliseconds 500
-            if ($connectionAttempt.IsCompleted) { throw "offline formal execution attempted dependency network access" }
+            New-Item -ItemType Directory -Path $installRoot, $stateRoot -Force | Out-Null
+            $env:TESTING_SKILLS_INSTALL_ROOT = $installRoot
+            $env:TESTING_SKILLS_STATE_ROOT = $stateRoot
+            $env:TESTING_SKILLS_NO_PAUSE = "1"
+            $publicCmd = Join-Path $PWD "build/public-release/install-web-api-test-execution-evidence.cmd"
+            & $env:ComSpec /d /c ('"' + $publicCmd + '"')
+            if ($LASTEXITCODE -ne 0) { throw "public CMD installation failed: $LASTEXITCODE" }
+
+            $installationReceipt = Join-Path $stateRoot "installations/web-api-test-execution-evidence.json"
+            if (-not (Test-Path -LiteralPath $installationReceipt -PathType Leaf)) { throw "installation-receipt is missing" }
+            $receipt = Get-Content -LiteralPath $installationReceipt -Raw -Encoding UTF8 | ConvertFrom-Json
+            $diagnostics = [string]$receipt.diagnostics_path
+            if (-not (Test-Path -LiteralPath (Join-Path $diagnostics "smoke-result.json") -PathType Leaf)) { throw "smoke-result.json is missing" }
             foreach ($pattern in @("*.png", "playwright-trace.zip", "*.xlsx", "*.html", "run-result.json", "*.jsonl")) {
-              if (-not (Get-ChildItem -LiteralPath $offlineDiagnostics -Recurse -File -Filter $pattern | Select-Object -First 1)) {
-                throw "offline formal execution artifact is missing: $pattern"
+              if (-not (Get-ChildItem -LiteralPath $diagnostics -Recurse -File -Filter $pattern | Select-Object -First 1)) {
+                throw "public installation diagnostic is missing: $pattern"
               }
             }
+
+            $networkSentinel = New-Object Net.Sockets.TcpListener([Net.IPAddress]::Loopback, 0)
+            $networkSentinel.Start()
+            $proxyPort = ([Net.IPEndPoint]$networkSentinel.LocalEndpoint).Port
+            $connectionAttempt = $networkSentinel.AcceptTcpClientAsync()
+            $env:HTTP_PROXY = "http://127.0.0.1:$proxyPort"
+            $env:HTTPS_PROXY = "http://127.0.0.1:$proxyPort"
+            $env:ALL_PROXY = "http://127.0.0.1:$proxyPort"
+            try {
+              $installedLauncher = Join-Path $installRoot "web-api-test-execution-evidence/scripts/testing-runner.ps1"
+              & $installedLauncher --version
+              if ($LASTEXITCODE -ne 0) { throw "installed launcher verification failed: $LASTEXITCODE" }
+              $runtimePath = [string]$receipt.runtime_path
+              $bundledNode = Join-Path $runtimePath "node/node.exe"
+              $smokeScript = Join-Path $runtimePath "smoke/installation-smoke-test.mjs"
+              $offlineDiagnostics = Join-Path $isolated "offline-formal-execution"
+              & $bundledNode $smokeScript $offlineDiagnostics
+              if ($LASTEXITCODE -ne 0) { throw "offline formal execution failed: $LASTEXITCODE" }
+              Start-Sleep -Milliseconds 500
+              $dependencyNetworkAttempted = [bool]$connectionAttempt.IsCompleted
+              if ($dependencyNetworkAttempted) { throw "offline formal execution attempted dependency network access" }
+              foreach ($pattern in @("*.png", "playwright-trace.zip", "*.xlsx", "*.html", "run-result.json", "*.jsonl")) {
+                if (-not (Get-ChildItem -LiteralPath $offlineDiagnostics -Recurse -File -Filter $pattern | Select-Object -First 1)) {
+                  throw "offline formal execution artifact is missing: $pattern"
+                }
+              }
+            } finally {
+              $networkSentinel.Stop()
+              Remove-Item Env:HTTP_PROXY, Env:HTTPS_PROXY, Env:ALL_PROXY -ErrorAction SilentlyContinue
+            }
           } finally {
-            $networkSentinel.Stop()
+            try {
+              $pathEvidence = [ordered]@{
+                schema_version = 1
+                runner_temp = $env:RUNNER_TEMP
+                volume_root = $volumeRoot
+                isolated_root = $isolated
+                isolated_root_length = $isolated.Length
+                install_root = $installRoot
+                state_root = $stateRoot
+                dependency_network_attempted = $dependencyNetworkAttempted
+              }
+              [IO.File]::WriteAllText(
+                (Join-Path $evidenceRoot "public-install-paths.json"),
+                ($pathEvidence | ConvertTo-Json -Depth 10),
+                (New-Object Text.UTF8Encoding($false))
+              )
+              if ($installationReceipt -and (Test-Path -LiteralPath $installationReceipt -PathType Leaf)) {
+                Copy-Item -LiteralPath $installationReceipt -Destination (Join-Path $evidenceRoot "installation-receipt.json") -Force
+              }
+              if ($diagnostics -and (Test-Path -LiteralPath $diagnostics -PathType Container)) {
+                Copy-Item -LiteralPath $diagnostics -Destination (Join-Path $evidenceRoot "install-diagnostics") -Recurse -Force
+              }
+              if ($offlineDiagnostics -and (Test-Path -LiteralPath $offlineDiagnostics -PathType Container)) {
+                Copy-Item -LiteralPath $offlineDiagnostics -Destination (Join-Path $evidenceRoot "offline-formal-execution") -Recurse -Force
+              }
+            } catch {
+              Write-Warning "could not preserve all public-install diagnostics: $($_.Exception.Message)"
+            }
             Remove-Item Env:HTTP_PROXY, Env:HTTPS_PROXY, Env:ALL_PROXY,
               Env:TESTING_SKILLS_INSTALL_ROOT, Env:TESTING_SKILLS_STATE_ROOT,
               Env:TESTING_SKILLS_NO_PAUSE -ErrorAction SilentlyContinue
+            if (Test-Path -LiteralPath $isolated) {
+              Remove-Item -LiteralPath $isolated -Recurse -Force -ErrorAction SilentlyContinue
+            }
           }
+      - name: Upload public installation verification evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: public-runtime-install-verification-${{ matrix.arch }}
+          path: build/public-install-evidence-${{ matrix.arch }}
+          if-no-files-found: warn
+          retention-days: 14
