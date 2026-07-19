@@ -582,6 +582,15 @@ class EighthSkillReleaseWorkflowContractTest(unittest.TestCase):
             with self.subTest(phrase=phrase):
                 self.assertIn(phrase, workflow)
         self.assertNotIn("contents: write", workflow)
+
+    def test_windows_x64_pr_ci_executes_the_real_runtime_long_path_installer_fixture(self):
+        workflow = (ROOT / ".github/workflows/validate-runner-windows-release.yml").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn(
+            "CompleteInstallerTest.test_real_runtime_long_path_installs_through_temporary_short_alias",
+            workflow,
+        )
         self.assertNotIn("gh release", workflow)
         release_docs = "\n".join(
             path.read_text(encoding="utf-8")
