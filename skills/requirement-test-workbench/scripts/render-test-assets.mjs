@@ -4,13 +4,14 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-export const COLUMNS = ["用例 ID", "所属模块", "用例标题", "验证功能点", "前置条件", "测试步骤", "预期结果", "优先级", "执行结果", "备注"];
-export const WORKBENCH_COLUMNS = [...COLUMNS.slice(0, 8), "实际结果", ...COLUMNS.slice(8)];
+export const COLUMNS = ["用例 ID", "所属模块", "用例标题", "前置条件", "测试步骤", "预期结果", "优先级", "执行结果"];
+export const LEGACY_COLUMNS = ["用例 ID", "所属模块", "用例标题", "验证功能点", "前置条件", "测试步骤", "预期结果", "优先级", "执行结果", "备注"];
+export const WORKBENCH_COLUMNS = [...LEGACY_COLUMNS.slice(0, 8), "实际结果", ...LEGACY_COLUMNS.slice(8)];
 export const STATUSES = ["未执行", "通过", "不通过", "待定"];
 const PRIORITIES = ["P0", "P1", "P2"];
 
 function isSupportedCaseColumns(columns) {
-  return [COLUMNS, WORKBENCH_COLUMNS].some((expected) =>
+  return [COLUMNS, LEGACY_COLUMNS, WORKBENCH_COLUMNS].some((expected) =>
     JSON.stringify(columns) === JSON.stringify(expected));
 }
 
@@ -285,3 +286,4 @@ async function main() {
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) main().catch((error) => { console.error(error); process.exitCode = 1; });
+

@@ -7,7 +7,7 @@ import type {
   SkillInvocation,
   TenColumnName,
 } from "../types.js";
-import { ELEVEN_COLUMNS, TEN_COLUMNS, UnsupportedInputError, isSupportedCaseColumns, type NativeReportDocument } from "./detect-input.js";
+import { COMPACT_COLUMNS, ELEVEN_COLUMNS, TEN_COLUMNS, UnsupportedInputError, isSupportedCaseColumns, type NativeReportDocument } from "./detect-input.js";
 import { inspectSource } from "./source-snapshot.js";
 
 export type { NormalizedCase, NormalizedCaseSet } from "../types.js";
@@ -121,12 +121,13 @@ export async function readNativeReport(file: string): Promise<NormalizedCaseSet>
   }
   const report: NativeReportDocument = inspected.detected.report;
   const rows: SourceRow[] = [];
-  let outputColumns: CaseColumnName[] = [...TEN_COLUMNS];
+  let outputColumns: CaseColumnName[] = [...COMPACT_COLUMNS];
   for (const sheet of report.sheets) {
     if (sheet.kind !== "test_cases") continue;
     if (!isSupportedCaseColumns(sheet.columns)) {
       throw new UnsupportedInputError(file, `${sheet.name} 不是精确标准十列或工作台十一列`);
     }
+    if (sheet.columns.length === TEN_COLUMNS.length) outputColumns = [...TEN_COLUMNS];
     if (sheet.columns.length === ELEVEN_COLUMNS.length) outputColumns = [...ELEVEN_COLUMNS];
     sheet.rows.forEach((row, index) => {
       rows.push({

@@ -21,6 +21,11 @@ export const TEN_COLUMNS = [
   "备注",
 ] as const;
 
+export const COMPACT_COLUMNS = [
+  TEN_COLUMNS[0], TEN_COLUMNS[1], TEN_COLUMNS[2], TEN_COLUMNS[4],
+  TEN_COLUMNS[5], TEN_COLUMNS[6], TEN_COLUMNS[7], TEN_COLUMNS[8],
+] as const;
+
 export const ELEVEN_COLUMNS = [
   ...TEN_COLUMNS.slice(0, 8),
   "实际结果",
@@ -101,7 +106,7 @@ function headerValues(sheet: ExcelJS.Worksheet): string[] {
 }
 
 export function isSupportedCaseColumns(headers: readonly string[]): boolean {
-  return [TEN_COLUMNS, ELEVEN_COLUMNS].some((expected) =>
+  return [COMPACT_COLUMNS, TEN_COLUMNS, ELEVEN_COLUMNS].some((expected) =>
     headers.length === expected.length &&
     headers.every((header, index) => header === expected[index]),
   );

@@ -259,7 +259,8 @@ export function projectExecutionReport(input: ProjectExecutionReportInput): Test
     row.values[columnIndex(sheet, "执行结果")] = item.case_status;
     const actualResultIndex = sheet.columns.indexOf("实际结果");
     if (actualResultIndex >= 0) row.values[actualResultIndex] = assertionSummary(item);
-    appendRemark(row, columnIndex(sheet, "备注"), executionNote(input.result, item));
+    const remarkIndex = sheet.columns.indexOf("备注");
+    if (remarkIndex >= 0) appendRemark(row, remarkIndex, executionNote(input.result, item));
   }
 
   projected.sheets.push(
