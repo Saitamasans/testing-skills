@@ -129,7 +129,6 @@ jobs:
           }
           NODE
           grep -F "installation-smoke-test.mjs" packages/testing-runner/scripts/build-windows-bundle.mjs
-          grep -F "1.1.2" packages/testing-runner/scripts/installation-smoke-test.mjs
       - name: Execute the packaged production dependency combination
         shell: powershell
         run: |

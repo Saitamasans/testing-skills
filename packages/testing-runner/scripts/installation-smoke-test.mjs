@@ -36,6 +36,12 @@ function smokeError(message) {
   return error;
 }
 
+export function assertRunnerVersionMatchesManifest(cliVersion, manifestVersion) {
+  if (cliVersion !== manifestVersion) {
+    throw smokeError("Runner CLI version does not match payload manifest");
+  }
+}
+
 function canonicalValue(value) {
   if (Array.isArray(value)) return value.map(canonicalValue);
   if (value === null || typeof value !== "object") return value;
@@ -420,9 +426,7 @@ export async function runInstallationSmokeTest(input = {}) {
     const runnerRoot = path.join(bundleRoot, "runner");
     const runnerCli = path.join(runnerRoot, "dist", "cli.js");
     const version = await runProcess({ executable: expectedNode, args: [runnerCli, "--version"], cwd: runnerRoot });
-    if (version.stdout.trim() !== payload.components.runner.version) {
-      throw smokeError("Runner CLI version does not match payload manifest");
-    }
+    assertRunnerVersionMatchesManifest(version.stdout.trim(), payload.components.runner.version);
     const dependencyNames = Object.keys(JSON.parse(await readFile(path.join(runnerRoot, "package.json"), "utf8")).dependencies ?? {});
     const dependencyCheck = [
       "const {createRequire}=require('node:module');",
