@@ -82,105 +82,6 @@ function countBy<T extends string>(values: T[]): Record<string, number> {
   return counts;
 }
 
-function jsonCell(value: unknown): string {
-  return value === undefined ? "" : JSON.stringify(value);
-}
-
-function createAssertionSheet(result: RunResult): NativeReportSheet {
-  return {
-    name: "Assertion outcomes",
-    kind: "supplementary",
-    columns: ["Case ID", "Assertion ID", "Passed", "Actual", "Expected"],
-    rows: result.cases.flatMap((item) => item.assertions.map((assertion) => ({
-      values: [
-        item.case_id,
-        assertion.assertion_id,
-        String(assertion.passed),
-        jsonCell(assertion.actual),
-        jsonCell(assertion.expected),
-      ],
-    }))),
-  };
-}
-
-function createDetailEvidenceSheet(result: RunResult): NativeReportSheet {
-  return {
-    name: "Evidence references",
-    kind: "supplementary",
-    columns: ["Case ID", "Run status", "Case status", "Evidence path", "SHA-256"],
-    rows: result.cases.flatMap((item) => item.evidence.map((evidence) => ({
-      values: [
-        item.case_id,
-        item.run_status,
-        item.case_status,
-        evidence.path,
-        evidence.sha256,
-      ],
-    }))),
-  };
-}
-
-function rowsByName(report: TestingSkillsReport, name: string): NativeReportRow[] | undefined {
-  const matching = report.sheets.filter((sheet) => sheet.name === name);
-  return matching.length === 1 ? matching[0]!.rows : undefined;
-}
-
-function rowKey(values: unknown[]): string {
-  return JSON.stringify(values.map((value) => String(value ?? "")));
-}
-
-function rowCounts(rows: NativeReportRow[]): Map<string, number> {
-  const counts = new Map<string, number>();
-  for (const row of rows) {
-    const key = rowKey(row.values);
-    counts.set(key, (counts.get(key) ?? 0) + 1);
-  }
-  return counts;
-}
-
-function compareDetailRows(
-  label: string,
-  expected: NativeReportRow[],
-  actual: NativeReportRow[] | undefined,
-): string[] {
-  if (!actual) return [`${label} sheet is missing or duplicated`];
-  const errors: string[] = [];
-  const expectedCounts = rowCounts(expected);
-  const actualCounts = rowCounts(actual);
-  for (const [key, count] of expectedCounts) {
-    if (actualCounts.get(key) !== count) {
-      const values = JSON.parse(key) as string[];
-      errors.push(`${label} ${values[1] ?? values[0] ?? "row"} projection drift`);
-    }
-  }
-  for (const [key, count] of actualCounts) {
-    if (expectedCounts.get(key) !== count) {
-      const values = JSON.parse(key) as string[];
-      errors.push(`${label} ${values[1] ?? values[0] ?? "row"} has an extra or duplicate projection`);
-    }
-  }
-  return errors;
-}
-
-export function verifyExecutionDetailProjection(input: ProjectExecutionReportInput): {
-  valid: boolean;
-  errors: string[];
-} {
-  const errors = [
-    ...compareDetailRows(
-      "assertion",
-      createAssertionSheet(input.result).rows,
-      rowsByName(input.report, "Assertion outcomes"),
-    ),
-    ...compareDetailRows(
-      "evidence",
-      createDetailEvidenceSheet(input.result).rows,
-      rowsByName(input.report, "Evidence references"),
-    ),
-  ];
-  return { valid: errors.length === 0, errors };
-}
-
 function createOverviewSheet(result: RunResult): NativeReportSheet {
   const caseCounts = countBy(result.cases.map(({ case_status }) => case_status));
   const runCounts = countBy(result.cases.map(({ run_status }) => run_status));
@@ -205,28 +106,11 @@ function createEvidenceSheet(result: RunResult): NativeReportSheet {
   return {
     name: "执行证据",
     kind: "supplementary",
-    columns: [
-      "用例 ID",
-      "运行状态",
-      "执行结果",
-      "证据路径",
-      "SHA-256",
-      "断言数",
-      "断言明细 JSON",
-    ],
+    columns: ["用例 ID", "运行状态", "执行结果", "证据路径", "SHA-256", "断言数"],
     rows: result.cases.flatMap((item) => {
-      const assertionDetails = JSON.stringify(item.assertions);
       if (item.evidence.length === 0) {
         return [{
-          values: [
-            item.case_id,
-            item.run_status,
-            item.case_status,
-            "",
-            "",
-            String(item.assertions.length),
-            assertionDetails,
-          ],
+          values: [item.case_id, item.run_status, item.case_status, "", "", String(item.assertions.length)],
         }];
       }
       return item.evidence.map((evidence) => ({
@@ -237,7 +121,6 @@ function createEvidenceSheet(result: RunResult): NativeReportSheet {
           evidence.path,
           evidence.sha256,
           String(item.assertions.length),
-          assertionDetails,
         ],
       }));
     }),
@@ -259,15 +142,11 @@ export function projectExecutionReport(input: ProjectExecutionReportInput): Test
     row.values[columnIndex(sheet, "执行结果")] = item.case_status;
     const actualResultIndex = sheet.columns.indexOf("实际结果");
     if (actualResultIndex >= 0) row.values[actualResultIndex] = assertionSummary(item);
-    appendRemark(row, columnIndex(sheet, "备注"), executionNote(input.result, item));
+    const remarkIndex = sheet.columns.indexOf("备注");
+    if (remarkIndex >= 0) appendRemark(row, remarkIndex, executionNote(input.result, item));
   }
 
-  projected.sheets.push(
-    createOverviewSheet(input.result),
-    createEvidenceSheet(input.result),
-    createAssertionSheet(input.result),
-    createDetailEvidenceSheet(input.result),
-  );
+  projected.sheets.push(createOverviewSheet(input.result), createEvidenceSheet(input.result));
   return projected;
 }
 
@@ -279,3 +158,4 @@ export async function renderExecutionReports(
   const renderer = await loadReportRenderer();
   return renderer.renderBoth(report, outputDir, basename);
 }
+
