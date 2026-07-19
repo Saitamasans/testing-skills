@@ -33,7 +33,7 @@
 
 发布状态说明：远端 tag `testing-runner-v1.1.1` 仅为未发布/作废发布目标，不对应可安全公开的 Runner Release，自动化不得再次尝试发布它，也不得删除或移动该 tag。首个可发布目标为 `testing-runner-v1.1.2`。
 
-[![Install All 8 Skills](https://img.shields.io/badge/Install-All_8_Skills-2ea44f?style=for-the-badge&logo=github)](https://github.com/Saitamasans/testing-skills/releases/download/skill-installers-v1/install-all.cmd)
+[![Install All 8 Skills](https://img.shields.io/badge/Install-All_8_Skills-2ea44f?style=for-the-badge&logo=github)](https://github.com/Saitamasans/testing-skills/releases/download/web-api-test-execution-evidence-v1.0.1/install-all.cmd)
 
 第 8 个 Skill 的执行就绪安装器：`install-web-api-test-execution-evidence.cmd` 或 `install-web-api-test-execution-evidence.ps1`。它使用固定版本的 GitHub Release 完整安装器，显示下载进度、速度、ETA、重试、续传、校验、解压和 smoke test；安装已损坏或不完整时，用同一安装器加 `-Repair`，不要在执行过程中下载或替换任何组件。
 
@@ -47,7 +47,7 @@
 
 安装损坏时，下载同一 Release 中的 `install-web-api-test-execution-evidence.ps1`，在其所在目录运行 `powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\install-web-api-test-execution-evidence.ps1 -Repair`。默认 receipt 位于 `%USERPROFILE%\.testing-skills\installations\web-api-test-execution-evidence.json`，诊断目录位于 `%USERPROFILE%\.testing-skills\diagnostics\web-api-test-execution-evidence`。
 
-点击按钮会下载纯文本 `.cmd` 启动器；下载后双击并完成 Windows 安全确认即可安装。GitHub 不能静默执行访问者电脑上的程序，也不会绕过浏览器或 Windows 的确认步骤。前 7 个和全部安装按钮从固定的 `skill-installers-v1` Release 提供；第 8 个执行就绪按钮只从不可变的 `web-api-test-execution-evidence-v1.0.1` Release 提供。Release 资产发布后按钮才生效；如果下载返回 404，请使用下面的命令兜底。
+点击按钮会下载纯文本 `.cmd` 启动器；下载后双击并完成 Windows 安全确认即可安装。GitHub 不能静默执行访问者电脑上的程序，也不会绕过浏览器或 Windows 的确认步骤。前 7 个独立安装按钮来自固定且不可变的 `skill-installers-v1` Release；全部 8 个 Skill 和第 8 个执行就绪按钮只从不可变的 `web-api-test-execution-evidence-v1.0.1` Release 提供。Release 资产发布后按钮才生效；如果下载返回 404，请使用下面的命令兜底。
 
 `.cmd` 可以先在 GitHub 查看，或下载后右键用文本编辑器检查。Windows 可能显示“来自互联网”或 SmartScreen 提示，这是正常安全机制。启动器只读取本仓库的 HTTPS 安装脚本，默认写入当前用户的 `.agents\skills`，不写系统目录。
 

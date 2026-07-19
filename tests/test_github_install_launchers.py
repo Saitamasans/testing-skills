@@ -94,8 +94,9 @@ class GitHubInstallReadmeTest(unittest.TestCase):
         cls.slugs = [item["slug"] for item in load_manifest(ROOT)["skills"]]
 
     def test_readme_links_one_all_button_and_one_button_per_skill(self):
-        all_url = RELEASE_BASE + "install-all.cmd"
-        self.assertEqual(1, self.readme.count(all_url))
+        all_url = RUNTIME_RELEASE_BASE + "install-all.cmd"
+        self.assertEqual(2, self.readme.count(all_url))
+        self.assertNotIn(RELEASE_BASE + "install-all.cmd", self.readme)
         self.assertIn("Install All 8 Skills", self.readme)
         for slug in self.slugs:
             with self.subTest(slug=slug):
@@ -107,7 +108,6 @@ class GitHubInstallReadmeTest(unittest.TestCase):
                 asset_url = base + f"install-{slug}.cmd"
                 expected_count = 3 if slug == "web-api-test-execution-evidence" else 1
                 self.assertEqual(expected_count, self.readme.count(asset_url))
-        self.assertIn(RUNTIME_RELEASE_BASE + "install-all.cmd", self.readme)
         self.assertNotIn(
             RELEASE_BASE + "install-web-api-test-execution-evidence.cmd",
             self.readme,
@@ -130,6 +130,13 @@ class GitHubInstallReadmeTest(unittest.TestCase):
         self.assertIn("scripts/install.ps1", self.readme)
         self.assertIn("-All", self.readme)
         self.assertIn("-Skill 'requirement-test-workbench'", self.readme)
+        self.assertIn(
+            "前 7 个独立安装按钮来自固定且不可变的 `skill-installers-v1` Release；"
+            "全部 8 个 Skill 和第 8 个执行就绪按钮只从不可变的 "
+            "`web-api-test-execution-evidence-v1.0.1` Release 提供",
+            self.readme,
+        )
+        self.assertNotIn("前 7 个和全部安装按钮从固定的", self.readme)
 
     def test_complete_fallbacks_run_immutable_cmds_without_pausing_and_preserve_exit_code(self):
         fallback = self.readme.split("### 命令兜底：Windows 零 Node 安装", 1)[1].split(
@@ -299,16 +306,13 @@ class GitHubInstallerReleaseWorkflowTest(unittest.TestCase):
             ROOT / ".github" / "workflows" / "publish-installers.yml"
         ).read_text(encoding="utf-8")
 
-    def test_main_excludes_eighth_and_reuses_verified_all_launcher(self):
+    def test_workflow_validates_public_entries_without_mutating_frozen_release(self):
         workflow = self.workflow
 
         for phrase in [
             "push:",
             "branches: [main]",
             "installers/*.cmd",
-            "contents: write",
-            "gh release upload skill-installers-v1",
-            "--clobber",
             "GH_TOKEN: ${{ github.token }}",
             "web-api-test-execution-evidence-v1.0.1",
             "gh release download",
@@ -317,26 +321,33 @@ class GitHubInstallerReleaseWorkflowTest(unittest.TestCase):
             "workflow_run:",
             "Publish verified eighth Skill runtime",
             "github.event.workflow_run.conclusion == 'success'",
-            "gh release delete-asset skill-installers-v1",
             "install-web-api-test-execution-evidence.cmd",
-            "build/mutable-installers/SHA256SUMS.txt",
-            "mutable eighth launcher still exists",
-            "runtime release is missing or not immutable; mutable installers are unchanged",
+            'gh api "repos/$GITHUB_REPOSITORY/releases/tags/skill-installers-v1"',
+            "build/frozen-installers/SHA256SUMS.txt",
+            "frozen skill-installers-v1 remains unchanged",
+            "runtime release is missing or not immutable; public installer entry is unchanged",
             'if [[ "$GITHUB_EVENT_NAME" == "workflow_run" ]]',
             "ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}",
         ]:
             self.assertIn(phrase, workflow)
         self.assertIn("! -name 'install-web-api-test-execution-evidence.cmd'", workflow)
-        self.assertNotIn("gh release upload skill-installers-v1 installers/*.cmd", workflow)
+        for forbidden in [
+            "contents: write",
+            "gh release upload skill-installers-v1",
+            "gh release delete-asset skill-installers-v1",
+            "gh release edit skill-installers-v1",
+            "--clobber",
+        ]:
+            with self.subTest(forbidden=forbidden):
+                self.assertNotIn(forbidden, workflow)
 
-    def test_mutable_release_publishes_auditable_windows_x64_user_notes(self):
+    def test_repository_docs_publish_auditable_windows_x64_runtime_entry(self):
         notes_path = ROOT / "docs" / "release" / "skill-installers-v1.md"
         self.assertTrue(notes_path.exists())
         notes = notes_path.read_text(encoding="utf-8")
 
         self.assertIn('"docs/release/skill-installers-v1.md"', self.workflow)
-        self.assertIn("gh release edit skill-installers-v1", self.workflow)
-        self.assertIn("--notes-file docs/release/skill-installers-v1.md", self.workflow)
+        self.assertNotIn("gh release edit skill-installers-v1", self.workflow)
         for phrase in [
             "Windows x64 三步使用",
             "install-web-api-test-execution-evidence.cmd",
@@ -347,6 +358,7 @@ class GitHubInstallerReleaseWorkflowTest(unittest.TestCase):
             r"%USERPROFILE%\.testing-skills\installations\web-api-test-execution-evidence.json",
             r"%USERPROFILE%\.testing-skills\diagnostics\web-api-test-execution-evidence",
             "正常执行阶段不会下载 Node、Runner、Playwright 或 Chromium",
+            "此不可变历史 Release 仅提供前七个 Skill 的独立启动器",
         ]:
             with self.subTest(phrase=phrase):
                 self.assertIn(phrase, notes)
@@ -361,7 +373,7 @@ class GitHubInstallerReleaseWorkflowTest(unittest.TestCase):
         self.assertIn(ancestry, workflow)
         self.assertLess(workflow.index(fetch), workflow.index(ancestry))
 
-    def test_runtime_release_is_ready_before_any_release_asset_mutation(self):
+    def test_runtime_and_frozen_installer_releases_are_verified_without_mutation(self):
         workflow = self.workflow
         metadata_query = 'gh api "repos/$GITHUB_REPOSITORY/releases/tags/$RUNTIME_TAG"'
         readiness_checks = [
@@ -369,11 +381,7 @@ class GitHubInstallerReleaseWorkflowTest(unittest.TestCase):
             "value.draft !== false",
             "value.immutable !== true",
         ]
-        release_operations = [
-            "gh release download",
-            "gh release delete-asset",
-            "gh release upload",
-        ]
+        frozen_query = 'gh api "repos/$GITHUB_REPOSITORY/releases/tags/skill-installers-v1"'
 
         self.assertIn(metadata_query, workflow)
         self.assertIn(
@@ -383,11 +391,14 @@ class GitHubInstallerReleaseWorkflowTest(unittest.TestCase):
         for phrase in readiness_checks:
             with self.subTest(phrase=phrase):
                 self.assertIn(phrase, workflow)
-        for operation in release_operations:
-            with self.subTest(operation=operation):
-                self.assertGreater(workflow.index(operation), workflow.index(metadata_query))
-        self.assertIn("runtime release is missing or not immutable; mutable installers are unchanged", workflow)
+        self.assertIn(frozen_query, workflow)
+        self.assertGreater(workflow.index(frozen_query), workflow.index(metadata_query))
+        self.assertIn("value.immutable !== true", workflow[workflow.index(frozen_query):])
+        self.assertIn("sha256sum -c SHA256SUMS.txt", workflow)
+        self.assertIn("runtime release is missing or not immutable; public installer entry is unchanged", workflow)
         self.assertIn("successful runtime workflow did not publish the required immutable release", workflow)
+        self.assertNotIn("gh release delete-asset", workflow)
+        self.assertNotIn("gh release upload", workflow)
 
 
 if __name__ == "__main__":

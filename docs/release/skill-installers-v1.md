@@ -27,4 +27,4 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\install-web-api-test-e
 - diagnostics：`%USERPROFILE%\.testing-skills\diagnostics\web-api-test-execution-evidence`
 - Skill：`%USERPROFILE%\.agents\skills\web-api-test-execution-evidence`
 
-此可变 Release 仅提供前七个 Skill 的独立启动器和经过验证的 `install-all.cmd`。第八个 Skill 的独立入口始终来自上面的不可变 Runtime Release，避免可变入口替换已审计的 Runtime 安装字节。
+此不可变历史 Release 仅提供前七个 Skill 的独立启动器和原有 `install-all.cmd` 快照，不再覆盖或替换任何资产。全部 8 个 Skill 和第八个 Skill 的执行就绪入口始终来自上面的不可变 Runtime Release，避免历史入口替换已审计的 Runtime 安装字节。
