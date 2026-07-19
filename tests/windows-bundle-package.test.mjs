@@ -693,20 +693,32 @@ test("smoke contract is loopback-only R0 with one explicit visible-text assertio
   assert.match(await readFile(fixturePath, "utf8"), /Bundle Smoke Ready/);
 });
 
+test("smoke artifact inventory reads run events from the Runner run directory", async () => {
+  const smoke = await import("../packages/testing-runner/scripts/installation-smoke-test.mjs");
+  assert.deepEqual(smoke.requiredSmokeArtifactPaths("run-bundle-smoke"), [
+    "run-result.json",
+    "projected-report.json",
+    "result.html",
+    "result.xlsx",
+    "run-bundle-smoke/run-events.jsonl",
+  ]);
+});
+
 test("smoke validator requires matching assertion, PNG hash, Trace, and every report projection", async () => {
   const outputDir = await tempDir("windows-bundle-smoke-output-");
   const runId = "run-bundle-smoke";
-  const gotoEvidencePath = `${runId}/evidence/BUNDLE-SMOKE-001/attempt-1/BUNDLE-SMOKE-001-open-fixture/web-page.png`;
-  const evidencePath = `${runId}/evidence/BUNDLE-SMOKE-001/attempt-1/BUNDLE-SMOKE-001-visible-text/web-page.png`;
-  const tracePath = "evidence/playwright-trace.zip";
+  const runOutputDir = path.join(outputDir, runId);
+  const gotoEvidencePath = "evidence/BUNDLE-SMOKE-001/attempt-1/BUNDLE-SMOKE-001-open-fixture/web-page.png";
+  const evidencePath = "evidence/BUNDLE-SMOKE-001/attempt-1/BUNDLE-SMOKE-001-visible-text/web-page.png";
+  const tracePath = "evidence/BUNDLE-SMOKE-001/playwright-trace.zip";
   const gotoPng = Buffer.from("goto-png");
   const png = Buffer.from("png");
   const trace = Buffer.from("trace");
-  await mkdir(path.dirname(path.join(outputDir, gotoEvidencePath)), { recursive: true });
-  await mkdir(path.dirname(path.join(outputDir, evidencePath)), { recursive: true });
+  await mkdir(path.dirname(path.join(runOutputDir, gotoEvidencePath)), { recursive: true });
+  await mkdir(path.dirname(path.join(runOutputDir, evidencePath)), { recursive: true });
   await mkdir(path.dirname(path.join(outputDir, tracePath)), { recursive: true });
-  await writeFile(path.join(outputDir, gotoEvidencePath), gotoPng);
-  await writeFile(path.join(outputDir, evidencePath), png);
+  await writeFile(path.join(runOutputDir, gotoEvidencePath), gotoPng);
+  await writeFile(path.join(runOutputDir, evidencePath), png);
   await writeFile(path.join(outputDir, tracePath), trace);
   const result = {
     protocol_version: "1.0.0",
@@ -723,7 +735,6 @@ test("smoke validator requires matching assertion, PNG hash, Trace, and every re
         assertion_id: "BUNDLE-SMOKE-001-visible-text",
         passed: true,
         actual: { text: "Bundle Smoke Ready", visible_count: 1 },
-        expected: "Bundle Smoke Ready",
       }],
       evidence: [
         { path: gotoEvidencePath, sha256: sha256(gotoPng) },
@@ -770,6 +781,7 @@ test("smoke validator requires matching assertion, PNG hash, Trace, and every re
   const runnerRoot = path.join(repoRoot, "packages/testing-runner");
   const validated = await validateSmokeArtifacts({ outputDir, runnerRoot });
 
+  assert.equal(validated.run_id, runId);
   assert.equal(validated.case_id, "BUNDLE-SMOKE-001");
   assert.equal(validated.assertion_passed, true);
   assert.equal(validated.png.path, evidencePath);

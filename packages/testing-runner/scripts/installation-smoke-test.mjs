@@ -42,6 +42,16 @@ export function assertRunnerVersionMatchesManifest(cliVersion, manifestVersion) 
   }
 }
 
+export function requiredSmokeArtifactPaths(runId) {
+  return [
+    "run-result.json",
+    "projected-report.json",
+    "result.html",
+    "result.xlsx",
+    `${runId}/run-events.jsonl`,
+  ];
+}
+
 function canonicalValue(value) {
   if (Array.isArray(value)) return value.map(canonicalValue);
   if (value === null || typeof value !== "object") return value;
@@ -230,7 +240,10 @@ async function readWorkbookProjection(file, runnerRoot) {
     const rows = [];
     worksheet.eachRow((row, rowNumber) => {
       if (rowNumber === 1) return;
-      rows.push(row.values.slice(1).map((value) => String(value ?? "")));
+      rows.push(Array.from(
+        { length: worksheet.columnCount },
+        (_, index) => String(row.getCell(index + 1).value ?? ""),
+      ));
     });
     sheets.set(worksheet.name, rows);
   });
@@ -265,10 +278,13 @@ export async function validateSmokeArtifacts(input) {
   }
   const pngReference = item.evidence?.find((entry) =>
     entry.path.endsWith(`/${ASSERTION_ID}/web-page.png`));
-  const traceReference = item.evidence?.find((entry) => entry.path === "evidence/playwright-trace.zip");
+  const traceReference = item.evidence?.find((entry) =>
+    entry.path === "evidence/playwright-trace.zip"
+    || entry.path === `evidence/${CASE_ID}/playwright-trace.zip`);
   if (!pngReference) throw smokeError("PNG evidence reference is missing");
   if (!traceReference) throw smokeError("Trace evidence reference is missing");
-  const png = await verifyReference(outputDir, pngReference, "PNG evidence");
+  const runOutputDir = safeOutputPath(outputDir, result.run_id);
+  const png = await verifyReference(runOutputDir, pngReference, "PNG evidence");
   const trace = await verifyReference(outputDir, traceReference, "Trace evidence");
 
   const expectedAssertionRows = item.assertions.map((assertion) => [
@@ -325,6 +341,7 @@ export async function validateSmokeArtifacts(input) {
     expectedEvidenceRows,
   );
   return {
+    run_id: result.run_id,
     case_id: CASE_ID,
     case_status: "通过",
     assertion_id: ASSERTION_ID,
@@ -467,13 +484,7 @@ export async function runInstallationSmokeTest(input = {}) {
       }
       const validated = await validateSmokeArtifacts({ outputDir, runnerRoot });
       const artifacts = [];
-      for (const relative of [
-        "run-result.json",
-        "projected-report.json",
-        "result.html",
-        "result.xlsx",
-        "run-events.jsonl",
-      ]) {
+      for (const relative of requiredSmokeArtifactPaths(validated.run_id)) {
         const absolute = safeOutputPath(outputDir, relative);
         const metadata = await lstat(absolute).catch(() => undefined);
         if (!metadata?.isFile() || metadata.isSymbolicLink() || metadata.size === 0) {
