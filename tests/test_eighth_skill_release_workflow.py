@@ -307,6 +307,20 @@ class EighthSkillReleaseWorkflowContractTest(unittest.TestCase):
                 self.assertIn(phrase, self.runner_release)
         self.assertNotIn("--clobber", self.runner_release)
 
+    def test_runner_release_installs_its_pinned_ci_browser_before_tests(self):
+        job = re.search(
+            r"(?ms)^  build-and-contract-test:\n(.*?)(?=^  [a-z][a-z-]+:\n)",
+            self.runner_release,
+        )
+        self.assertIsNotNone(job)
+        text = job.group(1)
+        install = "node node_modules/playwright/cli.js install --with-deps chromium"
+        test = "npm test --workspace @saitamasans/testing-runner"
+        self.assertIn("timeout-minutes: 45", text)
+        self.assertIn(install, text)
+        self.assertIn(test, text)
+        self.assertLess(text.index(install), text.index(test))
+
     def test_mutable_installer_publication_reverifies_provenance_and_exact_public_bytes(self):
         for phrase in [
             "concurrency:",
