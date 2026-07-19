@@ -1,8 +1,8 @@
 @echo off
 setlocal
 set "INSTALL_SELECTOR=-Skill web-api-test-execution-evidence"
-set "INSTALLER_URL=https://github.com/Saitamasans/testing-skills/releases/download/web-api-test-execution-evidence-v1.0.1/install-web-api-test-execution-evidence.ps1"
-set "INSTALLER_SHA256=670759ec9dcd75016d1a755ae77e3127e9f0dbe5bcb4f5810f51364b35360083"
+set "INSTALLER_URL=https://github.com/Saitamasans/testing-skills/releases/download/web-api-test-execution-evidence-v1.0.2/install-web-api-test-execution-evidence.ps1"
+set "INSTALLER_SHA256=ce198941046242ebe0b945fec010bcc902d54a2e7597e43798105d1556bfd3ef"
 set "POWERSHELL_EXE=%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe"
 if exist "%POWERSHELL_EXE%" goto powershell_found
 set "POWERSHELL_EXE=%SystemRoot%\Sysnative\WindowsPowerShell\v1.0\powershell.exe"

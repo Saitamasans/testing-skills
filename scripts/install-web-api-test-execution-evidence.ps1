@@ -40,15 +40,15 @@ $ErrorActionPreference = "Stop"
 [Console]::OutputEncoding = New-Object System.Text.UTF8Encoding($false)
 
 $script:SkillName = "web-api-test-execution-evidence"
-$script:BundleVersion = "1.0.1"
-$script:ReleaseTag = "web-api-test-execution-evidence-v1.0.1"
+$script:BundleVersion = "1.0.2"
+$script:ReleaseTag = "web-api-test-execution-evidence-v1.0.2"
 $script:PinnedManifests = @{
     x64 = @{
-        Uri = "https://github.com/Saitamasans/testing-skills/releases/download/web-api-test-execution-evidence-v1.0.1/web-api-test-execution-evidence-1.0.1-windows-x64.manifest.json"
+        Uri = "https://github.com/Saitamasans/testing-skills/releases/download/web-api-test-execution-evidence-v1.0.2/web-api-test-execution-evidence-1.0.2-windows-x64.manifest.json"
         Sha256 = "__X64_COMPANION_MANIFEST_SHA256__"
     }
     arm64 = @{
-        Uri = "https://github.com/Saitamasans/testing-skills/releases/download/web-api-test-execution-evidence-v1.0.1/web-api-test-execution-evidence-1.0.1-windows-arm64.manifest.json"
+        Uri = "https://github.com/Saitamasans/testing-skills/releases/download/web-api-test-execution-evidence-v1.0.2/web-api-test-execution-evidence-1.0.2-windows-arm64.manifest.json"
         Sha256 = "__ARM64_COMPANION_MANIFEST_SHA256__"
     }
 }
@@ -460,7 +460,7 @@ function New-HttpRequest {
     $request.Method = "GET"
     $request.AllowAutoRedirect = $false
     $request.AutomaticDecompression = [Net.DecompressionMethods]::GZip -bor [Net.DecompressionMethods]::Deflate
-    $request.UserAgent = "testing-skills-complete-installer/1.0.1"
+    $request.UserAgent = "testing-skills-complete-installer/1.0.2"
     $request.Timeout = 30000
     $request.ReadWriteTimeout = 30000
     $request.Proxy = [Net.WebRequest]::DefaultWebProxy

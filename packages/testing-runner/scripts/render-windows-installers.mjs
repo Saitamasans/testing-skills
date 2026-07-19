@@ -332,7 +332,7 @@ export async function renderWindowsInstallers(rawInput) {
     completeText = completeText.replaceAll('[ValidateSet("x64", "arm64")]', '[ValidateSet("x64")]');
     completeText = replaceRegexExactly(
       completeText,
-      /    arm64 = @\{\r?\n        Uri = "https:\/\/github\.com\/Saitamasans\/testing-skills\/releases\/download\/web-api-test-execution-evidence-v1\.0\.1\/web-api-test-execution-evidence-1\.0\.1-windows-arm64\.manifest\.json"\r?\n        Sha256 = "__ARM64_COMPANION_MANIFEST_SHA256__"\r?\n    \}\r?\n/,
+      /    arm64 = @\{\r?\n        Uri = "https:\/\/github\.com\/Saitamasans\/testing-skills\/releases\/download\/web-api-test-execution-evidence-v1\.0\.2\/web-api-test-execution-evidence-1\.0\.2-windows-arm64\.manifest\.json"\r?\n        Sha256 = "__ARM64_COMPANION_MANIFEST_SHA256__"\r?\n    \}\r?\n/,
       "",
       "complete PowerShell ARM64 manifest block",
     );

@@ -2,7 +2,7 @@
 
 ## Windows x64 三步使用
 
-1. 下载并双击推荐的一键安装器：[install-web-api-test-execution-evidence.cmd](https://github.com/Saitamasans/testing-skills/releases/download/web-api-test-execution-evidence-v1.0.1/install-web-api-test-execution-evidence.cmd)。安装器会下载一次完整 Runtime，执行 SHA-256、清单和本地 smoke 校验，无需管理员权限，也不依赖系统 Node、npm、Git 或 Chrome。
+1. 下载并双击推荐的一键安装器：[install-web-api-test-execution-evidence.cmd](https://github.com/Saitamasans/testing-skills/releases/download/web-api-test-execution-evidence-v1.0.2/install-web-api-test-execution-evidence.cmd)。安装器会下载一次完整 Runtime，执行 SHA-256、清单和本地 smoke 校验，无需管理员权限，也不依赖系统 Node、npm、Git 或 Chrome。
 2. 安装成功后重启 Codex。
 3. 上传十列 Excel 测试用例并输入：`调用第八个 Skill 执行`。
 
@@ -10,10 +10,10 @@
 
 ## 下载与审计
 
-- 推荐一键安装 CMD：[install-web-api-test-execution-evidence.cmd](https://github.com/Saitamasans/testing-skills/releases/download/web-api-test-execution-evidence-v1.0.1/install-web-api-test-execution-evidence.cmd)
-- 完整 Windows x64 Runtime ZIP：[web-api-test-execution-evidence-1.0.1-windows-x64.zip](https://github.com/Saitamasans/testing-skills/releases/download/web-api-test-execution-evidence-v1.0.1/web-api-test-execution-evidence-1.0.1-windows-x64.zip)
-- 公开校验清单：[SHA256SUMS.txt](https://github.com/Saitamasans/testing-skills/releases/download/web-api-test-execution-evidence-v1.0.1/SHA256SUMS.txt)
-- 不可变 Runtime Release：[web-api-test-execution-evidence-v1.0.1](https://github.com/Saitamasans/testing-skills/releases/tag/web-api-test-execution-evidence-v1.0.1)
+- 推荐一键安装 CMD：[install-web-api-test-execution-evidence.cmd](https://github.com/Saitamasans/testing-skills/releases/download/web-api-test-execution-evidence-v1.0.2/install-web-api-test-execution-evidence.cmd)
+- 完整 Windows x64 Runtime ZIP：[web-api-test-execution-evidence-1.0.2-windows-x64.zip](https://github.com/Saitamasans/testing-skills/releases/download/web-api-test-execution-evidence-v1.0.2/web-api-test-execution-evidence-1.0.2-windows-x64.zip)
+- 公开校验清单：[SHA256SUMS.txt](https://github.com/Saitamasans/testing-skills/releases/download/web-api-test-execution-evidence-v1.0.2/SHA256SUMS.txt)
+- 不可变 Runtime Release：[web-api-test-execution-evidence-v1.0.2](https://github.com/Saitamasans/testing-skills/releases/tag/web-api-test-execution-evidence-v1.0.2)
 
 ## 修复与诊断
 

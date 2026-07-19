@@ -120,7 +120,7 @@ async function installedFixture(options = {}) {
   }));
   const manifest = {
     schema_version: 1,
-    bundle: { name: skillName, version: "1.0.1", release_tag: "web-api-test-execution-evidence-v1.0.1", os: "windows", arch: options.architecture ?? "x64" },
+    bundle: { name: skillName, version: "1.0.2", release_tag: "web-api-test-execution-evidence-v1.0.2", os: "windows", arch: options.architecture ?? "x64" },
     components: {
       node: { version: "22.23.1" },
       runner: { name: "@saitamasans/testing-runner", version: "1.1.2" },
@@ -136,8 +136,8 @@ async function installedFixture(options = {}) {
   await write(path.dirname(receiptPath), path.basename(receiptPath), JSON.stringify({
     schema_version: 1,
     skill: skillName,
-    bundle_version: "1.0.1",
-    release_tag: "web-api-test-execution-evidence-v1.0.1",
+    bundle_version: "1.0.2",
+    release_tag: "web-api-test-execution-evidence-v1.0.2",
     architecture: options.architecture ?? "x64",
     installed_at_utc: "2026-07-18T00:00:00.000Z",
     archive_sha256: "a".repeat(64),

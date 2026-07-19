@@ -70,8 +70,8 @@ def build_fixture(*, arch="x64", unsafe_entry=None, duplicate_case=False,
         "schema_version": 1,
         "bundle": {
             "name": SKILL,
-            "version": "1.0.1",
-            "release_tag": "web-api-test-execution-evidence-v1.0.1",
+            "version": "1.0.2",
+            "release_tag": "web-api-test-execution-evidence-v1.0.2",
             "os": "windows",
             "arch": arch,
         },
@@ -110,7 +110,7 @@ def build_fixture(*, arch="x64", unsafe_entry=None, duplicate_case=False,
                     bundle.writestr("NODE/node.exe", b"duplicate")
         archive_file.seek(0)
         archive = archive_file.read()
-    archive_name = f"{SKILL}-1.0.1-windows-{arch}.zip"
+    archive_name = f"{SKILL}-1.0.2-windows-{arch}.zip"
     companion = {
         "schema_version": 1,
         "bundle": payload["bundle"],
@@ -344,7 +344,7 @@ class CompleteInstallerTest(unittest.TestCase):
         return self.state_root / "installations" / f"{SKILL}.json"
 
     def cache_paths(self, fixture):
-        parent = self.state_root / "downloads" / SKILL / "1.0.1" / "x64"
+        parent = self.state_root / "downloads" / SKILL / "1.0.2" / "x64"
         return parent / (fixture.archive_name + ".part"), parent / (
             fixture.archive_name + ".part.meta.json"
         )

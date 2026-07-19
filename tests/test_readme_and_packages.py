@@ -41,7 +41,7 @@ class ReadmeAndPackagesTest(unittest.TestCase):
         )
         self.assertNotIn("-Skill 'web-api-test-execution-evidence'", readme)
         self.assertIn(
-            "web-api-test-execution-evidence-v1.0.1/"
+            "web-api-test-execution-evidence-v1.0.2/"
             "install-web-api-test-execution-evidence.cmd",
             readme,
         )
@@ -86,7 +86,7 @@ class ReadmeAndPackagesTest(unittest.TestCase):
         for phrase in [
             "Windows x64 三步使用",
             "install-web-api-test-execution-evidence.cmd",
-            "web-api-test-execution-evidence-1.0.1-windows-x64.zip",
+            "web-api-test-execution-evidence-1.0.2-windows-x64.zip",
             "SHA256SUMS.txt",
             "重启 Codex",
             "调用第八个 Skill 执行",

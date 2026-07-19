@@ -278,7 +278,7 @@ class NoNodeInstallerStaticTest(unittest.TestCase):
         recommended = readme.split("### 高级方式：npx", 1)[0]
         self.assertIn("无需安装 Node.js、npm、npx 或 Git", recommended)
         self.assertIn("scripts/install.ps1", recommended)
-        self.assertIn("web-api-test-execution-evidence-v1.0.1/install-all.cmd", recommended)
+        self.assertIn("web-api-test-execution-evidence-v1.0.2/install-all.cmd", recommended)
         self.assertIn(") -Skill 'requirement-test-workbench'", recommended)
         self.assertNotIn("npx skills add", recommended)
         advanced = readme.split("### 高级方式：npx", 1)[1]
