@@ -504,6 +504,26 @@ class EighthSkillReleaseWorkflowContractTest(unittest.TestCase):
         self.assertNotIn("publish only when both architectures pass", release_docs)
         self.assertNotIn("Publication is rejected if either architecture", release_docs)
 
+    def test_packaged_tar_smoke_runs_outside_checkout_and_copies_only_evidence(self):
+        for workflow in [self.windows_release_ci, self.runner_release]:
+            with self.subTest(workflow=workflow.splitlines()[0]):
+                self.assertIn("$env:RUNNER_TEMP", workflow)
+                self.assertIn("runner-tar-smoke-", workflow)
+                self.assertIn("[Guid]::NewGuid()", workflow)
+                self.assertIn("finally", workflow)
+                self.assertIn("Copy-Item", workflow)
+                self.assertIn("Remove-Item -LiteralPath $smokeRoot -Recurse -Force", workflow)
+                self.assertNotIn("build/windows-x64-release-evidence/packaged-tar", workflow)
+
+        for phrase in [
+            "workspace_realpath",
+            "package_root_realpath",
+            "package_outside_workspace",
+            "package root must be outside GITHUB_WORKSPACE",
+        ]:
+            with self.subTest(phrase=phrase):
+                self.assertIn(phrase, self.packaged_smoke)
+
     def test_packaged_tar_smoke_blocks_downloads_and_root_dependencies(self):
         for phrase in [
             "package/node_modules",
@@ -520,6 +540,7 @@ class EighthSkillReleaseWorkflowContractTest(unittest.TestCase):
             "network_events",
             "package_manager_invocations",
             "empty-path",
+            "NODE_PATH",
         ]:
             with self.subTest(phrase=phrase):
                 self.assertIn(phrase, self.packaged_smoke)

@@ -83,10 +83,35 @@ jobs:
         shell: powershell
         run: |
           $ErrorActionPreference = "Stop"
-          node packages/testing-runner/scripts/verify-release-tarball.mjs `
-            build/release-a/saitamasans-testing-runner-1.1.2.tgz `
-            build/windows-x64-release-evidence/packaged-tar
-          if ($LASTEXITCODE -ne 0) { throw "packaged Runner smoke failed" }
+          $archive = (Resolve-Path -LiteralPath build/release-a/saitamasans-testing-runner-1.1.2.tgz).Path
+          $evidenceRoot = Join-Path $PWD "build/windows-x64-release-evidence"
+          $smokeRoot = Join-Path $env:RUNNER_TEMP ("runner-tar-smoke-" + [Guid]::NewGuid().ToString("N"))
+          try {
+            node packages/testing-runner/scripts/verify-release-tarball.mjs $archive $smokeRoot
+            if ($LASTEXITCODE -ne 0) { throw "packaged Runner smoke failed" }
+          } finally {
+            try {
+              New-Item -ItemType Directory -Path $evidenceRoot -Force | Out-Null
+              $evidenceFiles = @{
+                "packaged-tar-evidence.json" = "packaged-tar-evidence.json"
+                "execution-network.jsonl" = "execution-network.jsonl"
+                "result/run-result.json" = "packaged-run-result.json"
+                "result/projected-report.json" = "packaged-projected-report.json"
+                "plan/run-manifest.json" = "packaged-run-manifest.json"
+                "plan/approval.json" = "packaged-approval.json"
+              }
+              foreach ($entry in $evidenceFiles.GetEnumerator()) {
+                $source = Join-Path $smokeRoot $entry.Key
+                if (Test-Path -LiteralPath $source -PathType Leaf) {
+                  Copy-Item -LiteralPath $source -Destination (Join-Path $evidenceRoot $entry.Value) -Force
+                }
+              }
+            } finally {
+              if (Test-Path -LiteralPath $smokeRoot) {
+                Remove-Item -LiteralPath $smokeRoot -Recurse -Force
+              }
+            }
+          }
 
       - name: Execute Windows PowerShell 5.1 empty-PATH installer fixtures
         shell: powershell

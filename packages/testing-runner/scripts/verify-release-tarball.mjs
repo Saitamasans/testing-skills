@@ -14,6 +14,12 @@ function tarPath(value) {
   return process.platform === "win32" ? value.replaceAll("\\", "/") : value;
 }
 
+function pathIsWithin(parent, candidate) {
+  const relative = path.relative(parent, candidate);
+  return relative === ""
+    || (relative !== ".." && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative));
+}
+
 async function run(executable, args, options = {}) {
   return await new Promise((resolve, reject) => {
     const child = spawn(executable, args, {
@@ -45,7 +51,8 @@ async function writeJson(file, value) {
 function guardedEnvironment(emptyPath, guardPath, guardLog) {
   const env = {};
   for (const [key, value] of Object.entries(process.env)) {
-    if (key.toLocaleLowerCase("en-US") !== "path" && key !== "NODE_PATH" && value !== undefined) {
+    const normalizedKey = key.toLocaleLowerCase("en-US");
+    if (!["path", "node_path", "node_options"].includes(normalizedKey) && value !== undefined) {
       env[key] = value;
     }
   }
@@ -130,6 +137,14 @@ export async function verifyReleaseTarball(archive, workDir) {
   });
 
   const packageRoot = path.join(extractDir, "package");
+  const packageRootRealpath = await realpath(packageRoot);
+  const workspaceRealpath = process.env.GITHUB_WORKSPACE
+    ? await realpath(process.env.GITHUB_WORKSPACE)
+    : null;
+  if (workspaceRealpath && pathIsWithin(workspaceRealpath, packageRootRealpath)) {
+    fail("package root must be outside GITHUB_WORKSPACE");
+  }
+  const packageOutsideWorkspace = workspaceRealpath ? true : null;
   const packageNodeModules = path.join(packageRoot, "node_modules");
   const cli = path.join(packageRoot, "dist", "cli.js");
   const packageJson = JSON.parse(await readFile(path.join(packageRoot, "package.json"), "utf8"));
@@ -211,11 +226,16 @@ export async function verifyReleaseTarball(archive, workDir) {
     schema_version: 1,
     archive,
     package_root: packageRoot,
+    workspace_realpath: workspaceRealpath,
+    package_root_realpath: packageRootRealpath,
+    package_outside_workspace: packageOutsideWorkspace,
     packaged_node_modules: packageNodeModules,
     packaged_dependency_layout: PACKAGED_DEPENDENCY_LAYOUT,
     node_executable: process.execPath,
     cli,
     path_during_execution: emptyPath,
+    NODE_PATH: environment.NODE_PATH ?? null,
+    NODE_OPTIONS: environment.NODE_OPTIONS ?? null,
     dependencies,
     commands: ["--version", "plan", "approve", "run", "verify-report"],
     network_policy: {

@@ -134,9 +134,35 @@ jobs:
         shell: powershell
         run: |
           $ErrorActionPreference = "Stop"
-          node packages/testing-runner/scripts/verify-release-tarball.mjs `
-            "build/releases/$env:RUNNER_ASSET" build/packaged-tar-verification
-          if ($LASTEXITCODE -ne 0) { throw "packaged Runner execution failed" }
+          $archive = (Resolve-Path -LiteralPath "build/releases/$env:RUNNER_ASSET").Path
+          $evidenceRoot = Join-Path $PWD "build/packaged-tar-verification"
+          $smokeRoot = Join-Path $env:RUNNER_TEMP ("runner-tar-smoke-" + [Guid]::NewGuid().ToString("N"))
+          try {
+            node packages/testing-runner/scripts/verify-release-tarball.mjs $archive $smokeRoot
+            if ($LASTEXITCODE -ne 0) { throw "packaged Runner execution failed" }
+          } finally {
+            try {
+              New-Item -ItemType Directory -Path $evidenceRoot -Force | Out-Null
+              $evidenceFiles = @{
+                "packaged-tar-evidence.json" = "packaged-tar-evidence.json"
+                "execution-network.jsonl" = "execution-network.jsonl"
+                "result/run-result.json" = "packaged-run-result.json"
+                "result/projected-report.json" = "packaged-projected-report.json"
+                "plan/run-manifest.json" = "packaged-run-manifest.json"
+                "plan/approval.json" = "packaged-approval.json"
+              }
+              foreach ($entry in $evidenceFiles.GetEnumerator()) {
+                $source = Join-Path $smokeRoot $entry.Key
+                if (Test-Path -LiteralPath $source -PathType Leaf) {
+                  Copy-Item -LiteralPath $source -Destination (Join-Path $evidenceRoot $entry.Value) -Force
+                }
+              }
+            } finally {
+              if (Test-Path -LiteralPath $smokeRoot) {
+                Remove-Item -LiteralPath $smokeRoot -Recurse -Force
+              }
+            }
+          }
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: testing-runner-1.1.2-execution-evidence

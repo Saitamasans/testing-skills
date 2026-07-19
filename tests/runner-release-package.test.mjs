@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -12,6 +12,7 @@ import {
   resolveReleaseOutputDir,
   sha256File,
 } from "../packages/testing-runner/scripts/package-release.mjs";
+import { verifyReleaseTarball } from "../packages/testing-runner/scripts/verify-release-tarball.mjs";
 
 const REPO_ROOT = fileURLToPath(new URL("..", import.meta.url));
 
@@ -98,4 +99,44 @@ test("release tarball contains runner and bundled production dependencies", asyn
     },
   });
   assert.equal(release.manifestPath, manifestPath);
+});
+
+test("release tarball verification rejects workspace execution and succeeds outside checkout", async (t) => {
+  const outputDir = await mkdtemp(path.join(os.tmpdir(), "runner-release-isolation-"));
+  const workspace = await mkdtemp(path.join(os.tmpdir(), "runner-workspace-"));
+  const outsideWorkDir = await mkdtemp(path.join(os.tmpdir(), "runner-outside-workspace-"));
+  const previousWorkspace = process.env.GITHUB_WORKSPACE;
+  const previousNodePath = process.env.NODE_PATH;
+  const previousNodeOptions = process.env.NODE_OPTIONS;
+  t.after(async () => {
+    if (previousWorkspace === undefined) delete process.env.GITHUB_WORKSPACE;
+    else process.env.GITHUB_WORKSPACE = previousWorkspace;
+    if (previousNodePath === undefined) delete process.env.NODE_PATH;
+    else process.env.NODE_PATH = previousNodePath;
+    if (previousNodeOptions === undefined) delete process.env.NODE_OPTIONS;
+    else process.env.NODE_OPTIONS = previousNodeOptions;
+    await Promise.all([outputDir, workspace, outsideWorkDir].map(
+      (directory) => rm(directory, { recursive: true, force: true }),
+    ));
+  });
+
+  const release = await buildReleaseTarball(outputDir, path.join(outputDir, "runner-release.json"));
+  process.env.GITHUB_WORKSPACE = workspace;
+  process.env.NODE_PATH = path.join(REPO_ROOT, "node_modules");
+  process.env.NODE_OPTIONS = `--require=${path.join(REPO_ROOT, "package.json")}`;
+  await assert.rejects(
+    verifyReleaseTarball(release.archivePath, path.join(workspace, "build", "packaged-tar")),
+    /package root must be outside GITHUB_WORKSPACE/,
+  );
+
+  const evidence = await verifyReleaseTarball(release.archivePath, outsideWorkDir);
+  assert.equal(evidence.workspace_realpath, await realpath(workspace));
+  assert.equal(
+    evidence.package_root_realpath,
+    await realpath(path.join(outsideWorkDir, "extracted", "package")),
+  );
+  assert.equal(evidence.package_outside_workspace, true);
+  assert.equal(evidence.NODE_PATH, null);
+  assert.equal(evidence.NODE_OPTIONS, null);
+  assert.deepEqual(evidence.commands, ["--version", "plan", "approve", "run", "verify-report"]);
 });
