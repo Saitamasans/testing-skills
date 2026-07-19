@@ -147,4 +147,3 @@ export async function readNativeReport(file: string): Promise<NormalizedCaseSet>
     skill_invocation: report.skill_invocation as SkillInvocation,
   };
 }
-
