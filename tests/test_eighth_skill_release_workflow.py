@@ -314,8 +314,10 @@ class EighthSkillReleaseWorkflowContractTest(unittest.TestCase):
         )
         self.assertIsNotNone(job)
         text = job.group(1)
-        install = "node node_modules/playwright/cli.js install --with-deps chromium"
+        install = "node node_modules/playwright/cli.js install chromium"
         test = "npm test --workspace @saitamasans/testing-runner"
+        self.assertIn("runs-on: windows-2025", text)
+        self.assertIn('test "$(node -p process.arch)" = "x64"', text)
         self.assertIn("timeout-minutes: 45", text)
         self.assertIn(install, text)
         self.assertIn(test, text)
