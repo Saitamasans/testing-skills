@@ -48,7 +48,7 @@ def build_fixture(*, arch="x64", unsafe_entry=None, duplicate_case=False,
     files = {
         "node/node.exe": b"fixture-node",
         "runner/dist/cli.js": b"fixture-runner",
-        "runner/package.json": b'{"name":"@saitamasans/testing-runner","version":"1.1.1"}\n',
+        "runner/package.json": b'{"name":"@saitamasans/testing-runner","version":"1.1.2"}\n',
         "skill/web-api-test-execution-evidence/SKILL.md": (
             f"# Fixture Skill\n\n{content_marker}\n".encode()
         ),
@@ -70,7 +70,7 @@ def build_fixture(*, arch="x64", unsafe_entry=None, duplicate_case=False,
         },
         "components": {
             "node": {"version": "22.23.1"},
-            "runner": {"name": "@saitamasans/testing-runner", "version": "1.1.1"},
+            "runner": {"name": "@saitamasans/testing-runner", "version": "1.1.2"},
             "playwright": {
                 "version": "1.61.1",
                 "chromium_revision": "1228",
@@ -286,7 +286,7 @@ class CompleteInstallerTest(unittest.TestCase):
             "[ordered]@{path=$relative;size_bytes=(Get-Item $file).Length;"
             "sha256=(Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash.ToLowerInvariant()}}\n"
             "$result=[ordered]@{schema_version=1;ok=$true;node=@{version='22.23.1';arch='x64'};"
-            "runner=@{version='1.1.1'};browser=@{visible=$true};case_id='BUNDLE-SMOKE-001';"
+            "runner=@{version='1.1.2'};browser=@{visible=$true};case_id='BUNDLE-SMOKE-001';"
             "case_status='通过';assertion_id='BUNDLE-SMOKE-001-visible-text';assertion_passed=$true;"
             "png=(Ref $png);trace=(Ref $trace);artifacts=@($artifacts|ForEach-Object {Ref $_})}\n"
             "$result|ConvertTo-Json -Depth 8|Set-Content -LiteralPath (Join-Path $DiagnosticsRoot 'smoke-result.json') -Encoding UTF8\n",

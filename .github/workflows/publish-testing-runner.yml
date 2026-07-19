@@ -3,13 +3,13 @@ name: Publish immutable testing Runner
 on:
   push:
     tags:
-      - "testing-runner-v1.1.1"
+      - "testing-runner-v1.1.2"
   workflow_dispatch:
     inputs:
       tag:
         description: Existing reviewed Runner tag to publish
         required: true
-        default: testing-runner-v1.1.1
+        default: testing-runner-v1.1.2
         type: string
 
 concurrency:
@@ -20,9 +20,9 @@ permissions:
   contents: read
 
 env:
-  EXPECTED_TAG: testing-runner-v1.1.1
-  EXPECTED_VERSION: 1.1.1
-  RUNNER_ASSET: saitamasans-testing-runner-1.1.1.tgz
+  EXPECTED_TAG: testing-runner-v1.1.2
+  EXPECTED_VERSION: 1.1.2
+  RUNNER_ASSET: saitamasans-testing-runner-1.1.2.tgz
 
 jobs:
   validate-tag:
@@ -76,22 +76,29 @@ jobs:
           npm run pack:runner-release
           test -f "build/releases/$RUNNER_ASSET"
           test -f "build/releases/$RUNNER_ASSET.sha256"
-          grep -Fx "$(sha256sum "build/releases/$RUNNER_ASSET" | sed 's#  build/releases/#  #')" \
-            "build/releases/$RUNNER_ASSET.sha256"
-          sha256sum "build/releases/$RUNNER_ASSET" "build/releases/$RUNNER_ASSET.sha256" |
-            sed 's#  build/releases/#  #' | LC_ALL=C sort -k2 > build/releases/SHA256SUMS.txt
           node - <<'NODE'
           const fs = require("node:fs");
           const crypto = require("node:crypto");
-          const asset = "build/releases/saitamasans-testing-runner-1.1.1.tgz";
+          const path = require("node:path");
+          const releaseDir = "build/releases";
+          const assetName = "saitamasans-testing-runner-1.1.2.tgz";
+          const asset = path.join(releaseDir, assetName);
           const release = JSON.parse(fs.readFileSync("skill-sources/web-api-test-execution-evidence/assets/runner-release.json", "utf8")).runner;
           const lock = JSON.parse(fs.readFileSync("packages/testing-runner/release/windows-runtime-lock.json", "utf8")).runner;
           const bytes = fs.readFileSync(asset);
           const actual = { size_bytes: bytes.length, sha256: crypto.createHash("sha256").update(bytes).digest("hex") };
+          const checksumPath = asset + ".sha256";
+          const expectedChecksum = `${actual.sha256}  ${assetName}\n`;
+          if (fs.readFileSync(checksumPath, "utf8") !== expectedChecksum) throw new Error("Runner checksum companion mismatch");
           for (const expected of [release, lock]) {
-            if (expected.name !== "@saitamasans/testing-runner" || expected.version !== "1.1.1") throw new Error("locked Runner identity mismatch");
+            if (expected.name !== "@saitamasans/testing-runner" || expected.version !== "1.1.2") throw new Error("locked Runner identity mismatch");
             if (expected.size_bytes !== actual.size_bytes || expected.sha256 !== actual.sha256) throw new Error("built Runner does not match locked size and SHA-256");
           }
+          const sums = [assetName, assetName + ".sha256"].sort().map((name) => {
+            const digest = crypto.createHash("sha256").update(fs.readFileSync(path.join(releaseDir, name))).digest("hex");
+            return `${digest}  ${name}`;
+          }).join("\n") + "\n";
+          fs.writeFileSync(path.join(releaseDir, "SHA256SUMS.txt"), sums, "utf8");
           NODE
       - name: Inspect packaged Runner contract
         shell: bash
@@ -104,7 +111,7 @@ jobs:
           const fs = require("node:fs");
           const root = "build/runner-inspection/package";
           const pkg = JSON.parse(fs.readFileSync(`${root}/package.json`, "utf8"));
-          if (pkg.name !== "@saitamasans/testing-runner" || pkg.version !== "1.1.1") throw new Error("Runner package identity mismatch");
+          if (pkg.name !== "@saitamasans/testing-runner" || pkg.version !== "1.1.2") throw new Error("Runner package identity mismatch");
           if (pkg.dependencies?.playwright !== "1.61.1") throw new Error('"playwright": "1.61.1" is required');
           for (const relative of [
             "dist/cli.js", "dist/commands/run.js", "dist/commands/verify-report.js",
@@ -112,7 +119,7 @@ jobs:
             "node_modules/playwright/cli.js", "node_modules/playwright-core/browsers.json",
           ]) if (!fs.statSync(`${root}/${relative}`).isFile()) throw new Error(`missing packaged Runner file: ${relative}`);
           const cli = fs.readFileSync(`${root}/dist/cli.js`, "utf8");
-          if (!cli.includes("1.1.1")) throw new Error("compiled CLI does not expose Runner 1.1.1");
+          if (!cli.includes("1.1.2")) throw new Error("compiled CLI does not expose Runner 1.1.2");
           const run = fs.readFileSync(`${root}/dist/commands/run.js`, "utf8");
           if (!run.includes("run-result.json")) throw new Error("packaged Runner lacks current result behavior");
           const browsers = JSON.parse(fs.readFileSync(`${root}/node_modules/playwright-core/browsers.json`, "utf8")).browsers;
@@ -122,13 +129,13 @@ jobs:
           }
           NODE
           grep -F "installation-smoke-test.mjs" packages/testing-runner/scripts/build-windows-bundle.mjs
-          grep -F "1.1.1" packages/testing-runner/scripts/installation-smoke-test.mjs
+          grep -F "1.1.2" packages/testing-runner/scripts/installation-smoke-test.mjs
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: verified-testing-runner-1.1.1-assets
+          name: verified-testing-runner-1.1.2-assets
           path: |
-            build/releases/saitamasans-testing-runner-1.1.1.tgz
-            build/releases/saitamasans-testing-runner-1.1.1.tgz.sha256
+            build/releases/saitamasans-testing-runner-1.1.2.tgz
+            build/releases/saitamasans-testing-runner-1.1.2.tgz.sha256
             build/releases/SHA256SUMS.txt
           if-no-files-found: error
           retention-days: 14
@@ -143,7 +150,7 @@ jobs:
     steps:
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
-          name: verified-testing-runner-1.1.1-assets
+          name: verified-testing-runner-1.1.2-assets
           path: build/runner-release
       - uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2
         with:
@@ -161,7 +168,7 @@ jobs:
           clean: true
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
-          name: verified-testing-runner-1.1.1-assets
+          name: verified-testing-runner-1.1.2-assets
           path: build/trusted
       - name: Create non-overwritable Runner draft
         env:
@@ -176,7 +183,7 @@ jobs:
             exit 1
           fi
           gh release create "$RELEASE_TAG" --draft --verify-tag --target "$TAG_COMMIT" \
-            --title "Testing Runner 1.1.1" build/trusted/*
+            --title "Testing Runner 1.1.2" build/trusted/*
           mkdir build/draft
           gh release download "$RELEASE_TAG" --dir build/draft
           diff --no-dereference --recursive build/trusted build/draft
@@ -194,7 +201,7 @@ jobs:
           clean: true
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
-          name: verified-testing-runner-1.1.1-assets
+          name: verified-testing-runner-1.1.2-assets
           path: build/trusted
       - name: Verify immutable releases are enabled
         env:
@@ -218,7 +225,7 @@ jobs:
           const fs = require("node:fs");
           const [tag, commit, file] = process.argv.slice(2);
           const release = JSON.parse(fs.readFileSync(file, "utf8"));
-          const expected = ["SHA256SUMS.txt", "saitamasans-testing-runner-1.1.1.tgz", "saitamasans-testing-runner-1.1.1.tgz.sha256"];
+          const expected = ["SHA256SUMS.txt", "saitamasans-testing-runner-1.1.2.tgz", "saitamasans-testing-runner-1.1.2.tgz.sha256"];
           const actual = release.assets.map(({ name }) => name).sort();
           if (!release.draft || release.tag_name !== tag || release.target_commitish !== commit) throw new Error("Runner draft identity changed");
           if (JSON.stringify(actual) !== JSON.stringify(expected)) throw new Error("Runner draft asset allowlist changed");
@@ -238,7 +245,7 @@ jobs:
     steps:
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
-          name: verified-testing-runner-1.1.1-assets
+          name: verified-testing-runner-1.1.2-assets
           path: build/trusted
       - name: Verify public immutable Runner bytes and package contract
         env:
@@ -268,7 +275,7 @@ jobs:
           const fs = require("node:fs");
           const root = "build/public-package/package";
           const pkg = JSON.parse(fs.readFileSync(`${root}/package.json`, "utf8"));
-          if (pkg.version !== "1.1.1" || pkg.dependencies?.playwright !== "1.61.1") throw new Error("public Runner package contract mismatch");
+          if (pkg.version !== "1.1.2" || pkg.dependencies?.playwright !== "1.61.1") throw new Error("public Runner package contract mismatch");
           for (const file of ["dist/cli.js", "dist/commands/run.js", "dist/commands/verify-report.js", "vendor/test-case-renderer.mjs"]) {
             if (!fs.statSync(`${root}/${file}`).isFile()) throw new Error(`public Runner is missing ${file}`);
           }

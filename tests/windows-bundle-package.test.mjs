@@ -275,7 +275,7 @@ test("bundle layout locks exact components and requires the local smoke fixture"
     node: { version: "22.23.1" },
     runner: {
       name: "@saitamasans/testing-runner",
-      version: "1.1.1",
+      version: "1.1.2",
       download_url: lock.runner.download_url,
       sha256: lock.runner.sha256,
       size_bytes: lock.runner.size_bytes,
@@ -327,7 +327,7 @@ test("payload manifest inventories every payload file without a self-hash cycle"
   assert.equal(written.sha256, sha256(await readFile(written.path)));
   assert.equal(manifest.schema_version, 1);
   assert.equal(manifest.bundle.arch, "arm64");
-  assert.equal(manifest.components.runner.version, "1.1.1");
+  assert.equal(manifest.components.runner.version, "1.1.2");
   assert.equal(manifest.components.playwright.chromium_revision, "1228");
   assert.equal(manifest.files.some((entry) => entry.path === "bundle-manifest.json"), false);
   assert.equal(manifest.files.some((entry) => entry.path === "smoke/installation-smoke-fixture.html"), true);

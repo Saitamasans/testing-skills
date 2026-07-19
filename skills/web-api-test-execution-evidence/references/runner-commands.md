@@ -11,7 +11,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File "<ABSOLUTE_SKILL_ROOT>\s
 
 `<ABSOLUTE_SKILL_ROOT>` 必须替换为已安装 Skill 的绝对目录，路径含空格时正确加引号。正式执行只快速验证安装回执、回执绑定的 bundle 清单、固定组件身份和关键可执行/证据标记，不会下载、安装或修改运行时；若验证失败，重新运行 GitHub Release 完整安装器并带 `-Repair`。无需 npm 账号或手工安装。`<ISO_EXPIRES_AT>` 使用本次执行窗口内的短期过期时间，不使用长期或永久审批。
 
-最终用户必须先使用 GitHub Release 完整安装器。完整安装不提供轻量版或可选浏览器，安装时已交付 portable Node 22.23.1、Runner 1.1.1、Playwright 1.61.1、Chromium 1228、headless shell 1228 和 FFmpeg 1011。无需系统安装 Node.js、npm、Git、Chrome、Excel 或 Python。若报告 `installation_incomplete` 或 `installation_corrupt`，使用 GitHub Release 完整安装器的 `-Repair` 修复；执行期不会下载、安装或修改运行时。
+最终用户必须先使用 GitHub Release 完整安装器。完整安装不提供轻量版或可选浏览器，安装时已交付 portable Node 22.23.1、Runner 1.1.2、Playwright 1.61.1、Chromium 1228、headless shell 1228 和 FFmpeg 1011。无需系统安装 Node.js、npm、Git、Chrome、Excel 或 Python。若报告 `installation_incomplete` 或 `installation_corrupt`，使用 GitHub Release 完整安装器的 `-Repair` 修复；执行期不会下载、安装或修改运行时。
 
 `discover-web` 是执行前的黑盒只读探测，不会生成审批、点击或输入。先查看 `web-discovery.json`、`web-discovery.md` 和 `web-discovery.png`，确认定位器与断言方案后，再生成 `execution-profile.json`。
 

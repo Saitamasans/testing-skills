@@ -13,6 +13,31 @@ import {
   sha256File,
 } from "../packages/testing-runner/scripts/package-release.mjs";
 
+const REPO_ROOT = fileURLToPath(new URL("..", import.meta.url));
+
+test("release packaging consumes a committed exact dependency lock", async () => {
+  const runnerPackage = JSON.parse(await readFile(
+    path.join(REPO_ROOT, "packages", "testing-runner", "package.json"),
+    "utf8",
+  ));
+  const releaseLock = JSON.parse(await readFile(
+    path.join(REPO_ROOT, "packages", "testing-runner", "release", "package-lock.json"),
+    "utf8",
+  ));
+  const releaseScript = await readFile(
+    path.join(REPO_ROOT, "packages", "testing-runner", "scripts", "package-release.mjs"),
+    "utf8",
+  );
+
+  assert.equal(releaseLock.lockfileVersion, 3);
+  assert.equal(releaseLock.packages[""].name, runnerPackage.name);
+  assert.equal(releaseLock.packages[""].version, runnerPackage.version);
+  assert.deepEqual(releaseLock.packages[""].dependencies, runnerPackage.dependencies);
+  assert.doesNotMatch(releaseScript, /package-lock-only/);
+  assert.doesNotMatch(releaseScript, /pnpm/);
+  assert.match(releaseScript, /release[\\/]+package-lock\.json/);
+});
+
 test("release CLI resolves a relative output directory from the repository root", () => {
   const repoRoot = fileURLToPath(new URL("..", import.meta.url));
   assert.equal(resolveReleaseOutputDir("build/releases"), path.join(repoRoot, "build", "releases"));
@@ -52,7 +77,7 @@ test("release tarball contains runner and bundled production dependencies", asyn
   }
 
   assert.equal(await sha256File(release.archivePath), release.sha256);
-  assert.equal(release.fileName, "saitamasans-testing-runner-1.1.1.tgz");
+  assert.equal(release.fileName, "saitamasans-testing-runner-1.1.2.tgz");
   assert.ok(release.sizeBytes > 100_000);
 
   const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
@@ -60,8 +85,8 @@ test("release tarball contains runner and bundled production dependencies", asyn
     schema_version: 1,
     runner: {
       name: "@saitamasans/testing-runner",
-      version: "1.1.1",
-      download_url: "https://github.com/Saitamasans/testing-skills/releases/download/testing-runner-v1.1.1/saitamasans-testing-runner-1.1.1.tgz",
+      version: "1.1.2",
+      download_url: "https://github.com/Saitamasans/testing-skills/releases/download/testing-runner-v1.1.2/saitamasans-testing-runner-1.1.2.tgz",
       sha256: release.sha256,
       size_bytes: release.sizeBytes,
       minimum_node: 20,

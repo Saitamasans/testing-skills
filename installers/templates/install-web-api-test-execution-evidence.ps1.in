@@ -914,7 +914,7 @@ function Assert-PayloadManifest {
     }
     if ($payload.components.node.version -cne "22.23.1" -or
         $payload.components.runner.name -cne "@saitamasans/testing-runner" -or
-        $payload.components.runner.version -cne "1.1.1" -or
+        $payload.components.runner.version -cne "1.1.2" -or
         $payload.components.playwright.version -cne "1.61.1" -or
         $payload.components.playwright.chromium_revision -cne "1228" -or
         $payload.components.playwright.chromium_headless_shell_revision -cne "1228" -or
@@ -1156,7 +1156,7 @@ function Test-ExistingSmokeDiagnostics {
         $result = Get-Content -LiteralPath $resultPath -Raw -Encoding UTF8 | ConvertFrom-Json
         if ($result.schema_version -ne 1 -or $result.ok -ne $true -or
             $result.node.version -cne "22.23.1" -or $result.node.arch -cne $SelectedArchitecture -or
-            $result.runner.version -cne "1.1.1" -or $result.browser.visible -ne $true -or
+            $result.runner.version -cne "1.1.2" -or $result.browser.visible -ne $true -or
             $result.case_id -cne "BUNDLE-SMOKE-001" -or $result.case_status -cne "通过" -or
             $result.assertion_id -cne "BUNDLE-SMOKE-001-visible-text" -or $result.assertion_passed -ne $true) {
             return $false

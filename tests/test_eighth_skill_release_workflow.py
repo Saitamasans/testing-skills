@@ -283,10 +283,10 @@ class EighthSkillReleaseWorkflowContractTest(unittest.TestCase):
                     self.assertRegex(target, r"^[^@]+@[a-f0-9]{40}$")
                     self.assertRegex(version_comment, r"^v\d+")
 
-    def test_runner_111_release_is_immutable_attested_and_publicly_contract_verified(self):
+    def test_runner_112_release_is_immutable_attested_and_publicly_contract_verified(self):
         for phrase in [
-            "testing-runner-v1.1.1",
-            "saitamasans-testing-runner-1.1.1.tgz",
+            "testing-runner-v1.1.2",
+            "saitamasans-testing-runner-1.1.2.tgz",
             "npm ci --ignore-scripts",
             "npm run pack:runner-release",
             "package.json",
@@ -321,6 +321,8 @@ class EighthSkillReleaseWorkflowContractTest(unittest.TestCase):
         self.assertIn("timeout-minutes: 45", text)
         self.assertIn(install, text)
         self.assertIn(test, text)
+        self.assertNotIn("sha256sum", text)
+        self.assertIn("SHA256SUMS.txt", text)
         self.assertLess(text.index(install), text.index(test))
 
     def test_mutable_installer_publication_reverifies_provenance_and_exact_public_bytes(self):
@@ -415,13 +417,13 @@ class WindowsInstallerRendererContractTest(unittest.TestCase):
                 "node": {"version": "22.23.1"},
                 "runner": {
                     "name": "@saitamasans/testing-runner",
-                    "version": "1.1.1",
+                    "version": "1.1.2",
                     "download_url": (
                         "https://github.com/Saitamasans/testing-skills/releases/download/"
-                        "testing-runner-v1.1.1/saitamasans-testing-runner-1.1.1.tgz"
+                        "testing-runner-v1.1.2/saitamasans-testing-runner-1.1.2.tgz"
                     ),
-                    "sha256": "c9d6cdafcd8d9b67d4a21bfac6e3efee02b0c0451c47c2da10b81572a4a78311",
-                    "size_bytes": 22763679,
+                    "sha256": "0db2c917eaf786fa9c03bacc9f33a058ef8a9b429bc111772c7833f82c664a07",
+                    "size_bytes": 22769464,
                 },
                 "playwright": {
                     "version": "1.61.1",

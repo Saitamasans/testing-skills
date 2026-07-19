@@ -3,6 +3,7 @@ import { spawn } from "node:child_process";
 import {
   access,
   cp,
+  copyFile,
   mkdir,
   readFile,
   readdir,
@@ -16,9 +17,9 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { gunzipSync } from "node:zlib";
 
 const PACKAGE_NAME = "@saitamasans/testing-runner";
-const VERSION = "1.1.1";
-const FILE_NAME = "saitamasans-testing-runner-1.1.1.tgz";
-const RELEASE_TAG = "testing-runner-v1.1.1";
+const VERSION = "1.1.2";
+const FILE_NAME = "saitamasans-testing-runner-1.1.2.tgz";
+const RELEASE_TAG = "testing-runner-v1.1.2";
 const RELEASE_URL = "https://github.com/Saitamasans/testing-skills/releases/download/"
   + RELEASE_TAG + "/" + FILE_NAME;
 const CHROMIUM_ESTIMATED_SIZE_BYTES = 180_000_000;
@@ -44,6 +45,9 @@ const OWNED_TEXT_EXTENSIONS = new Set([
 ]);
 const REPO_ROOT = fileURLToPath(new URL("../../..", import.meta.url));
 const PACKAGE_ROOT = fileURLToPath(new URL("..", import.meta.url));
+const RELEASE_DEPENDENCY_LOCK_PATH = fileURLToPath(
+  new URL("../release/package-lock.json", import.meta.url),
+);
 const DEFAULT_MANIFEST_PATH = path.join(
   REPO_ROOT,
   "skill-sources",
@@ -58,34 +62,24 @@ export function resolveReleaseOutputDir(outputDir = path.join(REPO_ROOT, "build"
 
 async function packageManager() {
   if (process.env.npm_execpath) {
+    if (!/[\\/]npm(?:-cli)?\.(?:js|cjs)$/i.test(process.env.npm_execpath)) {
+      throw new Error("release packaging requires npm with the committed dependency lock");
+    }
     return {
-      kind: /pnpm/i.test(process.env.npm_execpath) ? "pnpm" : "npm",
+      kind: "npm",
       cli: process.env.npm_execpath,
     };
   }
-  const candidates = [
-    {
-      kind: "npm",
-      cli: path.join(path.dirname(process.execPath), "node_modules", "npm", "bin", "npm-cli.js"),
-    },
-    {
-      kind: "pnpm",
-      cli: path.resolve(path.dirname(process.execPath), "..", "node_modules", "pnpm", "bin", "pnpm.mjs"),
-    },
-    {
-      kind: "pnpm",
-      cli: path.resolve(path.dirname(process.execPath), "..", "node_modules", "pnpm", "bin", "pnpm.cjs"),
-    },
-  ];
-  for (const candidate of candidates) {
-    try {
-      await access(candidate.cli);
-      return candidate;
-    } catch {
-      // Try the next package manager distributed with the current Node runtime.
-    }
+  const candidate = {
+    kind: "npm",
+    cli: path.join(path.dirname(process.execPath), "node_modules", "npm", "bin", "npm-cli.js"),
+  };
+  try {
+    await access(candidate.cli);
+    return candidate;
+  } catch {
+    throw new Error("release packaging requires npm with the committed dependency lock");
   }
-  throw new Error("release packaging requires npm or pnpm, but neither CLI is available");
 }
 
 async function runPackageManager(manager, args, cwd = REPO_ROOT) {
@@ -197,27 +191,19 @@ export async function buildReleaseTarball(
       JSON.stringify(packageJson, null, 2) + "\n",
       "utf8",
     );
-    if (manager.kind === "npm") {
-      await runPackageManager(manager, [
-        "install", "--package-lock-only", "--ignore-scripts", "--no-audit", "--no-fund",
-      ], stageDir);
-      await runPackageManager(manager, [
-        "ci", "--omit=dev", "--ignore-scripts", "--no-audit", "--no-fund",
-      ], stageDir);
-    } else {
-      await runPackageManager(manager, [
-        "--config.node-linker=hoisted", "install", "--lockfile-only", "--ignore-scripts",
-      ], stageDir);
-      await runPackageManager(manager, [
-        "--config.node-linker=hoisted", "install", "--prod", "--frozen-lockfile", "--ignore-scripts",
-      ], stageDir);
+    const releaseLock = JSON.parse(await readFile(RELEASE_DEPENDENCY_LOCK_PATH, "utf8"));
+    const lockedRoot = releaseLock.packages?.[""];
+    if (releaseLock.lockfileVersion !== 3
+        || lockedRoot?.name !== packageJson.name
+        || lockedRoot?.version !== packageJson.version
+        || JSON.stringify(lockedRoot?.dependencies) !== JSON.stringify(packageJson.dependencies)) {
+      throw new Error("committed Runner release dependency lock does not match package.json");
     }
-    const packArgs = manager.kind === "npm"
-      ? ["pack", "--pack-destination", outputDir, "--json", "--ignore-scripts"]
-      : [
-        "--config.ignore-scripts=true", "--config.node-linker=hoisted",
-        "pack", "--pack-destination", outputDir, "--json",
-      ];
+    await copyFile(RELEASE_DEPENDENCY_LOCK_PATH, path.join(stageDir, "package-lock.json"));
+    await runPackageManager(manager, [
+      "ci", "--omit=dev", "--ignore-scripts", "--no-audit", "--no-fund",
+    ], stageDir);
+    const packArgs = ["pack", "--pack-destination", outputDir, "--json", "--ignore-scripts"];
     const packed = await runPackageManager(manager, packArgs, stageDir);
     const parsed = JSON.parse(packed.stdout.trim());
     const result = Array.isArray(parsed) ? parsed[0] : parsed;
