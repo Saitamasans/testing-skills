@@ -8,6 +8,7 @@ const SKILL = "web-api-test-execution-evidence";
 const BUNDLE_VERSION = "1.0.0";
 const RELEASE_TAG = "web-api-test-execution-evidence-v1.0.0";
 const PASS_STATUS = "\u901a\u8fc7";
+const RUN_ID = "run-bundle-smoke";
 const CASE_ID = "BUNDLE-SMOKE-001";
 const ASSERTION_ID = "BUNDLE-SMOKE-001-visible-text";
 const REQUIRED_SMOKE_ARTIFACTS = [
@@ -15,7 +16,7 @@ const REQUIRED_SMOKE_ARTIFACTS = [
   "projected-report.json",
   "result.html",
   "result.xlsx",
-  "run-events.jsonl",
+  `${RUN_ID}/run-events.jsonl`,
 ];
 const SHA256 = /^[a-f0-9]{64}$/;
 const REQUIRED_FILES = [
@@ -252,14 +253,14 @@ async function validatePayload(runtimePath, expectedHash, architecture) {
   await validateRuntimeIdentity(runtimePath);
 }
 
-async function validateSmokeEvidence(diagnosticsPath, reference, label) {
+async function validateSmokeEvidence(evidenceRoot, reference, label) {
   const entry = object(reference, `${label} smoke evidence`);
   const relative = safeRelative(entry.path);
   integer(entry.size_bytes, `${label} smoke evidence size`, false);
   if (!SHA256.test(entry.sha256)) corrupt(`${label} smoke evidence SHA-256 is invalid`);
-  const absolute = path.resolve(diagnosticsPath, ...relative.split("/"));
-  if (!contained(absolute, diagnosticsPath)) corrupt(`${label} smoke evidence escapes diagnostics`);
-  const physical = await physicalContained(diagnosticsPath, absolute, `${label} smoke evidence`);
+  const absolute = path.resolve(evidenceRoot, ...relative.split("/"));
+  if (!contained(absolute, evidenceRoot)) corrupt(`${label} smoke evidence escapes diagnostics`);
+  const physical = await physicalContained(evidenceRoot, absolute, `${label} smoke evidence`);
   const metadata = await fileInfo(physical, `${label} smoke evidence`);
   if (metadata.size !== entry.size_bytes || await sha256File(physical) !== entry.sha256) corrupt(`${label} smoke evidence does not match its smoke marker`);
   return relative;
@@ -273,13 +274,14 @@ async function validateSmoke(diagnosticsPath, smoke, architecture) {
   exact(node.arch, architecture, "smoke Node architecture");
   exact(object(smoke.runner, "smoke Runner identity").version, "1.1.2", "smoke Runner version");
   exact(object(smoke.browser, "smoke browser identity").visible, true, "smoke visible browser result");
+  exact(smoke.run_id, RUN_ID, "smoke run ID");
   exact(smoke.case_id, CASE_ID, "smoke case ID");
   exact(smoke.case_status, PASS_STATUS, "smoke case status");
   exact(smoke.assertion_id, ASSERTION_ID, "smoke assertion ID");
   exact(smoke.assertion_passed, true, "smoke assertion result");
-  const png = await validateSmokeEvidence(diagnosticsPath, smoke.png, "PNG");
+  const png = await validateSmokeEvidence(path.join(diagnosticsPath, RUN_ID), smoke.png, "PNG");
   const trace = await validateSmokeEvidence(diagnosticsPath, smoke.trace, "Trace");
-  if (!png.endsWith(`/${ASSERTION_ID}/web-page.png`) || trace !== "evidence/playwright-trace.zip") corrupt("smoke evidence paths do not match the locked smoke case");
+  if (!png.endsWith(`/${ASSERTION_ID}/web-page.png`) || trace !== `evidence/${CASE_ID}/playwright-trace.zip`) corrupt("smoke evidence paths do not match the locked smoke case");
   if (!Array.isArray(smoke.artifacts) || smoke.artifacts.length !== REQUIRED_SMOKE_ARTIFACTS.length) {
     corrupt("installation report smoke evidence list is invalid");
   }

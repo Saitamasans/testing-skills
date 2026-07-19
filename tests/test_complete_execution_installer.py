@@ -275,20 +275,23 @@ class CompleteInstallerTest(unittest.TestCase):
         self.smoke = self.root / "fixture-smoke.ps1"
         self.smoke.write_text(
             "param([string]$BundleRoot, [string]$DiagnosticsRoot)\n"
+            "$ErrorActionPreference='Stop'\n"
             "New-Item -ItemType Directory -Path $DiagnosticsRoot -Force | Out-Null\n"
-            "$png='evidence/BUNDLE-SMOKE-001/BUNDLE-SMOKE-001-visible-text/web-page.png'; "
-            "$trace='evidence/playwright-trace.zip'; "
-            "$artifacts=@('run-result.json','projected-report.json','result.html','result.xlsx','run-events.jsonl');\n"
-            "foreach($relative in @($png,$trace)+$artifacts){$target=Join-Path $DiagnosticsRoot $relative; "
+            "$runId='run-bundle-smoke'; "
+            "$png='evidence/BUNDLE-SMOKE-001/attempt-1/BUNDLE-SMOKE-001-visible-text/web-page.png'; "
+            "$pngStorage=Join-Path $runId $png; "
+            "$trace='evidence/BUNDLE-SMOKE-001/playwright-trace.zip'; "
+            "$artifacts=@('run-result.json','projected-report.json','result.html','result.xlsx','run-bundle-smoke/run-events.jsonl');\n"
+            "foreach($relative in @($pngStorage,$trace)+$artifacts){$target=Join-Path $DiagnosticsRoot $relative; "
             "New-Item -ItemType Directory -Path (Split-Path -Parent $target) -Force | Out-Null; "
             "Set-Content -LiteralPath $target -Encoding UTF8 -Value ('fixture-'+$relative)}\n"
-            "function Ref([string]$relative){$file=Join-Path $DiagnosticsRoot $relative; "
+            "function Ref([string]$relative,[string]$storage=$relative){$file=Join-Path $DiagnosticsRoot $storage; "
             "[ordered]@{path=$relative;size_bytes=(Get-Item $file).Length;"
             "sha256=(Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash.ToLowerInvariant()}}\n"
             "$result=[ordered]@{schema_version=1;ok=$true;node=@{version='22.23.1';arch='x64'};"
-            "runner=@{version='1.1.2'};browser=@{visible=$true};case_id='BUNDLE-SMOKE-001';"
+            "runner=@{version='1.1.2'};browser=@{visible=$true};run_id=$runId;case_id='BUNDLE-SMOKE-001';"
             "case_status='通过';assertion_id='BUNDLE-SMOKE-001-visible-text';assertion_passed=$true;"
-            "png=(Ref $png);trace=(Ref $trace);artifacts=@($artifacts|ForEach-Object {Ref $_})}\n"
+            "png=(Ref $png $pngStorage);trace=(Ref $trace);artifacts=@($artifacts|ForEach-Object {Ref $_})}\n"
             "$result|ConvertTo-Json -Depth 8|Set-Content -LiteralPath (Join-Path $DiagnosticsRoot 'smoke-result.json') -Encoding UTF8\n",
             encoding="utf-8-sig",
         )
@@ -379,6 +382,17 @@ class CompleteInstallerTest(unittest.TestCase):
         self.assertGreaterEqual(receipt_mtime, (skill / "SKILL.md").stat().st_mtime_ns)
         for field in ("当前文件", "总字节", "已下载", "百分比", "字节/秒", "ETA", "重试", "续传偏移"):
             self.assertIn(field, output)
+
+    def test_existing_receipt_with_current_smoke_layout_is_idempotent(self):
+        fixture = build_fixture()
+        with FixtureServer(fixture) as server:
+            installed = self.run_installer(server)
+            repeated = self.run_installer(server)
+
+        self.assertEqual(0, installed.returncode, self.output(installed))
+        output = self.output(repeated)
+        self.assertEqual(0, repeated.returncode, output)
+        self.assertEqual(1, output.count(SUCCESS), output)
 
     def test_public_cmd_environment_roots_drive_default_install_locations(self):
         fixture = build_fixture()

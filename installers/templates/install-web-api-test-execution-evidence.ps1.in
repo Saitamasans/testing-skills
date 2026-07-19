@@ -1157,15 +1157,16 @@ function Test-ExistingSmokeDiagnostics {
         if ($result.schema_version -ne 1 -or $result.ok -ne $true -or
             $result.node.version -cne "22.23.1" -or $result.node.arch -cne $SelectedArchitecture -or
             $result.runner.version -cne "1.1.2" -or $result.browser.visible -ne $true -or
+            $result.run_id -cne "run-bundle-smoke" -or
             $result.case_id -cne "BUNDLE-SMOKE-001" -or $result.case_status -cne "通过" -or
             $result.assertion_id -cne "BUNDLE-SMOKE-001-visible-text" -or $result.assertion_passed -ne $true) {
             return $false
         }
-        if (-not (Test-SmokeEvidenceReference -DiagnosticsRoot $diagnostics -Reference $result.png `
+        if (-not (Test-SmokeEvidenceReference -DiagnosticsRoot (Join-Path $diagnostics $result.run_id) -Reference $result.png `
             -ExpectedPath "/BUNDLE-SMOKE-001-visible-text/web-page.png" -AllowSuffix)) { return $false }
         if (-not (Test-SmokeEvidenceReference -DiagnosticsRoot $diagnostics -Reference $result.trace `
-            -ExpectedPath "evidence/playwright-trace.zip")) { return $false }
-        $requiredArtifacts = @("run-result.json", "projected-report.json", "result.html", "result.xlsx", "run-events.jsonl")
+            -ExpectedPath "evidence/BUNDLE-SMOKE-001/playwright-trace.zip")) { return $false }
+        $requiredArtifacts = @("run-result.json", "projected-report.json", "result.html", "result.xlsx", "run-bundle-smoke/run-events.jsonl")
         $artifacts = @($result.artifacts)
         foreach ($required in $requiredArtifacts) {
             $matches = @($artifacts | Where-Object { [string]$_.path -ceq $required })

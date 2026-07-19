@@ -16,16 +16,18 @@ const windowsRuntimeTest = process.platform === "win32" ? test : test.skip;
 const skillName = "web-api-test-execution-evidence";
 const repoRoot = fileURLToPath(new URL("..", import.meta.url));
 const passStatus = "\u901a\u8fc7";
+const runId = "run-bundle-smoke";
 const caseId = "BUNDLE-SMOKE-001";
 const assertionId = "BUNDLE-SMOKE-001-visible-text";
-const pngPath = `run-bundle-smoke/evidence/${caseId}/attempt-1/${assertionId}/web-page.png`;
-const tracePath = "evidence/playwright-trace.zip";
+const pngPath = `evidence/${caseId}/attempt-1/${assertionId}/web-page.png`;
+const pngStoragePath = `${runId}/${pngPath}`;
+const tracePath = `evidence/${caseId}/playwright-trace.zip`;
 const smokeArtifactPaths = [
   "run-result.json",
   "projected-report.json",
   "result.html",
   "result.xlsx",
-  "run-events.jsonl",
+  `${runId}/run-events.jsonl`,
 ];
 const sourceScripts = path.join(repoRoot, "skill-sources", skillName, "scripts");
 const fixtureHomes = new Set();
@@ -94,7 +96,7 @@ async function installedFixture(options = {}) {
   }
   const png = "smoke png";
   const trace = "smoke trace";
-  await write(diagnosticsPath, pngPath, png);
+  await write(diagnosticsPath, pngStoragePath, png);
   await write(diagnosticsPath, tracePath, trace);
   for (const relative of smokeArtifactPaths) await write(diagnosticsPath, relative, `smoke ${relative}`);
   await write(diagnosticsPath, "smoke-result.json", JSON.stringify({
@@ -103,6 +105,7 @@ async function installedFixture(options = {}) {
     node: { version: "22.23.1", arch: options.architecture ?? "x64" },
     runner: { version: "1.1.2" },
     browser: { visible: true },
+    run_id: runId,
     case_id: caseId,
     case_status: passStatus,
     assertion_id: assertionId,
