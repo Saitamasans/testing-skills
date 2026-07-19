@@ -130,6 +130,13 @@ class GitHubInstallReadmeTest(unittest.TestCase):
         self.assertIn("scripts/install.ps1", self.readme)
         self.assertIn("-All", self.readme)
         self.assertIn("-Skill 'requirement-test-workbench'", self.readme)
+        self.assertIn(
+            "前 7 个独立安装按钮来自固定且不可变的 `skill-installers-v1` Release；"
+            "全部 8 个 Skill 和第 8 个执行就绪按钮只从不可变的 "
+            "`web-api-test-execution-evidence-v1.0.1` Release 提供",
+            self.readme,
+        )
+        self.assertNotIn("前 7 个和全部安装按钮从固定的", self.readme)
 
     def test_complete_fallbacks_run_immutable_cmds_without_pausing_and_preserve_exit_code(self):
         fallback = self.readme.split("### 命令兜底：Windows 零 Node 安装", 1)[1].split(
@@ -351,6 +358,7 @@ class GitHubInstallerReleaseWorkflowTest(unittest.TestCase):
             r"%USERPROFILE%\.testing-skills\installations\web-api-test-execution-evidence.json",
             r"%USERPROFILE%\.testing-skills\diagnostics\web-api-test-execution-evidence",
             "正常执行阶段不会下载 Node、Runner、Playwright 或 Chromium",
+            "此不可变历史 Release 仅提供前七个 Skill 的独立启动器",
         ]:
             with self.subTest(phrase=phrase):
                 self.assertIn(phrase, notes)
