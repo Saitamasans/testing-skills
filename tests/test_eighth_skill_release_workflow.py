@@ -69,7 +69,32 @@ class EighthSkillReleaseWorkflowContractTest(unittest.TestCase):
         self.assertIn("inputs.release_tag", self.bundle)
         self.assertRegex(self.bundle, r"(?s)inputs\.release_tag.*runtime lock release tag")
 
-    def test_rendered_installer_runs_clean_room_on_both_native_architectures(self):
+    def test_x64_release_path_is_independent_from_arm64_validation(self):
+        build_x64 = re.search(
+            r"(?ms)^  build-x64:\n(.*?)(?=^  [a-z][a-z0-9-]+:\n)",
+            self.release,
+        )
+        arm64 = re.search(
+            r"(?ms)^  validate-arm64:\n(.*?)(?=^  [a-z][a-z0-9-]+:\n)",
+            self.release,
+        )
+        assemble = re.search(
+            r"(?ms)^  assemble-release:\n(.*?)(?=^  [a-z][a-z0-9-]+:\n)",
+            self.release,
+        )
+        self.assertIsNotNone(build_x64)
+        self.assertIsNotNone(arm64)
+        self.assertIsNotNone(assemble)
+        self.assertIn("architecture: x64", build_x64.group(1))
+        self.assertIn("architecture: arm64", arm64.group(1))
+        self.assertIn("non_blocking: true", arm64.group(1))
+        self.assertIn("needs: [validate-tag, build-x64]", assemble.group(1))
+        self.assertNotIn("validate-arm64", assemble.group(1))
+        self.assertNotIn("complete-windows-bundle-arm64", assemble.group(1))
+        self.assertNotIn("--arm64-manifest", assemble.group(1))
+        self.assertNotIn("--arm64-bundle", assemble.group(1))
+
+    def test_rendered_x64_installer_runs_clean_room_on_native_x64(self):
         job = re.search(
             r"(?ms)^  clean-room-install-smoke:\n(.*?)(?=^  [a-z][a-z-]+:\n)",
             self.release,
@@ -79,9 +104,7 @@ class EighthSkillReleaseWorkflowContractTest(unittest.TestCase):
         for phrase in [
             "needs: assemble-release",
             "windows-2025",
-            "windows-11-arm",
             "complete-windows-bundle-x64",
-            "complete-windows-bundle-arm64",
             "install-web-api-test-execution-evidence.ps1",
             "-ManifestSha256",
             "-AllowLocalFixture",
@@ -101,6 +124,8 @@ class EighthSkillReleaseWorkflowContractTest(unittest.TestCase):
         ]:
             with self.subTest(phrase=phrase):
                 self.assertIn(phrase, text)
+        self.assertNotIn("windows-11-arm", text)
+        self.assertNotIn("complete-windows-bundle-arm64", text)
         create_draft = re.search(
             r"(?ms)^  create-draft:\n(.*?)(?=^  [a-z][a-z-]+:\n)",
             self.release,
@@ -275,8 +300,6 @@ class EighthSkillReleaseWorkflowContractTest(unittest.TestCase):
         for name in [
             "web-api-test-execution-evidence-1.0.0-windows-x64.zip",
             "web-api-test-execution-evidence-1.0.0-windows-x64.manifest.json",
-            "web-api-test-execution-evidence-1.0.0-windows-arm64.zip",
-            "web-api-test-execution-evidence-1.0.0-windows-arm64.manifest.json",
             "install-web-api-test-execution-evidence.ps1",
             "install-web-api-test-execution-evidence.cmd",
             "install.ps1",
@@ -285,6 +308,16 @@ class EighthSkillReleaseWorkflowContractTest(unittest.TestCase):
         ]:
             with self.subTest(name=name):
                 self.assertIn(name, self.release)
+        for name in [
+            "web-api-test-execution-evidence-1.0.0-windows-arm64.zip",
+            "web-api-test-execution-evidence-1.0.0-windows-arm64.manifest.json",
+        ]:
+            with self.subTest(excluded=name):
+                assemble = re.search(
+                    r"(?ms)^  assemble-release:\n(.*?)(?=^  [a-z][a-z0-9-]+:\n)",
+                    self.release,
+                )
+                self.assertNotIn(name, assemble.group(1))
         self.assertIn("unresolved placeholder", self.release)
         self.assertIn("github.sha", self.release)
         self.assertIn("target_commitish", self.release)
@@ -401,13 +434,12 @@ class EighthSkillReleaseWorkflowContractTest(unittest.TestCase):
             with self.subTest(phrase=phrase):
                 self.assertIn(phrase, self.publish_installers)
 
-    def test_post_public_verification_installs_through_public_cmd_on_native_x64_and_arm64(self):
+    def test_post_public_verification_installs_through_public_cmd_on_native_x64(self):
         job = re.search(r"(?ms)^  post-publish-verify:\n(.*)\Z", self.release)
         self.assertIsNotNone(job)
         text = job.group(1)
         for phrase in [
             "windows-2025",
-            "windows-11-arm",
             "PROCESSOR_ARCHITECTURE",
             "verified-eighth-runtime-release-assets",
             "diff --no-dereference --recursive",
@@ -428,6 +460,14 @@ class EighthSkillReleaseWorkflowContractTest(unittest.TestCase):
         ]:
             with self.subTest(phrase=phrase):
                 self.assertIn(phrase, text)
+        self.assertNotIn("windows-11-arm", text)
+        self.assertNotIn("windows-arm64", text)
+
+    def test_mutable_installer_gate_uses_the_x64_p0_runtime_allowlist(self):
+        self.assertIn("web-api-test-execution-evidence-1.0.0-windows-x64.zip", self.publish_installers)
+        self.assertIn("web-api-test-execution-evidence-1.0.0-windows-x64.manifest.json", self.publish_installers)
+        self.assertNotIn("web-api-test-execution-evidence-1.0.0-windows-arm64.zip", self.publish_installers)
+        self.assertNotIn("web-api-test-execution-evidence-1.0.0-windows-arm64.manifest.json", self.publish_installers)
 
     def test_renderer_declares_its_zip_parser_dependency(self):
         package = json.loads((ROOT / "package.json").read_text(encoding="utf-8"))
@@ -572,6 +612,37 @@ class WindowsInstallerRendererContractTest(unittest.TestCase):
             "--output", str(output),
         ]
         return subprocess.run(command, capture_output=True, text=True, check=False)
+
+    def _run_x64_only(self, output):
+        command = [
+            NODE,
+            str(RENDERER),
+            "--lock", str(ROOT / "packages/testing-runner/release/windows-runtime-lock.json"),
+            "--x64-manifest", str(self.x64_manifest),
+            "--x64-bundle", str(self.x64_bundle),
+            "--complete-template", str(ROOT / "installers/templates/install-web-api-test-execution-evidence.ps1.in"),
+            "--cmd-template", str(ROOT / "installers/templates/install-web-api-test-execution-evidence.cmd.in"),
+            "--generic-template", str(ROOT / "scripts/install.ps1"),
+            "--all-template", str(ROOT / "installers/install-all.cmd"),
+            "--output", str(output),
+        ]
+        return subprocess.run(command, capture_output=True, text=True, check=False)
+
+    def test_renders_x64_only_release_without_arm64_assets_or_installer_route(self):
+        output = self.root / "x64-release"
+        result = self._run_x64_only(output)
+        self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+        names = {item.name for item in output.iterdir()}
+        self.assertIn(self.x64_bundle.name, names)
+        self.assertIn(self.x64_manifest.name, names)
+        self.assertNotIn(self.arm64_bundle.name, names)
+        self.assertNotIn(self.arm64_manifest.name, names)
+        complete = (output / "install-web-api-test-execution-evidence.ps1").read_text(encoding="utf-8-sig")
+        self.assertIn('[ValidateSet("x64")]', complete)
+        self.assertNotIn("windows-arm64.manifest.json", complete)
+        self.assertNotIn('return "arm64"', complete)
+        checksum_lines = (output / "SHA256SUMS.txt").read_text().splitlines()
+        self.assertEqual(6, len(checksum_lines))
 
     def test_renders_manifest_to_ps1_to_cmd_to_all_hash_chain(self):
         output = self.root / "release"

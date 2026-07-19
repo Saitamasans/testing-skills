@@ -6,12 +6,21 @@ on:
       release_tag:
         required: true
         type: string
+      architecture:
+        required: true
+        type: string
+      non_blocking:
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: read
 
 jobs:
   build-and-smoke:
+    if: inputs.architecture == matrix.arch
+    continue-on-error: ${{ inputs.non_blocking }}
     strategy:
       fail-fast: false
       matrix:

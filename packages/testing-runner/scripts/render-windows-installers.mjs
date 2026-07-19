@@ -39,8 +39,6 @@ function parseArguments(argv) {
     "--lock",
     "--x64-manifest",
     "--x64-bundle",
-    "--arm64-manifest",
-    "--arm64-bundle",
     "--complete-template",
     "--cmd-template",
     "--generic-template",
@@ -50,8 +48,12 @@ function parseArguments(argv) {
   for (const flag of required) {
     if (!values.has(flag)) fail(`missing required argument: ${flag}`);
   }
-  if (values.size !== required.length) fail("unknown argument supplied");
-  return Object.fromEntries(required.map((flag) => [flag.slice(2), values.get(flag)]));
+  const arm64Flags = ["--arm64-manifest", "--arm64-bundle"];
+  const arm64Count = arm64Flags.filter((flag) => values.has(flag)).length;
+  if (arm64Count === 1) fail("arm64 manifest and bundle must be supplied together");
+  const accepted = [...required, ...(arm64Count === 2 ? arm64Flags : [])];
+  if (values.size !== accepted.length) fail("unknown argument supplied");
+  return Object.fromEntries(accepted.map((flag) => [flag.slice(2), values.get(flag)]));
 }
 
 function sha256Bytes(bytes) {
@@ -255,6 +257,12 @@ function replaceExactly(text, token, value, label) {
   return text.replace(token, value);
 }
 
+function replaceRegexExactly(text, expression, value, label) {
+  const matches = text.match(expression) ?? [];
+  if (matches.length !== 1) fail(`${label} must contain exactly one required block`);
+  return text.replace(expression, value);
+}
+
 function replaceSetting(text, name, value) {
   const expression = new RegExp(`^set "${name}=[^"\\r\\n]*"$`, "gm");
   const matches = text.match(expression) ?? [];
@@ -284,21 +292,19 @@ export async function renderWindowsInstallers(rawInput) {
   const lock = validateRuntimeLock(await readJson(input.lock, "runtime lock"));
   exact(lock.release_tag, `${SKILL}-v${lock.bundle_version}`, "runtime lock release_tag");
 
-  const [x64, arm64] = await Promise.all([
-    validateCompanion({
-      arch: "x64",
-      manifestPath: input["x64-manifest"],
-      bundlePath: input["x64-bundle"],
-      lock,
-    }),
-    validateCompanion({
+  const x64 = await validateCompanion({
+    arch: "x64",
+    manifestPath: input["x64-manifest"],
+    bundlePath: input["x64-bundle"],
+    lock,
+  });
+  const arm64 = input["arm64-manifest"] ? await validateCompanion({
       arch: "arm64",
       manifestPath: input["arm64-manifest"],
       bundlePath: input["arm64-bundle"],
       lock,
-    }),
-  ]);
-  if (x64.manifestSha256 === arm64.manifestSha256) {
+    }) : undefined;
+  if (arm64 && x64.manifestSha256 === arm64.manifestSha256) {
     fail("x64 and arm64 companion manifests must be distinct");
   }
 
@@ -313,12 +319,31 @@ export async function renderWindowsInstallers(rawInput) {
     x64.manifestSha256,
     "complete PowerShell template",
   );
-  completeText = replaceExactly(
-    completeText,
-    "__ARM64_COMPANION_MANIFEST_SHA256__",
-    arm64.manifestSha256,
-    "complete PowerShell template",
-  );
+  if (arm64) {
+    completeText = replaceExactly(
+      completeText,
+      "__ARM64_COMPANION_MANIFEST_SHA256__",
+      arm64.manifestSha256,
+      "complete PowerShell template",
+    );
+  } else {
+    const architectureSets = completeText.match(/\[ValidateSet\("x64", "arm64"\)\]/g) ?? [];
+    if (architectureSets.length !== 2) fail("complete PowerShell template must contain two architecture validation sets");
+    completeText = completeText.replaceAll('[ValidateSet("x64", "arm64")]', '[ValidateSet("x64")]');
+    completeText = replaceRegexExactly(
+      completeText,
+      /    arm64 = @\{\r?\n        Uri = "https:\/\/github\.com\/Saitamasans\/testing-skills\/releases\/download\/web-api-test-execution-evidence-v1\.0\.0\/web-api-test-execution-evidence-1\.0\.0-windows-arm64\.manifest\.json"\r?\n        Sha256 = "__ARM64_COMPANION_MANIFEST_SHA256__"\r?\n    \}\r?\n/,
+      "",
+      "complete PowerShell ARM64 manifest block",
+    );
+    completeText = replaceRegexExactly(
+      completeText,
+      /    if \(\$combined\.Contains\("ARM64"\)\) \{\r?\n        return "arm64"\r?\n    \}\r?\n/,
+      "",
+      "complete PowerShell ARM64 architecture branch",
+    );
+    completeText = completeText.replace("仅支持 x64 和 ARM64", "仅支持 x64");
+  }
   rejectPlaceholders(completeText, "complete PowerShell installer");
   const completeBytes = Buffer.from(completeText, "utf8");
   const completeSha256 = sha256Bytes(completeBytes);
@@ -364,7 +389,8 @@ export async function renderWindowsInstallers(rawInput) {
   await mkdir(staging, { recursive: true });
   let completed = false;
   try {
-    for (const item of [x64, arm64]) {
+    const releaseItems = [x64, ...(arm64 ? [arm64] : [])];
+    for (const item of releaseItems) {
       await copyFile(item.bundlePath, path.join(staging, item.bundleName));
       await copyFile(item.manifestPath, path.join(staging, item.manifestName));
     }
@@ -376,8 +402,7 @@ export async function renderWindowsInstallers(rawInput) {
     const names = [
       x64.bundleName,
       x64.manifestName,
-      arm64.bundleName,
-      arm64.manifestName,
+      ...(arm64 ? [arm64.bundleName, arm64.manifestName] : []),
       completeName,
       `install-${SKILL}.cmd`,
       "install.ps1",
@@ -399,7 +424,7 @@ export async function renderWindowsInstallers(rawInput) {
     output: input.output,
     release_tag: lock.release_tag,
     x64_companion_sha256: x64.manifestSha256,
-    arm64_companion_sha256: arm64.manifestSha256,
+    arm64_companion_sha256: arm64?.manifestSha256 ?? null,
     complete_installer_sha256: completeSha256,
     generic_installer_sha256: genericSha256,
   };
