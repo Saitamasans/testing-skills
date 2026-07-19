@@ -31,6 +31,8 @@
 
 第 8 个 `web-api-test-execution-evidence` 的最终用户必须使用 GitHub Release 完整安装器。完整安装不提供轻量版、API-only 或可选浏览器模式，安装时已交付 portable Node 22.23.1、Runner 1.1.2、Playwright 1.61.1、Chromium 1228、headless shell 1228 和 FFmpeg 1011；无需系统安装 Node.js、npm、Git、Chrome、Excel 或 Python。安装器完成下载、SHA-256 校验、解压、bundle 清单校验和本地完整 smoke test 后才显示“安装完成，可以执行 Web/API 自动化测试”。
 
+发布状态说明：远端 tag `testing-runner-v1.1.1` 仅为未发布/作废发布目标，不对应可安全公开的 Runner Release，自动化不得再次尝试发布它，也不得删除或移动该 tag。首个可发布目标为 `testing-runner-v1.1.2`。
+
 [![Install All 8 Skills](https://img.shields.io/badge/Install-All_8_Skills-2ea44f?style=for-the-badge&logo=github)](https://github.com/Saitamasans/testing-skills/releases/download/skill-installers-v1/install-all.cmd)
 
 第 8 个 Skill 的执行就绪安装器：`install-web-api-test-execution-evidence.cmd` 或 `install-web-api-test-execution-evidence.ps1`。它使用固定版本的 GitHub Release 完整安装器，显示下载进度、速度、ETA、重试、续传、校验、解压和 smoke test；安装已损坏或不完整时，用同一安装器加 `-Repair`，不要在执行过程中下载或替换任何组件。

@@ -468,6 +468,29 @@ class EighthSkillReleaseWorkflowContractTest(unittest.TestCase):
         self.assertIn("SHA256SUMS.txt", text)
         self.assertLess(text.index(install), text.index(test))
 
+    def test_runner_111_is_retired_and_112_is_the_only_publishable_target(self):
+        retired = "testing-runner-v1.1.1"
+        for relative in [
+            ".github/workflows",
+            "installers",
+            "packages/testing-runner",
+            "scripts",
+            "skill-sources/web-api-test-execution-evidence",
+            "skills/web-api-test-execution-evidence",
+        ]:
+            for path in (ROOT / relative).rglob("*"):
+                if not path.is_file() or path.suffix.lower() in {".zip", ".tgz", ".pyc"}:
+                    continue
+                with self.subTest(path=path.relative_to(ROOT)):
+                    self.assertNotIn(retired, path.read_text(encoding="utf-8", errors="ignore"))
+
+        readme = (ROOT / "README.md").read_text(encoding="utf-8")
+        self.assertIn("testing-runner-v1.1.1", readme)
+        self.assertIn("未发布/作废发布目标", readme)
+        self.assertIn("首个可发布目标为 `testing-runner-v1.1.2`", readme)
+        self.assertIn('tags:\n      - "testing-runner-v1.1.2"', self.runner_release)
+        self.assertNotIn('tags:\n      - "testing-runner-v1.1.1"', self.runner_release)
+
     def test_mutable_installer_publication_reverifies_provenance_and_exact_public_bytes(self):
         for phrase in [
             "concurrency:",
