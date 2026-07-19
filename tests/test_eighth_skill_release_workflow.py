@@ -132,6 +132,25 @@ class EighthSkillReleaseWorkflowContractTest(unittest.TestCase):
                 self.assertIn(phrase, text)
         self.assertNotIn("windows-11-arm", text)
         self.assertNotIn("complete-windows-bundle-arm64", text)
+        self.assertIn(
+            "$volumeRoot = [IO.Path]::GetPathRoot($env:RUNNER_TEMP)",
+            text,
+        )
+        self.assertIn(
+            '$cleanRoot = Join-Path $volumeRoot ("r-" + [Guid]::NewGuid().ToString("N").Substring(0, 8))',
+            text,
+        )
+        self.assertNotIn(
+            '$cleanRoot = Join-Path $PWD "build/clean-room-${{ matrix.arch }}"',
+            text,
+        )
+        self.assertIn("[IO.File]::WriteAllText(", text)
+        self.assertIn("$localManifestPath,", text)
+        self.assertIn("New-Object Text.UTF8Encoding($false)", text)
+        self.assertNotIn(
+            "$localManifest | ConvertTo-Json -Depth 20 | Set-Content",
+            text,
+        )
         create_draft = re.search(
             r"(?ms)^  create-draft:\n(.*?)(?=^  [a-z][a-z-]+:\n)",
             self.release,

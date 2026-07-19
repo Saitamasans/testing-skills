@@ -200,7 +200,8 @@ jobs:
             throw "complete installer does not authorize the native companion manifest"
           }
 
-          $cleanRoot = Join-Path $PWD "build/clean-room-${{ matrix.arch }}"
+          $volumeRoot = [IO.Path]::GetPathRoot($env:RUNNER_TEMP)
+          $cleanRoot = Join-Path $volumeRoot ("r-" + [Guid]::NewGuid().ToString("N").Substring(0, 8))
           $servedRoot = Join-Path $cleanRoot "served"
           $installRoot = Join-Path $cleanRoot "skills"
           $stateRoot = Join-Path $cleanRoot "state"
@@ -215,7 +216,12 @@ jobs:
           $localManifest = Get-Content -LiteralPath $releaseManifest -Raw -Encoding UTF8 | ConvertFrom-Json
           $localManifest.archive.download_url = "http://127.0.0.1:$port/$bundleName"
           $localManifestPath = Join-Path $servedRoot $manifestName
-          $localManifest | ConvertTo-Json -Depth 20 | Set-Content -LiteralPath $localManifestPath -Encoding UTF8
+          $localManifestJson = $localManifest | ConvertTo-Json -Depth 20
+          [IO.File]::WriteAllText(
+            $localManifestPath,
+            $localManifestJson,
+            (New-Object Text.UTF8Encoding($false))
+          )
           $localManifestSha = (Get-FileHash $localManifestPath -Algorithm SHA256).Hash.ToLowerInvariant()
 
           $python = (Get-Command python.exe -ErrorAction Stop).Source
