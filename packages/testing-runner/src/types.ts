@@ -327,6 +327,8 @@ export interface Approval {
   protocol_version: ProtocolVersion;
   approval_id: string;
   manifest_hash: string;
+  manifest_sha256: string;
+  package_sha256?: string;
   source_hash: string;
   runner?: { version: ProtocolVersion };
   rule_versions?: string[];

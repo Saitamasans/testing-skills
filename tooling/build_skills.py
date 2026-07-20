@@ -108,8 +108,12 @@ def _copy_resource_tree(source_root: Path, package: Path, desired: dict[Path, st
 def build_all(root: Path = ROOT, check: bool = False) -> list[Path]:
     manifest = load_manifest(root)
     entries = manifest.get("skills", [])
-    if len(entries) != 8 or len({i["slug"] for i in entries}) != 8:
-        raise ValueError("manifest 必须包含八个唯一 Skill")
+    if not entries:
+        raise ValueError("manifest 必须至少包含一个 Skill")
+    for field in ("slug", "source", "display_name"):
+        values = [str(item.get(field, "")).casefold() for item in entries]
+        if any(not value for value in values) or len(values) != len(set(values)):
+            raise ValueError(f"manifest 的 {field} 必须存在且唯一")
     desired: dict[Path, str | bytes] = {}
     for item in entries:
         source = root / item["source"]
@@ -123,7 +127,7 @@ def build_all(root: Path = ROOT, check: bool = False) -> list[Path]:
             desired[package / "SKILL.md"] = _render_skill(compact)
             for relative, reference in references.items():
                 desired[package / relative] = reference
-        elif item["slug"] == "web-api-test-execution-evidence":
+        elif item.get("execution_skill") or item.get("compiler_skill"):
             compact, references = _split_execution_skill(text)
             desired[package / "SKILL.md"] = _render_skill(compact, EXECUTION_BANNER)
             for relative, reference in references.items():
@@ -169,7 +173,7 @@ def build_all(root: Path = ROOT, check: bool = False) -> list[Path]:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="生成八个标准 Skill 安装包")
+    parser = argparse.ArgumentParser(description="按 manifest 生成标准 Skill 安装包")
     parser.add_argument("--check", action="store_true", help="只检查生成内容是否漂移")
     args = parser.parse_args()
     try:

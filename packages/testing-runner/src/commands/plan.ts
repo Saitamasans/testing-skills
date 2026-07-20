@@ -3,6 +3,7 @@ import path from "node:path";
 import { performance } from "node:perf_hooks";
 
 import { compileManifest, type ExecutionProfileWithPlans } from "../compiler/manifest-compiler.js";
+import { sha256Canonical } from "../compiler/canonical-json.js";
 import { assessReadiness, type RuntimeProbeReport } from "../readiness.js";
 import { validateDocument } from "../schema-registry.js";
 import { readStandardExcel } from "../input/excel-reader.js";
@@ -119,9 +120,49 @@ async function runPackagePlan(options: PlanCommandOptions, profile: ExecutionPro
   await writeFile(path.join(options.outputDir, "execution-preview.md"), renderPreview(manifest), "utf8");
   await writeJson(options.outputDir, "package-fast-path.json", {
     semantic_compilation: "skipped", semantic_compiler: "test-case-execution-compiler", contract_version: loaded.contract.contract_version, package_id: loaded.manifest.package_id, package_sha256: loaded.package_sha256,
+    review: packageReviewMetadata(loaded, manifest),
     timings: { ...loaded.timings, runtime_doctor_ms, web_discovery_ms: null, binding_ms, transition_discovery_ms, manifest_assembly_ms, approval_wait_ms: null, execution_ms: null, report_ms: null },
   });
   return { case_set: loaded.caseSet, manifest, readiness };
+}
+
+function packageReviewMetadata(
+  loaded: Awaited<ReturnType<typeof readExecutionPackage>>,
+  manifest: RunManifest,
+) {
+  const riskRank = { R0: 0, R1: 1, R2: 2, R3: 3 } as const;
+  const reviewCases = loaded.contract.cases.map((contractCase) => {
+    const manifestCase = manifest.cases.find(({ case_id }) => case_id === contractCase.case_id)!;
+    const riskLevels = [...new Set(manifestCase.steps.map(({ risk }) => risk))]
+      .sort((left, right) => riskRank[left] - riskRank[right]);
+    const actionIds = contractCase.actions.map((entry) => String((entry as { action_id?: unknown }).action_id ?? ""));
+    const assertionIds = contractCase.assertions.map((entry) => String((entry as { assertion_id?: unknown }).assertion_id ?? ""));
+    return {
+      case_id: contractCase.case_id,
+      source_case_id: contractCase.source_case_id,
+      action_ids: actionIds,
+      assertion_ids: assertionIds,
+      action_count: actionIds.length,
+      assertion_count: assertionIds.length,
+      risk_levels: riskLevels,
+      highest_risk: riskLevels.at(-1) ?? "R0",
+      setup: structuredClone(contractCase.setup),
+      cleanup: structuredClone(contractCase.cleanup),
+      resource_locks: structuredClone(contractCase.resource_locks),
+    };
+  });
+  const primarySourceName = path.posix.basename(loaded.manifest.source_files[0]!);
+  return {
+    package_sha256: loaded.package_sha256,
+    source_sha256: loaded.manifest.source_sha256[primarySourceName],
+    source_files_sha256: structuredClone(loaded.manifest.source_sha256),
+    final_manifest_sha256: sha256Canonical(manifest),
+    case_count: reviewCases.length,
+    action_count: reviewCases.reduce((count, item) => count + item.action_count, 0),
+    assertion_count: reviewCases.reduce((count, item) => count + item.assertion_count, 0),
+    case_ids: reviewCases.map(({ case_id }) => case_id),
+    cases: reviewCases,
+  };
 }
 
 function semanticIds(item: ContractCase): string[] {

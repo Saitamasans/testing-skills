@@ -29,6 +29,7 @@ type VersionedApproval = Approval & {
 
 export function createApproval(input: ApprovalInput): Approval {
   const manifest = input.manifest as LockableManifest;
+  const manifestSha256 = sha256Canonical(input.manifest);
   const approval: VersionedApproval = {
     protocol_version: "1.0.0",
     approval_id: input.approval_id ?? `approval-${sha256Canonical({
@@ -36,7 +37,9 @@ export function createApproval(input: ApprovalInput): Approval {
       issued_by: input.issued_by,
       issued_at: input.issued_at,
     }).slice(0, 16)}`,
-    manifest_hash: sha256Canonical(input.manifest),
+    manifest_hash: manifestSha256,
+    manifest_sha256: manifestSha256,
+    ...(input.manifest.package_sha256 ? { package_sha256: input.manifest.package_sha256 } : {}),
     source_hash: input.manifest.source.sha256,
     runner: { version: input.manifest.runner.version },
     rule_versions: [...(manifest.rule_versions ?? [])],
@@ -59,8 +62,15 @@ export function verifyApproval(
   const versionedApproval = approval as VersionedApproval;
   const reasons: string[] = [];
 
-  if (approval.manifest_hash !== sha256Canonical(manifest)) {
+  const currentManifestSha256 = sha256Canonical(manifest);
+  if (approval.manifest_hash !== currentManifestSha256 || approval.manifest_sha256 !== currentManifestSha256) {
     reasons.push("manifest changed after approval");
+  }
+  if (manifest.package_sha256) {
+    if (!approval.package_sha256) reasons.push("package SHA-256 missing from approval");
+    else if (approval.package_sha256 !== manifest.package_sha256) reasons.push("package SHA-256 mismatch");
+  } else if (approval.package_sha256) {
+    reasons.push("unexpected package SHA-256 in approval");
   }
   if (approval.source_hash !== manifest.source.sha256) {
     reasons.push("source hash mismatch");

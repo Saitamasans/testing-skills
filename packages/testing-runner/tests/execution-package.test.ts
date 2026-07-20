@@ -4,8 +4,11 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import ExcelJS from "exceljs";
-import { compilePackage, loadExecutionPackage } from "../../testing-contract-compiler/src/index.js";
+import { compilePackage, loadExecutionPackage, validatePackage } from "../../testing-contract-compiler/src/index.js";
+import { runApproveCommand } from "../src/commands/approve.js";
 import { runPlanCommand } from "../src/commands/plan.js";
+import { runRunCommand } from "../src/commands/run.js";
+import { EXIT_UNSAFE_OR_INVALID } from "../src/runtime/exit-codes.js";
 import { projectExecutionReport } from "../src/reporting/report-projector.js";
 import { runApprovedManifest } from "../src/runtime/run-orchestrator.js";
 import { validateDocument } from "../src/schema-registry.js";
@@ -68,6 +71,26 @@ test("READY package enters package-first path and skips semantic compilation", a
   assert.equal(metadata.semantic_compilation, "skipped");
   assert.equal(metadata.semantic_compiler, "test-case-execution-compiler");
   assert.equal(metadata.contract_version, "1.0.0");
+  assert.equal(metadata.review.package_sha256, result.manifest.package_sha256);
+  assert.equal(metadata.review.source_sha256, result.manifest.source.sha256);
+  assert.equal(metadata.review.final_manifest_sha256.length, 64);
+  assert.equal(metadata.review.case_count, 1);
+  assert.equal(metadata.review.action_count, 1);
+  assert.equal(metadata.review.assertion_count, 1);
+  assert.deepEqual(metadata.review.case_ids, ["LOGIN-001"]);
+  assert.deepEqual(metadata.review.cases[0], {
+    case_id: "LOGIN-001",
+    source_case_id: "LOGIN-001",
+    action_ids: ["LOGIN-001-A1"],
+    assertion_ids: ["LOGIN-001-E1"],
+    action_count: 1,
+    assertion_count: 1,
+    risk_levels: ["R0"],
+    highest_risk: "R0",
+    setup: [],
+    cleanup: { technical_cleanup: [{ type: "close_browser_context" }], business_cleanup: [] },
+    resource_locks: [],
+  });
   for (const field of ["package_validation_ms", "contract_loading_ms", "runtime_doctor_ms", "binding_ms", "transition_discovery_ms", "manifest_assembly_ms"]) assert.equal(typeof metadata.timings[field], "number", field);
   for (const field of ["web_discovery_ms", "approval_wait_ms", "execution_ms", "report_ms"]) assert.equal(metadata.timings[field], null, field);
 });
@@ -186,6 +209,44 @@ test("NOT_READY package is rejected before planning", async (t) => {
   await compilePackage({ input: f.input, output: f.package });
   await writeProfile(f.profile);
   await assert.rejects(() => runPlanCommand({ input: f.package, profile: f.profile, outputDir: f.output }), /package_not_ready/);
+});
+
+test("validated package is still untrusted and cannot run without a separate approval", async (t) => {
+  const f = await setup();
+  t.after(() => rm(f.root, { recursive: true, force: true }));
+  await compilePackage({ input: f.input, output: f.package });
+  await writeProfile(f.profile);
+  const validation = await validatePackage(f.package);
+  assert.equal(validation.valid, true);
+  assert.equal(validation.execution_authorized, false);
+  await runPlanCommand({ input: f.package, profile: f.profile, outputDir: f.output });
+  await assert.rejects(() => runRunCommand({
+    manifest: path.join(f.output, "run-manifest.json"),
+    approval: path.join(f.output, "missing-approval.json"),
+    outputDir: path.join(f.root, "run"),
+  }), /ENOENT/);
+});
+
+test("execution rejects package mutation after approval by recomputing package SHA", async (t) => {
+  const f = await setup();
+  t.after(() => rm(f.root, { recursive: true, force: true }));
+  await compilePackage({ input: f.input, output: f.package });
+  await writeProfile(f.profile);
+  await runPlanCommand({ input: f.package, profile: f.profile, outputDir: f.output });
+  const manifestPath = path.join(f.output, "run-manifest.json");
+  const approvalPath = path.join(f.output, "approval.json");
+  await runApproveCommand({
+    manifest: manifestPath,
+    out: approvalPath,
+    expiresAt: "2999-01-01T00:00:00.000Z",
+    confirmedBy: "reviewer",
+  });
+  await writeFile(f.package, Buffer.concat([await readFile(f.package), Buffer.from("post-approval mutation")]));
+
+  const exitCode = await runRunCommand({ manifest: manifestPath, approval: approvalPath, outputDir: path.join(f.root, "run") });
+  assert.equal(exitCode, EXIT_UNSAFE_OR_INVALID);
+  const result = JSON.parse(await readFile(path.join(f.root, "run", "run-result.json"), "utf8"));
+  assert.match(result.cases[0].assertions[0].actual, /package changed after approval/i);
 });
 
 test("raw Excel defaults to execution_contract_required", async (t) => {

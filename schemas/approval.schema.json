@@ -4,11 +4,13 @@
   "title": "Execution approval protocol 1.0.0",
   "type": "object",
   "additionalProperties": false,
-  "required": ["protocol_version", "approval_id", "manifest_hash", "source_hash", "runner", "rule_versions", "targets", "approved_risks", "approved_r3_action_ids", "issued_by", "issued_at", "expires_at"],
+  "required": ["protocol_version", "approval_id", "manifest_hash", "manifest_sha256", "source_hash", "runner", "rule_versions", "targets", "approved_risks", "approved_r3_action_ids", "issued_by", "issued_at", "expires_at"],
   "properties": {
     "protocol_version": { "const": "1.0.0" },
     "approval_id": { "type": "string", "minLength": 1 },
     "manifest_hash": { "$ref": "#/$defs/sha256" },
+    "manifest_sha256": { "$ref": "#/$defs/sha256" },
+    "package_sha256": { "$ref": "#/$defs/sha256" },
     "source_hash": { "$ref": "#/$defs/sha256" },
     "runner": {
       "type": "object",

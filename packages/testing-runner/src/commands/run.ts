@@ -322,6 +322,13 @@ export async function runRunCommand(options: RunCommandOptions): Promise<number>
   const manifest = validateDocument<RunManifest>("run-manifest", await readJson<unknown>(options.manifest));
   const approval = validateDocument<Approval>("approval", await readJson<unknown>(options.approval));
   const verification = verifyApproval(manifest, approval, mode);
+  if (verification.status === "approved" && manifest.package_sha256) {
+    const currentPackageSha256 = await sha256File(manifest.source.path).catch(() => null);
+    if (currentPackageSha256 !== manifest.package_sha256 || currentPackageSha256 !== approval.package_sha256) {
+      verification.status = "blocked";
+      verification.reasons.push("package changed after approval");
+    }
+  }
   if (verification.status !== "approved") {
     await persistBlockedResult(options.outputDir, manifest, "blocked", verification.reasons.join("; "));
     return EXIT_UNSAFE_OR_INVALID;

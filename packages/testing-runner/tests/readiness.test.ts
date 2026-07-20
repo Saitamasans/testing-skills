@@ -175,6 +175,7 @@ function approval(): Approval {
     protocol_version: "1.0.0",
     approval_id: "approval-001",
     manifest_hash: "b".repeat(64),
+    manifest_sha256: "b".repeat(64),
     source_hash: "a".repeat(64),
     targets: ["https://api.example.test"],
     approved_risks: ["R0", "R1"],

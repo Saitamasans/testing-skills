@@ -313,6 +313,7 @@ test("risk classification uses actual effects and cannot be lowered by test-like
 
 test("approval locks manifest, source, target, runner and rule versions", () => {
   const manifest = compileManifest(caseSet(), profile()) as CompiledManifest;
+  manifest.package_sha256 = "b".repeat(64);
   const approval = createApproval({
     manifest,
     issued_by: "qa-owner",
@@ -323,6 +324,8 @@ test("approval locks manifest, source, target, runner and rule versions", () => 
   });
 
   assert.equal(validateDocument("approval", approval), approval);
+  assert.equal(approval.manifest_sha256, sha256Canonical(manifest));
+  assert.equal(approval.package_sha256, manifest.package_sha256);
   assert.equal(verifyApproval(manifest, approval, "interactive").status, "approved");
 
   const changedAction = structuredClone(manifest);
@@ -340,6 +343,10 @@ test("approval locks manifest, source, target, runner and rule versions", () => 
   const changedRuleVersion = structuredClone(manifest) as CompiledManifest;
   changedRuleVersion.rule_versions[0] = "2.0.0";
   assert.match(verifyApproval(changedRuleVersion, approval, "interactive").reasons.join("\n"), /rule/i);
+
+  const stalePackage = structuredClone(manifest);
+  stalePackage.package_sha256 = "c".repeat(64);
+  assert.match(verifyApproval(stalePackage, approval, "interactive").reasons.join("\n"), /package SHA-256 mismatch/i);
 });
 
 test("CI approval accepts only locked R0/R1 and R3 requires explicit action approval", () => {
@@ -426,7 +433,7 @@ test("plan command writes inspection, readiness, normalized profile, manifest an
   const profileFile = await writeProfileFixture(directory);
   const outputDir = path.join(directory, "out");
 
-  const result = await runPlanCommand({ input, profile: profileFile, outputDir });
+  const result = await runPlanCommand({ input, profile: profileFile, outputDir, legacyInput: true });
 
   assert.equal(result.manifest.cases[0]?.case_id, "API-001");
   for (const fileName of [
@@ -449,7 +456,7 @@ test("plan command writes a mapping proposal before blocking nonstandard Excel w
   const outputDir = path.join(directory, "out");
 
   await assert.rejects(
-    () => runPlanCommand({ input, profile: profileFile, outputDir }),
+    () => runPlanCommand({ input, profile: profileFile, outputDir, legacyInput: true }),
     /mapping-approval/,
   );
 
@@ -468,7 +475,7 @@ test("approve command writes scoped approval and requires explicit R3 action ids
   const input = await writeNativeReportFixture(directory);
   const r3Profile = await writeProfileFixture(directory, "R3");
   const outputDir = path.join(directory, "out");
-  await runPlanCommand({ input, profile: r3Profile, outputDir });
+  await runPlanCommand({ input, profile: r3Profile, outputDir, legacyInput: true });
   const manifestFile = path.join(outputDir, "run-manifest.json");
   const approvalFile = path.join(directory, "approval.json");
 
