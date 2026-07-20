@@ -313,6 +313,8 @@ test("risk classification uses actual effects and cannot be lowered by test-like
 
 test("approval locks manifest, source, target, runner and rule versions", () => {
   const manifest = compileManifest(caseSet(), profile()) as CompiledManifest;
+  manifest.contract_version = "1.0.0";
+  manifest.package_id = "package-001";
   manifest.package_sha256 = "b".repeat(64);
   const approval = createApproval({
     manifest,
@@ -347,6 +349,23 @@ test("approval locks manifest, source, target, runner and rule versions", () => 
   const stalePackage = structuredClone(manifest);
   stalePackage.package_sha256 = "c".repeat(64);
   assert.match(verifyApproval(stalePackage, approval, "interactive").reasons.join("\n"), /package SHA-256 mismatch/i);
+
+  const downgradedManifest = structuredClone(manifest);
+  delete downgradedManifest.package_sha256;
+  const downgradedApproval = structuredClone(approval);
+  delete downgradedApproval.package_sha256;
+  downgradedApproval.manifest_hash = sha256Canonical(downgradedManifest);
+  downgradedApproval.manifest_sha256 = downgradedApproval.manifest_hash;
+  assert.throws(() => validateDocument("run-manifest", downgradedManifest), /package_sha256/);
+  assert.throws(() => createApproval({
+    manifest: downgradedManifest,
+    issued_by: "qa-owner",
+    issued_at: "2026-07-15T00:00:00.000Z",
+    expires_at: "2999-07-15T01:00:00.000Z",
+    approved_risks: ["R0", "R1", "R2"],
+    approved_r3_action_ids: [],
+  }), /package SHA-256 required/i);
+  assert.match(verifyApproval(downgradedManifest, downgradedApproval, "interactive").reasons.join("\n"), /package SHA-256 required/i);
 });
 
 test("CI approval accepts only locked R0/R1 and R3 requires explicit action approval", () => {

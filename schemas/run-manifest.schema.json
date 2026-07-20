@@ -5,6 +5,11 @@
   "type": "object",
   "additionalProperties": false,
   "required": ["protocol_version", "manifest_id", "runner", "source", "cases"],
+  "dependentRequired": {
+    "contract_version": ["package_id", "package_sha256"],
+    "package_id": ["contract_version", "package_sha256"],
+    "package_sha256": ["contract_version", "package_id"]
+  },
   "properties": {
     "protocol_version": { "const": "1.0.0" },
     "manifest_id": { "allOf": [{ "$ref": "https://saitamasans.dev/schemas/persisted-value.schema.json#/$defs/persistedString" }, { "type": "string", "minLength": 1 }] },

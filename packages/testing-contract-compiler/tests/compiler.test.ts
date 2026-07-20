@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { randomBytes } from "node:crypto";
 import { access, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -60,6 +61,22 @@ function patchCentralDeclaredSize(bytes: Buffer, entryName: string, size: number
     offset += 46 + nameLength + result.readUInt16LE(offset + 30) + result.readUInt16LE(offset + 32);
   }
   throw new Error(`central entry not found: ${entryName}`);
+}
+
+function patchDeclaredUncompressedSize(bytes: Buffer, entryName: string, size: number): Buffer {
+  const result = patchCentralDeclaredSize(bytes, entryName, size);
+  const signature = Buffer.from([0x50, 0x4b, 0x03, 0x04]);
+  let offset = 0;
+  while ((offset = result.indexOf(signature, offset)) >= 0) {
+    const nameLength = result.readUInt16LE(offset + 26);
+    const name = result.subarray(offset + 30, offset + 30 + nameLength).toString("utf8");
+    if (name === entryName) {
+      result.writeUInt32LE(size, offset + 22);
+      return result;
+    }
+    offset += 30 + nameLength + result.readUInt16LE(offset + 28);
+  }
+  throw new Error(`local entry not found: ${entryName}`);
 }
 
 function patchCentralExternalAttributes(bytes: Buffer, entryName: string, attributes: number): Buffer {
@@ -223,6 +240,41 @@ test("source and contract case IDs are compared against independently parsed sou
   assert.ok(result.errors.includes("source_contract_case_ids_mismatch"));
 });
 
+test("contract case_id cannot diverge from the independently parsed source or source mapping", async (t) => {
+  const f = await fixture();
+  t.after(() => rm(f.root, { recursive: true, force: true }));
+  await compilePackage({ input: f.input, output: f.output });
+  await replaceContractAndSelfHashes(f.output, (contract) => {
+    contract.cases[0].case_id = "ATTACKER-CASE-ID";
+  });
+
+  const result = await validatePackage(f.output);
+  assert.equal(result.valid, false);
+  assert.ok(result.errors.includes("source_contract_case_ids_mismatch"));
+});
+
+test("source mapping order and coordinates must match independently parsed source rows", async (t) => {
+  const f = await fixture(TEN_COLUMNS, [
+    ["CASE-001", "模块", "一", "功能", "前置", "动作", "预期", "P1", "", "未执行"],
+    ["CASE-002", "模块", "二", "功能", "前置", "动作", "预期", "P1", "", "未执行"],
+  ]);
+  t.after(() => rm(f.root, { recursive: true, force: true }));
+  await compilePackage({ input: f.input, output: f.output });
+  const zip = await JSZip.loadAsync(await readFile(f.output));
+  const mapping = JSON.parse(await zip.file("source-mapping.json")!.async("string"));
+  const manifest = JSON.parse(await zip.file("package-manifest.json")!.async("string"));
+  mapping.cases.reverse();
+  const mappingBytes = Buffer.from(stableJson(mapping));
+  zip.file("source-mapping.json", mappingBytes);
+  manifest.internal_file_sha256["source-mapping.json"] = sha256(mappingBytes);
+  zip.file("package-manifest.json", stableJson(manifest));
+  await writeFile(f.output, await zip.generateAsync({ type: "nodebuffer", platform: "UNIX" }));
+
+  const result = await validatePackage(f.output);
+  assert.equal(result.valid, false);
+  assert.ok(result.errors.includes("source_mapping_mismatch"));
+});
+
 test("source and contract counts are compared against independently parsed source content", async (t) => {
   const f = await fixture();
   t.after(() => rm(f.root, { recursive: true, force: true }));
@@ -276,6 +328,20 @@ test("ZIP metadata rejects links, reparse indicators, bombs, oversized declarati
   assert.ok((await validatePackage(f.output)).errors.includes("zip_critical_file_duplicate"));
 });
 
+test("bounded decompression rejects actual expansion when ZIP size declarations lie", async (t) => {
+  const f = await fixture();
+  t.after(() => rm(f.root, { recursive: true, force: true }));
+  await compilePackage({ input: f.input, output: f.output });
+  const zip = await JSZip.loadAsync(await readFile(f.output));
+  zip.file("actual-oversize.txt", randomBytes(33 * 1024 * 1024));
+  const bomb = await zip.generateAsync({ type: "nodebuffer", compression: "DEFLATE", compressionOptions: { level: 9 } });
+  await writeFile(f.output, patchDeclaredUncompressedSize(bomb, "actual-oversize.txt", 1024));
+
+  const result = await validatePackage(f.output);
+  assert.equal(result.valid, false);
+  assert.ok(result.errors.includes("zip_entry_too_large"));
+});
+
 test("package content scan rejects credentials and private material without logging values", async (t) => {
   const f = await fixture();
   t.after(() => rm(f.root, { recursive: true, force: true }));
@@ -288,6 +354,20 @@ test("package content scan rejects credentials and private material without logg
   assert.equal(result.valid, false);
   assert.ok(result.errors.includes("secret_value_forbidden"));
   assert.doesNotMatch(result.errors.join("\n"), /DO-NOT-LOG-THIS|PRIVATE KEY/);
+});
+
+test("package content scan rejects quoted JSON sensitive keys without echoing values", async (t) => {
+  const f = await fixture();
+  t.after(() => rm(f.root, { recursive: true, force: true }));
+  await compilePackage({ input: f.input, output: f.output });
+  const zip = await JSZip.loadAsync(await readFile(f.output));
+  zip.file("project-config.json", JSON.stringify({ nested: { password: "do not echo this value" } }));
+  await writeFile(f.output, await zip.generateAsync({ type: "nodebuffer" }));
+
+  const result = await validatePackage(f.output);
+  assert.equal(result.valid, false);
+  assert.ok(result.errors.includes("secret_value_forbidden"));
+  assert.doesNotMatch(result.errors.join("\n"), /do not echo this value/i);
 });
 
 test("script entries are inert and rejected without execution", async (t) => {

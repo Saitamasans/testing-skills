@@ -29,6 +29,10 @@ type VersionedApproval = Approval & {
 
 export function createApproval(input: ApprovalInput): Approval {
   const manifest = input.manifest as LockableManifest;
+  const packageDerived = input.manifest.contract_version !== undefined
+    || input.manifest.package_id !== undefined
+    || input.manifest.package_sha256 !== undefined;
+  if (packageDerived && !input.manifest.package_sha256) throw new Error("package SHA-256 required for package-derived manifest");
   const manifestSha256 = sha256Canonical(input.manifest);
   const approval: VersionedApproval = {
     protocol_version: "1.0.0",
@@ -66,8 +70,12 @@ export function verifyApproval(
   if (approval.manifest_hash !== currentManifestSha256 || approval.manifest_sha256 !== currentManifestSha256) {
     reasons.push("manifest changed after approval");
   }
-  if (manifest.package_sha256) {
-    if (!approval.package_sha256) reasons.push("package SHA-256 missing from approval");
+  const packageDerived = manifest.contract_version !== undefined
+    || manifest.package_id !== undefined
+    || manifest.package_sha256 !== undefined;
+  if (packageDerived) {
+    if (!manifest.package_sha256) reasons.push("package SHA-256 required for package-derived manifest");
+    else if (!approval.package_sha256) reasons.push("package SHA-256 missing from approval");
     else if (approval.package_sha256 !== manifest.package_sha256) reasons.push("package SHA-256 mismatch");
   } else if (approval.package_sha256) {
     reasons.push("unexpected package SHA-256 in approval");

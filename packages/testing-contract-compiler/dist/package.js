@@ -1,6 +1,7 @@
 import { copyFile, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { createInflateRaw } from "node:zlib";
 import ExcelJS from "exceljs";
 import JSZip from "jszip";
 import Ajv2020 from "ajv/dist/2020.js";
@@ -102,12 +103,20 @@ function validateZipStructure(bytes) {
         const localNameLength = bytes.readUInt16LE(localOffset + 26);
         const localExtraLength = bytes.readUInt16LE(localOffset + 28);
         const localNameEnd = localOffset + 30 + localNameLength;
-        if (localNameEnd + localExtraLength > bytes.length)
+        const dataStart = localNameEnd + localExtraLength;
+        const dataEnd = dataStart + compressedSize;
+        if (dataStart > bytes.length || dataEnd > centralOffset)
             throw new Error("zip_local_header_invalid");
         const localName = bytes.subarray(localOffset + 30, localNameEnd).toString("utf8");
         if (localName !== name)
             throw new Error("zip_local_name_mismatch");
-        entries.push({ name, compressedSize, uncompressedSize, directory });
+        const localFlags = bytes.readUInt16LE(localOffset + 6);
+        const localMethod = bytes.readUInt16LE(localOffset + 8);
+        if ((localFlags & 0x1) !== 0)
+            throw new Error("zip_encrypted_entry_forbidden");
+        if (localMethod !== method)
+            throw new Error("zip_local_header_invalid");
+        entries.push({ name, compressedSize, uncompressedSize, directory, method, dataStart, dataEnd });
         offset = entryEnd;
     }
     if (offset !== centralOffset + centralSize)
@@ -124,9 +133,74 @@ function validateZipStructure(bytes) {
     validateZipEntries(entries.map(({ name }) => name));
     return entries;
 }
+async function inflateEntryBounded(archive, entry, total) {
+    const compressed = archive.subarray(entry.dataStart, entry.dataEnd);
+    if (entry.method === 0) {
+        const actualSize = compressed.length;
+        if (actualSize > MAX_ENTRY_BYTES)
+            throw new Error("zip_entry_too_large");
+        if (total.value + actualSize > MAX_TOTAL_UNCOMPRESSED_BYTES)
+            throw new Error("zip_total_size_exceeded");
+        if (actualSize !== entry.uncompressedSize)
+            throw new Error("zip_declared_size_mismatch");
+        total.value += actualSize;
+        return Buffer.from(compressed);
+    }
+    return new Promise((resolve, reject) => {
+        const inflater = createInflateRaw();
+        const chunks = [];
+        let actualSize = 0;
+        let settled = false;
+        const fail = (code) => {
+            if (settled)
+                return;
+            settled = true;
+            inflater.destroy();
+            reject(new Error(code));
+        };
+        inflater.on("data", (chunk) => {
+            if (settled)
+                return;
+            actualSize += chunk.length;
+            if (actualSize > MAX_ENTRY_BYTES)
+                return fail("zip_entry_too_large");
+            if (total.value + actualSize > MAX_TOTAL_UNCOMPRESSED_BYTES)
+                return fail("zip_total_size_exceeded");
+            const actualCompressedSize = inflater.bytesWritten;
+            if (actualSize > 1024 * 1024 && (actualCompressedSize === 0 || actualSize / actualCompressedSize > MAX_COMPRESSION_RATIO)) {
+                return fail("zip_compression_ratio_exceeded");
+            }
+            chunks.push(Buffer.from(chunk));
+        });
+        inflater.on("error", () => fail("zip_decompression_failed"));
+        inflater.on("end", () => {
+            if (settled)
+                return;
+            if (inflater.bytesWritten !== entry.compressedSize)
+                return fail("zip_compressed_size_mismatch");
+            if (actualSize !== entry.uncompressedSize)
+                return fail("zip_declared_size_mismatch");
+            settled = true;
+            total.value += actualSize;
+            resolve(Buffer.concat(chunks, actualSize));
+        });
+        inflater.end(compressed);
+    });
+}
+async function extractZipEntriesBounded(bytes) {
+    const metadata = validateZipStructure(bytes);
+    const entries = new Map();
+    const total = { value: 0 };
+    for (const item of metadata) {
+        if (item.directory)
+            continue;
+        entries.set(item.name, await inflateEntryBounded(bytes, item, total));
+    }
+    return { metadata, entries };
+}
 async function assertEntryContainsNoSecrets(name, bytes) {
     if (path.posix.extname(name).toLowerCase() === ".xlsx") {
-        validateZipStructure(bytes);
+        await extractZipEntriesBounded(bytes);
         await inspectWorkbookBytes(bytes);
         return;
     }
@@ -218,24 +292,20 @@ export async function validatePackage(packagePath) {
     let manifest = null;
     try {
         const packageBytes = await readFile(packagePath);
-        const metadata = validateZipStructure(packageBytes);
-        const zip = await JSZip.loadAsync(packageBytes);
+        const { metadata, entries } = await extractZipEntriesBounded(packageBytes);
         const originalNames = metadata.filter(({ directory }) => !directory).map(({ name }) => name);
         for (const item of metadata) {
             if (item.directory)
                 continue;
-            const entry = zip.file(item.name);
-            if (!entry)
+            const entryBytes = entries.get(item.name);
+            if (!entryBytes)
                 throw new Error("zip_entry_missing_after_load");
-            const entryBytes = Buffer.from(await entry.async("uint8array"));
-            if (entryBytes.length !== item.uncompressedSize)
-                throw new Error("zip_declared_size_mismatch");
             await assertEntryContainsNoSecrets(item.name, entryBytes);
         }
-        const manifestEntry = zip.file("package-manifest.json");
+        const manifestEntry = entries.get("package-manifest.json");
         if (!manifestEntry)
             throw new Error("package_manifest_missing");
-        manifest = JSON.parse(await manifestEntry.async("string"));
+        manifest = JSON.parse(manifestEntry.toString("utf8"));
         const exactIdentity = manifest.schema_version === "1.0.0"
             && manifest.compiler_name === "@saitamasans/testing-contract-compiler"
             && manifest.compiler_version === "1.0.0"
@@ -263,29 +333,29 @@ export async function validatePackage(packagePath) {
         if (!exactInternal || !exactSources || !exactEntries)
             errors.push("package_inventory_mismatch");
         for (const sourcePath of manifest.source_files ?? []) {
-            const entry = zip.file(sourcePath);
+            const entry = entries.get(sourcePath);
             if (!entry) {
                 errors.push("source_file_missing");
                 continue;
             }
             const sourceName = path.posix.basename(sourcePath);
-            if (sha256(await entry.async("uint8array")) !== manifest.source_sha256[sourceName])
+            if (sha256(entry) !== manifest.source_sha256[sourceName])
                 errors.push("source_sha_mismatch");
         }
         for (const name of manifest.internal_files ?? []) {
-            const entry = zip.file(name);
+            const entry = entries.get(name);
             if (!entry) {
                 errors.push("internal_file_missing");
                 continue;
             }
-            if (sha256(await entry.async("uint8array")) !== manifest.internal_file_sha256[name])
+            if (sha256(entry) !== manifest.internal_file_sha256[name])
                 errors.push("internal_sha_mismatch");
         }
-        const contractEntry = zip.file("execution-contract.json");
+        const contractEntry = entries.get("execution-contract.json");
         if (!contractEntry)
             errors.push("contract_missing");
         else {
-            const contract = JSON.parse(await contractEntry.async("string"));
+            const contract = JSON.parse(contractEntry.toString("utf8"));
             const schema = JSON.parse(await readFile(new URL("../schemas/execution-contract.schema.json", import.meta.url), "utf8"));
             const Ajv2020Constructor = Ajv2020;
             const validate = new Ajv2020Constructor({ allErrors: true, strict: true }).compile(schema);
@@ -305,16 +375,40 @@ export async function validatePackage(packagePath) {
                 if (manifest.package_id !== expectedPackageId)
                     errors.push("package_id_mismatch");
                 const primarySourcePath = manifest.source_files[0];
-                const primarySource = primarySourcePath ? zip.file(primarySourcePath) : null;
+                const primarySource = primarySourcePath ? entries.get(primarySourcePath) : null;
                 if (!primarySource)
                     errors.push("source_file_missing");
                 else {
-                    const inspectedSource = await inspectWorkbookBytes(Buffer.from(await primarySource.async("uint8array")));
+                    const inspectedSource = await inspectWorkbookBytes(primarySource);
                     const sourceIds = inspectedSource.case_ids;
+                    const contractCaseIds = contract.cases.map((item) => item.case_id);
                     if (sourceIds.length !== contract.cases.length)
                         errors.push("source_contract_case_count_mismatch");
-                    if (JSON.stringify(sourceIds) !== JSON.stringify(ids))
+                    if (JSON.stringify(sourceIds) !== JSON.stringify(ids) || JSON.stringify(sourceIds) !== JSON.stringify(contractCaseIds)) {
                         errors.push("source_contract_case_ids_mismatch");
+                    }
+                    const mappingEntry = entries.get("source-mapping.json");
+                    if (!mappingEntry)
+                        errors.push("source_mapping_mismatch");
+                    else {
+                        const sourceMapping = JSON.parse(mappingEntry.toString("utf8"));
+                        const mappingMatches = Array.isArray(sourceMapping.cases)
+                            && sourceMapping.cases.length === inspectedSource.cases.length
+                            && sourceMapping.cases.every((mapping, index) => {
+                                const source = inspectedSource.cases[index];
+                                const contractCase = contract.cases[index];
+                                return source !== undefined && contractCase !== undefined
+                                    && mapping.source_case_id === source.case_id
+                                    && mapping.case_id === source.case_id
+                                    && mapping.source_sheet === source.source_sheet
+                                    && mapping.source_row === source.source_row
+                                    && contractCase.source_case_id === source.case_id
+                                    && contractCase.case_id === source.case_id
+                                    && contractCase.source_sheet === source.source_sheet;
+                            });
+                        if (!mappingMatches)
+                            errors.push("source_mapping_mismatch");
+                    }
                 }
             }
         }
@@ -344,12 +438,12 @@ export async function loadExecutionPackage(packagePath, options = {}) {
         throw new Error("package_not_ready");
     const loadingStarted = performance.now();
     const bytes = await readFile(packagePath);
-    const zip = await JSZip.loadAsync(bytes);
-    const contract = JSON.parse(await zip.file("execution-contract.json").async("string"));
-    const sourceMapping = JSON.parse(await zip.file("source-mapping.json").async("string"));
+    const { entries } = await extractZipEntriesBounded(bytes);
+    const contract = JSON.parse(entries.get("execution-contract.json").toString("utf8"));
+    const sourceMapping = JSON.parse(entries.get("source-mapping.json").toString("utf8"));
     const sourceFiles = new Map();
     for (const sourcePath of validation.manifest.source_files)
-        sourceFiles.set(sourcePath, Buffer.from(await zip.file(sourcePath).async("uint8array")));
+        sourceFiles.set(sourcePath, Buffer.from(entries.get(sourcePath)));
     return {
         manifest: validation.manifest,
         contract,
