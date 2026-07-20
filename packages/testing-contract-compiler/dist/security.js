@@ -21,7 +21,11 @@ function isStructuredReference(value) {
     if (!value || typeof value !== "object" || Array.isArray(value))
         return false;
     const record = value;
-    return typeof record.source === "string"
+    const keys = Object.keys(record).sort();
+    return keys.length === 2
+        && keys[0] === "name"
+        && keys[1] === "source"
+        && typeof record.source === "string"
         && ["env", "fixture", "output", "configured_env"].includes(record.source)
         && typeof record.name === "string"
         && /^[A-Za-z][A-Za-z0-9_.-]*$/.test(record.name);

@@ -408,6 +408,27 @@ test("explicit environment suffixes and structured references remain non-secret 
   assert.ok(!result.errors.includes("secret_value_forbidden"));
 });
 
+test("structured sensitive references reject value and extra-property plaintext smuggling", async (t) => {
+  const f = await fixture();
+  t.after(() => rm(f.root, { recursive: true, force: true }));
+  await compilePackage({ input: f.input, output: f.output });
+  const original = await readFile(f.output);
+
+  for (const [key, reference, secret] of [
+    ["password", { source: "env", name: "TEST_PASSWORD", value: "value payload must not be echoed" }, "value payload must not be echoed"],
+    ["apiToken", { source: "env", name: "TEST_API_TOKEN", plaintext: "extra payload must not be echoed" }, "extra payload must not be echoed"],
+  ] as const) {
+    const zip = await JSZip.loadAsync(original);
+    zip.file("project-config.json", JSON.stringify({ nested: { [key]: reference } }));
+    await writeFile(f.output, await zip.generateAsync({ type: "nodebuffer" }));
+
+    const result = await validatePackage(f.output);
+    assert.equal(result.valid, false);
+    assert.ok(result.errors.includes("secret_value_forbidden"));
+    assert.doesNotMatch(result.errors.join("\n"), new RegExp(secret, "i"));
+  }
+});
+
 test("script entries are inert and rejected without execution", async (t) => {
   const f = await fixture();
   t.after(() => rm(f.root, { recursive: true, force: true }));
