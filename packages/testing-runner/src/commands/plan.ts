@@ -20,6 +20,7 @@ import {
 import type { ExecutionProfile, NormalizedCaseSet, RunManifest, SourceSnapshot } from "../types.js";
 import { readExecutionPackage } from "../input/execution-package.js";
 import type { ContractCase } from "@saitamasans/testing-contract-compiler";
+import type { Page } from "playwright";
 import { verifyDiscoveryReceipts, type ActiveRuntimeSession } from "../security/discovery-receipt.js";
 
 export interface PlanCommandOptions {
@@ -31,7 +32,9 @@ export interface PlanCommandOptions {
   discoveryReceipts?: string[];
   discoveryApproval?: string;
   runtimeSession?: ActiveRuntimeSession;
+  livePage?: Page;
   now?: Date;
+  clock?: () => Date;
 }
 
 export interface PlanCommandResult {
@@ -107,7 +110,9 @@ async function runPackagePlan(options: PlanCommandOptions, profile: ExecutionPro
     contractCases: loaded.contract.cases,
     profile,
     ...(options.discoveryApproval ? { approvalPath: options.discoveryApproval } : {}),
+    ...(options.livePage ? { livePage: options.livePage } : {}),
     ...(options.now ? { now: options.now } : {}),
+    ...(options.clock ? { clock: options.clock } : {}),
   });
   const transition_discovery_ms = performance.now() - transitionStarted;
   const doctorStarted = performance.now();

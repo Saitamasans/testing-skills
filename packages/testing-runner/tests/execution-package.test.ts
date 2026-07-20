@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { createHash, randomBytes } from "node:crypto";
-import { copyFile, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -76,6 +76,8 @@ async function writeDiscoveryApproval(
     target_origin: "https://example.test",
     requested_url: "https://example.test/login",
     page_state_id: "workspace",
+    approved_risks: [...new Set(transitionActions.map((action: any) => action.risk))],
+    approved_r3_action_ids: transitionActions.filter((action: any) => action.risk === "R3").map((action: any) => action.action_id),
     issued_by: "reviewer",
     issued_at: now.toISOString(),
     expires_at: new Date(now.getTime() + 10 * 60_000).toISOString(),
@@ -531,6 +533,40 @@ test("old discovery artifact cannot be refreshed into a current-session receipt"
   await assert.rejects(() => readFile(path.join(discoveryDir, "discovery-receipt.json")), /ENOENT/);
 });
 
+test("transition case traversal is rejected before discovery writes", async (t) => {
+  const f = await setup();
+  t.after(() => rm(f.root, { recursive: true, force: true }));
+  await compilePackage({ input: f.input, output: f.package });
+  const loaded = await loadExecutionPackage(f.package);
+  const session = await (discoveryReceiptRuntime as any).createActiveRuntimeSession(f.output, RECEIPT_NOW);
+  const approvalPath = await writeDiscoveryApproval(f, loaded.package_sha256);
+  await assert.rejects(() => (discoveryReceiptRuntime as any).discoverAndIssueReceipt({
+    session, page: fakeDiscoveryPage(), packageSha256: loaded.package_sha256, sourceCaseIds: ["LOGIN-001"],
+    transitionCaseId: "../../escape", transitionActions: DEFAULT_TRANSITION_ACTIONS, targetOrigin: "https://example.test",
+    requestedUrl: "https://example.test/login", pageStateId: "workspace", approvalPath, now: RECEIPT_NOW,
+  }), /transition_case_id_path_invalid/);
+  await assert.rejects(() => readFile(path.join(f.root, "escape", "discovery-receipt.json")), /ENOENT/);
+});
+
+test("discovery writes reject a symlink or junction escape", async (t) => {
+  const f = await setup();
+  const outside = await mkdtemp(path.join(os.tmpdir(), "runner-discovery-escape-"));
+  t.after(() => rm(f.root, { recursive: true, force: true }));
+  t.after(() => rm(outside, { recursive: true, force: true }));
+  await compilePackage({ input: f.input, output: f.package });
+  const loaded = await loadExecutionPackage(f.package);
+  const session = await (discoveryReceiptRuntime as any).createActiveRuntimeSession(f.output, RECEIPT_NOW);
+  const approvalPath = await writeDiscoveryApproval(f, loaded.package_sha256);
+  await mkdir(path.join(f.output, "discovery"), { recursive: true });
+  await symlink(outside, path.join(f.output, "discovery", "LOGIN-001"), process.platform === "win32" ? "junction" : "dir");
+  await assert.rejects(() => (discoveryReceiptRuntime as any).discoverAndIssueReceipt({
+    session, page: fakeDiscoveryPage(), packageSha256: loaded.package_sha256, sourceCaseIds: ["LOGIN-001"],
+    transitionCaseId: "LOGIN-001", transitionActions: DEFAULT_TRANSITION_ACTIONS, targetOrigin: "https://example.test",
+    requestedUrl: "https://example.test/login", pageStateId: "workspace", approvalPath, now: RECEIPT_NOW,
+  }), /discovery_directory_outside_current_run/);
+  await assert.rejects(() => readFile(path.join(outside, "discovery-receipt.json")), /ENOENT/);
+});
+
 test("forged discovery receipt is rejected", async (t) => {
   const { f, receipt, plan } = await prepareReceiptPlan();
   t.after(() => rm(f.root, { recursive: true, force: true }));
@@ -618,6 +654,18 @@ test("expired discovery receipt and old runtime session are rejected", async (t)
     () => runPlanCommand({ input: f.package, profile: f.profile, outputDir: f.output, discoveryReceipts: [receipt], discoveryApproval: approval, runtimeSession: session, now: new Date(RECEIPT_NOW.getTime() + 20 * 60_000) }),
     /runtime_session_expired/,
   );
+});
+
+test("verification re-samples the clock and rejects expiry during work", async (t) => {
+  const { f, receipt, approval, session } = await prepareReceiptPlan();
+  t.after(() => rm(f.root, { recursive: true, force: true }));
+  let samples = 0;
+  const clock = () => ++samples < 3 ? RECEIPT_NOW : new Date(RECEIPT_NOW.getTime() + 20 * 60_000);
+  await assert.rejects(
+    () => runPlanCommand({ input: f.package, profile: f.profile, outputDir: f.output, discoveryReceipts: [receipt], discoveryApproval: approval, runtimeSession: session, clock }),
+    /runtime_session_expired/,
+  );
+  assert.ok(samples >= 3);
 });
 
 test("receipt outside the current run directory is rejected", async (t) => {

@@ -169,6 +169,8 @@ test("packed Runner loads its bundled schemas and rules outside the monorepo", a
       target_origin: `http://127.0.0.1:${port}`,
       requested_url: targetUrl,
       page_state_id: "workspace",
+      approved_risks: ["R0"],
+      approved_r3_action_ids: [],
       issued_by: "packed-smoke-reviewer",
       issued_at: now.toISOString(),
       expires_at: new Date(now.getTime() + 10 * 60_000).toISOString(),

@@ -49,6 +49,8 @@ export interface DiscoveryApproval {
   target_origin: string;
   requested_url: string;
   page_state_id: string;
+  approved_risks: Array<"R0" | "R1" | "R2" | "R3">;
+  approved_r3_action_ids: string[];
   issued_by: string;
   issued_at: string;
   expires_at: string;
@@ -101,6 +103,7 @@ export interface DiscoverAndIssueReceiptInput {
   pageStateId: string;
   approvalPath: string;
   now?: Date;
+  clock?: () => Date;
 }
 
 export interface VerifyDiscoveryReceiptsInput {
@@ -111,7 +114,9 @@ export interface VerifyDiscoveryReceiptsInput {
   contractCases: ContractCase[];
   profile: ExecutionProfile;
   approvalPath?: string;
+  livePage?: Page;
   now?: Date;
+  clock?: () => Date;
 }
 
 function invalid(reason: string): never {
@@ -160,6 +165,29 @@ async function canonicalRunRoot(runDir: string): Promise<string> {
   const root = await realpath(runDir);
   if (path.basename(root).toLowerCase() !== ".testing-run") throw new Error("runtime_session_run_root_invalid");
   return root;
+}
+
+function clockFor(input: { now?: Date; clock?: () => Date }): () => Date {
+  if (input.clock) return input.clock;
+  if (input.now) return () => input.now!;
+  return () => new Date();
+}
+
+function requirePathSafeCaseId(caseId: string): void {
+  if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(caseId) || caseId === "." || caseId === "..") {
+    invalid("transition_case_id_path_invalid");
+  }
+}
+
+function assertResolvedInside(root: string, resolved: string, label: string): void {
+  const relative = path.relative(root, resolved);
+  if (!relative || path.isAbsolute(relative) || relative === ".." || relative.startsWith(`..${path.sep}`)) invalid(`${label}_outside_current_run`);
+}
+
+async function requireWriteDirectoryInside(session: ActiveRuntimeSession, directory: string, now: Date): Promise<void> {
+  stateFor(session, now);
+  const resolved = await realpath(directory).catch(() => invalid("discovery_directory_missing"));
+  assertResolvedInside(session.runRoot, resolved, "discovery_directory");
 }
 
 export async function createActiveRuntimeSession(runDir: string, now = new Date()): Promise<ActiveRuntimeSession> {
@@ -233,7 +261,7 @@ function expectedWebBinding(profile: ExecutionProfile, actions: ManifestAction[]
 async function readApproval(
   session: ActiveRuntimeSession,
   approvalPath: string,
-  expected: Omit<DiscoveryApproval, "approval_schema_version" | "approval_id" | "issued_by" | "issued_at" | "expires_at">,
+  expected: Omit<DiscoveryApproval, "approval_schema_version" | "approval_id" | "approved_risks" | "approved_r3_action_ids" | "issued_by" | "issued_at" | "expires_at">,
   now: Date,
 ): Promise<{ approval: DiscoveryApproval; sha256: string }> {
   const located = await requirePathInside(session, approvalPath, "approval_path", now);
@@ -248,15 +276,55 @@ async function readApproval(
   return { approval, sha256: createHash("sha256").update(bytes).digest("hex") };
 }
 
+function requireApprovedTransitionRisks(approval: DiscoveryApproval, actions: ManifestAction[]): void {
+  const approvedRisks = new Set(approval.approved_risks);
+  const approvedR3 = new Set(approval.approved_r3_action_ids);
+  for (const action of actions) {
+    if (!approvedRisks.has(action.risk)) invalid(`approval_risk_missing_${action.risk}`);
+    if (action.risk === "R3" && !approvedR3.has(action.action_id)) invalid(`approval_r3_action_missing_${action.action_id}`);
+  }
+}
+
+export interface ValidateDiscoveryApprovalInput {
+  session: ActiveRuntimeSession;
+  approvalPath: string;
+  packageSha256: string;
+  sourceCaseIds: string[];
+  transitionCaseId: string;
+  transitionActions: ManifestAction[];
+  targetOrigin: string;
+  requestedUrl: string;
+  pageStateId: string;
+  now?: Date;
+}
+
+export async function validateDiscoveryApprovalForTransition(input: ValidateDiscoveryApprovalInput): Promise<DiscoveryApproval> {
+  requirePathSafeCaseId(input.transitionCaseId);
+  const now = input.now ?? new Date();
+  const approval = await readApproval(input.session, input.approvalPath, {
+    source_package_sha256: input.packageSha256,
+    source_case_ids: input.sourceCaseIds,
+    transition_case_id: input.transitionCaseId,
+    transition_actions_sha256: sha256Canonical(input.transitionActions),
+    target_origin: input.targetOrigin,
+    requested_url: input.requestedUrl,
+    page_state_id: input.pageStateId,
+  }, now);
+  requireApprovedTransitionRisks(approval.approval, input.transitionActions);
+  return approval.approval;
+}
+
 function macFor(secret: Buffer, receipt: Omit<DiscoveryReceipt, "session_mac">): string {
   return createHmac("sha256", secret).update(canonicalize(receipt), "utf8").digest("hex");
 }
 
 export async function discoverAndIssueReceipt(input: DiscoverAndIssueReceiptInput): Promise<{ receiptPath: string; artifactPath: string; receipt: DiscoveryReceipt }> {
-  const now = input.now ?? new Date();
+  const clock = clockFor(input);
+  const now = clock();
   const sessionState = stateFor(input.session, now);
   requireSha(input.packageSha256, "package_sha256");
   if (input.sourceCaseIds.length === 0 || input.transitionActions.length === 0) invalid("discovery_binding_missing");
+  requirePathSafeCaseId(input.transitionCaseId);
   const origin = normalizeOrigin(input.targetOrigin, "target_origin");
   if (input.targetOrigin !== origin || normalizeOrigin(input.requestedUrl, "requested_url") !== origin) invalid("requested_url_origin_mismatch");
 
@@ -269,6 +337,7 @@ export async function discoverAndIssueReceipt(input: DiscoverAndIssueReceiptInpu
     requested_url: input.requestedUrl,
     page_state_id: input.pageStateId,
   }, now);
+  requireApprovedTransitionRisks(approval.approval, input.transitionActions);
 
   const discovery = await discoverCurrentPage(input.page, { now });
   if (discovery.discovered_at !== now.toISOString()) invalid("discovery_not_current");
@@ -309,8 +378,10 @@ export async function discoverAndIssueReceipt(input: DiscoverAndIssueReceiptInpu
   const receiptBytes = Buffer.from(`${JSON.stringify(receipt, null, 2)}\n`, "utf8");
   let artifactCreated = false;
   try {
+    await requireWriteDirectoryInside(input.session, directory, clock());
     await writeFile(artifactPath, artifactBytes, { flag: "wx", mode: 0o600 });
     artifactCreated = true;
+    await requireWriteDirectoryInside(input.session, directory, clock());
     await writeFile(receiptPath, receiptBytes, { flag: "wx", mode: 0o600 });
   } catch (error) {
     if (artifactCreated) await rm(artifactPath, { force: true });
@@ -324,7 +395,8 @@ export async function discoverAndIssueReceipt(input: DiscoverAndIssueReceiptInpu
   return { receiptPath, artifactPath, receipt };
 }
 
-async function verifyOneReceipt(input: VerifyDiscoveryReceiptsInput, receiptPath: string, contractCase: ContractCase, now: Date): Promise<DiscoveryReceiptReference> {
+async function verifyOneReceipt(input: VerifyDiscoveryReceiptsInput, receiptPath: string, contractCase: ContractCase, clock: () => Date): Promise<DiscoveryReceiptReference> {
+  const now = clock();
   const session = input.session!;
   const sessionState = stateFor(session, now);
   const located = await requirePathInside(session, receiptPath, "receipt_path", now);
@@ -359,6 +431,7 @@ async function verifyOneReceipt(input: VerifyDiscoveryReceiptsInput, receiptPath
     requested_url: binding.requestedUrl,
     page_state_id: pageStateId,
   }, now);
+  requireApprovedTransitionRisks(approval.approval, actions);
   if (receipt.approval_reference !== approval.approval.approval_id || receipt.approval_sha256 !== approval.sha256) invalid("approval_binding_mismatch");
 
   const artifact = await requirePathInside(session, path.join(session.runRoot, ...receipt.discovery_artifact_path.split("/")), "artifact_path", now);
@@ -368,6 +441,13 @@ async function verifyOneReceipt(input: VerifyDiscoveryReceiptsInput, receiptPath
   if (discovery.url !== receipt.final_url || discovery.dom_sha256 !== receipt.dom_sha256 || discovery.accessibility_sha256 !== receipt.accessibility_sha256) invalid("page_fingerprint_mismatch");
   if (sha256Canonical({ dom_sha256: discovery.dom_sha256, accessibility_sha256: discovery.accessibility_sha256 }) !== receipt.page_fingerprint_sha256) invalid("page_fingerprint_mismatch");
   if (createHash("sha256").update(artifactBytes).digest("hex") !== receipt.discovery_artifact_sha256) invalid("artifact_sha_mismatch");
+  if (input.livePage) {
+    const live = await discoverCurrentPage(input.livePage, { now: clock() });
+    if (live.url !== receipt.final_url || live.dom_sha256 !== receipt.dom_sha256 || live.accessibility_sha256 !== receipt.accessibility_sha256) {
+      invalid("live_page_fingerprint_mismatch");
+    }
+  }
+  stateFor(session, clock());
   return { case_id: contractCase.case_id, page_state_id: pageStateId, discovery_id: receipt.discovery_id, receipt_path: located.relative, receipt_sha256: receiptSha };
 }
 
@@ -376,8 +456,8 @@ export async function verifyDiscoveryReceipts(input: VerifyDiscoveryReceiptsInpu
   if (required.length === 0) return [];
   if (input.receiptPaths.length === 0) throw new Error(`target_state_not_discovered: ${required[0]!.case_id}:${targetState(required[0]!)}`);
   if (!input.session) throw new Error("runtime_session_required");
-  const now = input.now ?? new Date();
-  stateFor(input.session, now);
+  const clock = clockFor(input);
+  stateFor(input.session, clock());
   if (input.receiptPaths.length !== required.length) invalid("receipt_count_mismatch");
-  return Promise.all(required.map((item, index) => verifyOneReceipt(input, input.receiptPaths[index]!, item, now)));
+  return Promise.all(required.map((item, index) => verifyOneReceipt(input, input.receiptPaths[index]!, item, clock)));
 }
