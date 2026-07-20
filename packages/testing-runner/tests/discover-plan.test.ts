@@ -12,7 +12,7 @@ import { runDiscoverPlanCommand } from "../src/commands/discover-plan.js";
 import type { ManifestAction } from "../src/types.js";
 import { startDemoApp } from "./fixtures/demo-app.js";
 
-async function fixture(targetState: string, baseUrl: string, actions: ManifestAction[]) {
+async function fixture(targetState: string, baseUrl: string, actions: ManifestAction[], approvalOptions: { approvedRisks?: string[]; approvedR3ActionIds?: string[] } = {}) {
   const root = await mkdtemp(path.join(os.tmpdir(), "discover-plan-test-"));
   const input = path.join(root, "cases.xlsx");
   const packagePath = path.join(root, "cases.execution-package.zip");
@@ -36,7 +36,7 @@ async function fixture(targetState: string, baseUrl: string, actions: ManifestAc
     approval_schema_version: "1.0.0", approval_id: "discovery-approval", source_package_sha256: loaded.package_sha256,
     source_case_ids: ["LOGIN-001"], transition_case_id: "LOGIN-001", transition_actions_sha256: sha256Canonical(actions),
     target_origin: baseUrl, requested_url: `${baseUrl}/login`, page_state_id: targetState,
-    approved_risks: ["R0"], approved_r3_action_ids: [], issued_by: "reviewer", issued_at: now.toISOString(), expires_at: new Date(now.getTime() + 10 * 60_000).toISOString(),
+    approved_risks: approvalOptions.approvedRisks ?? ["R0"], approved_r3_action_ids: approvalOptions.approvedR3ActionIds ?? [], issued_by: "reviewer", issued_at: now.toISOString(), expires_at: new Date(now.getTime() + 10 * 60_000).toISOString(),
   }, null, 2)}\n`);
   return { root, packagePath, profile, output, approval };
 }
@@ -80,3 +80,14 @@ test("transition actions cannot run without approval for their declared risk", a
   t.after(() => rm(f.root, { recursive: true, force: true }));
   await assert.rejects(() => runDiscoverPlanCommand({ input: f.packagePath, profile: f.profile, outputDir: f.output, discoveryApproval: f.approval, transitionCaseId: "LOGIN-001", browser: "headless" }), /approval_risk_missing_R1/);
 });
+
+for (const risk of ["R2", "R3"] as const) {
+  test(`automatic discovery rejects ${risk} even when the transition is explicitly approved`, async (t) => {
+    const app = await startDemoApp();
+    const action: ManifestAction = { type: "web.goto", action_id: `goto-${risk.toLowerCase()}`, target_alias: "web", url: `${app.baseUrl}/login`, risk, source_step: "LOGIN-001-A1" };
+    const f = await fixture("login", app.baseUrl, [action], { approvedRisks: [risk], approvedR3ActionIds: risk === "R3" ? [action.action_id] : [] });
+    t.after(() => app.close());
+    t.after(() => rm(f.root, { recursive: true, force: true }));
+    await assert.rejects(() => runDiscoverPlanCommand({ input: f.packagePath, profile: f.profile, outputDir: f.output, discoveryApproval: f.approval, transitionCaseId: "LOGIN-001", browser: "headless" }), new RegExp(`automatic_discovery_risk_not_allowed_${risk}`));
+  });
+}

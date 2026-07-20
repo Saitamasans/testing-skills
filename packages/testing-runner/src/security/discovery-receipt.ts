@@ -1,5 +1,5 @@
 import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
-import { mkdir, readFile, realpath, rm, writeFile } from "node:fs/promises";
+import { lstat, mkdir, open, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import type { ContractCase } from "@saitamasans/testing-contract-compiler";
@@ -104,6 +104,7 @@ export interface DiscoverAndIssueReceiptInput {
   approvalPath: string;
   now?: Date;
   clock?: () => Date;
+  afterExclusiveCreate?: (kind: "artifact" | "receipt", file: string) => Promise<void>;
 }
 
 export interface VerifyDiscoveryReceiptsInput {
@@ -173,10 +174,9 @@ function clockFor(input: { now?: Date; clock?: () => Date }): () => Date {
   return () => new Date();
 }
 
-function requirePathSafeCaseId(caseId: string): void {
-  if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(caseId) || caseId === "." || caseId === "..") {
-    invalid("transition_case_id_path_invalid");
-  }
+export function discoveryCaseDirectoryName(caseId: string): string {
+  if (typeof caseId !== "string" || caseId.length === 0) invalid("transition_case_id_invalid");
+  return `case-${createHash("sha256").update(caseId, "utf8").digest("hex")}`;
 }
 
 function assertResolvedInside(root: string, resolved: string, label: string): void {
@@ -188,6 +188,59 @@ async function requireWriteDirectoryInside(session: ActiveRuntimeSession, direct
   stateFor(session, now);
   const resolved = await realpath(directory).catch(() => invalid("discovery_directory_missing"));
   assertResolvedInside(session.runRoot, resolved, "discovery_directory");
+}
+
+function sameFileIdentity(left: Awaited<ReturnType<typeof lstat>>, right: Awaited<ReturnType<typeof lstat>>): boolean {
+  return left.dev === right.dev && left.ino === right.ino;
+}
+
+async function removeCreatedPathBestEffort(session: ActiveRuntimeSession, file: string, createdIdentity?: Awaited<ReturnType<typeof lstat>>): Promise<void> {
+  const current = await lstat(file).catch(() => undefined);
+  if (!current) return;
+  if (current.isSymbolicLink() || (createdIdentity && sameFileIdentity(current, createdIdentity))) {
+    await rm(file, { force: true }).catch(() => undefined);
+    return;
+  }
+  const resolved = await realpath(file).catch(() => undefined);
+  if (!resolved) return;
+  const relative = path.relative(session.runRoot, resolved);
+  if (!path.isAbsolute(relative) && relative !== ".." && !relative.startsWith(`..${path.sep}`)) await rm(file, { force: true }).catch(() => undefined);
+}
+
+async function createExclusiveContainedFile(input: {
+  session: ActiveRuntimeSession;
+  directory: string;
+  file: string;
+  bytes: Buffer;
+  kind: "artifact" | "receipt";
+  clock: () => Date;
+  afterCreate?: (kind: "artifact" | "receipt", file: string) => Promise<void>;
+}): Promise<Awaited<ReturnType<typeof lstat>>> {
+  await requireWriteDirectoryInside(input.session, input.directory, input.clock());
+  let handle: Awaited<ReturnType<typeof open>> | undefined;
+  let createdIdentity: Awaited<ReturnType<typeof lstat>> | undefined;
+  try {
+    handle = await open(input.file, "wx", 0o600);
+    await handle.writeFile(input.bytes);
+    const handleStat = await handle.stat();
+    await handle.close();
+    handle = undefined;
+    createdIdentity = await lstat(input.file);
+    if (!createdIdentity.isFile() || createdIdentity.isSymbolicLink() || createdIdentity.dev !== handleStat.dev || createdIdentity.ino !== handleStat.ino) {
+      invalid(`${input.kind}_identity_changed`);
+    }
+    await input.afterCreate?.(input.kind, input.file);
+    const current = await lstat(input.file).catch(() => invalid(`${input.kind}_missing_after_create`));
+    if (!current.isFile() || current.isSymbolicLink() || !sameFileIdentity(current, createdIdentity)) invalid(`${input.kind}_identity_changed`);
+    const resolved = await realpath(input.file).catch(() => invalid(`${input.kind}_missing_after_create`));
+    assertResolvedInside(input.session.runRoot, resolved, input.kind);
+    await requireWriteDirectoryInside(input.session, input.directory, input.clock());
+    return current;
+  } catch (error) {
+    await handle?.close().catch(() => undefined);
+    await removeCreatedPathBestEffort(input.session, input.file, createdIdentity);
+    throw error;
+  }
 }
 
 export async function createActiveRuntimeSession(runDir: string, now = new Date()): Promise<ActiveRuntimeSession> {
@@ -278,10 +331,9 @@ async function readApproval(
 
 function requireApprovedTransitionRisks(approval: DiscoveryApproval, actions: ManifestAction[]): void {
   const approvedRisks = new Set(approval.approved_risks);
-  const approvedR3 = new Set(approval.approved_r3_action_ids);
   for (const action of actions) {
+    if (action.risk === "R2" || action.risk === "R3") invalid(`automatic_discovery_risk_not_allowed_${action.risk}`);
     if (!approvedRisks.has(action.risk)) invalid(`approval_risk_missing_${action.risk}`);
-    if (action.risk === "R3" && !approvedR3.has(action.action_id)) invalid(`approval_r3_action_missing_${action.action_id}`);
   }
 }
 
@@ -299,7 +351,7 @@ export interface ValidateDiscoveryApprovalInput {
 }
 
 export async function validateDiscoveryApprovalForTransition(input: ValidateDiscoveryApprovalInput): Promise<DiscoveryApproval> {
-  requirePathSafeCaseId(input.transitionCaseId);
+  discoveryCaseDirectoryName(input.transitionCaseId);
   const now = input.now ?? new Date();
   const approval = await readApproval(input.session, input.approvalPath, {
     source_package_sha256: input.packageSha256,
@@ -324,7 +376,7 @@ export async function discoverAndIssueReceipt(input: DiscoverAndIssueReceiptInpu
   const sessionState = stateFor(input.session, now);
   requireSha(input.packageSha256, "package_sha256");
   if (input.sourceCaseIds.length === 0 || input.transitionActions.length === 0) invalid("discovery_binding_missing");
-  requirePathSafeCaseId(input.transitionCaseId);
+  const caseDirectoryName = discoveryCaseDirectoryName(input.transitionCaseId);
   const origin = normalizeOrigin(input.targetOrigin, "target_origin");
   if (input.targetOrigin !== origin || normalizeOrigin(input.requestedUrl, "requested_url") !== origin) invalid("requested_url_origin_mismatch");
 
@@ -342,7 +394,7 @@ export async function discoverAndIssueReceipt(input: DiscoverAndIssueReceiptInpu
   const discovery = await discoverCurrentPage(input.page, { now });
   if (discovery.discovered_at !== now.toISOString()) invalid("discovery_not_current");
   if (normalizeOrigin(discovery.url, "final_url") !== origin) invalid("final_url_origin_mismatch");
-  const directory = path.join(input.session.runRoot, "discovery", input.transitionCaseId);
+  const directory = path.join(input.session.runRoot, "discovery", caseDirectoryName);
   await mkdir(directory, { recursive: true });
   const artifactPath = path.join(directory, "web-discovery.json");
   const receiptPath = path.join(directory, "discovery-receipt.json");
@@ -376,15 +428,12 @@ export async function discoverAndIssueReceipt(input: DiscoverAndIssueReceiptInpu
   };
   const receipt: DiscoveryReceipt = { ...unsigned, session_mac: macFor(sessionState.secret, unsigned) };
   const receiptBytes = Buffer.from(`${JSON.stringify(receipt, null, 2)}\n`, "utf8");
-  let artifactCreated = false;
+  let artifactIdentity: Awaited<ReturnType<typeof lstat>> | undefined;
   try {
-    await requireWriteDirectoryInside(input.session, directory, clock());
-    await writeFile(artifactPath, artifactBytes, { flag: "wx", mode: 0o600 });
-    artifactCreated = true;
-    await requireWriteDirectoryInside(input.session, directory, clock());
-    await writeFile(receiptPath, receiptBytes, { flag: "wx", mode: 0o600 });
+    artifactIdentity = await createExclusiveContainedFile({ session: input.session, directory, file: artifactPath, bytes: artifactBytes, kind: "artifact", clock, ...(input.afterExclusiveCreate ? { afterCreate: input.afterExclusiveCreate } : {}) });
+    await createExclusiveContainedFile({ session: input.session, directory, file: receiptPath, bytes: receiptBytes, kind: "receipt", clock, ...(input.afterExclusiveCreate ? { afterCreate: input.afterExclusiveCreate } : {}) });
   } catch (error) {
-    if (artifactCreated) await rm(artifactPath, { force: true });
+    if (artifactIdentity) await removeCreatedPathBestEffort(input.session, artifactPath, artifactIdentity);
     throw error;
   }
   const relativeReceipt = path.relative(input.session.runRoot, receiptPath).split(path.sep).join("/");

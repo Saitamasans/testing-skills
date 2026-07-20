@@ -46,6 +46,10 @@ const DEFAULT_TRANSITION_ACTIONS = [{
   type: "web.goto" as const, action_id: "goto-login", target_alias: "web", url: "https://example.test/login" as const, risk: "R0" as const, source_step: "LOGIN-001-A1",
 }];
 
+function discoveryCaseDirectory(caseId: string): string {
+  return `case-${createHash("sha256").update(caseId, "utf8").digest("hex")}`;
+}
+
 function fakeDiscoveryPage(url = "https://example.test/workspace", dom = "<html><body>workspace</body></html>") {
   return {
     url: () => url,
@@ -243,7 +247,7 @@ test("READY package enters package-first path and skips semantic compilation", a
     case_id: "LOGIN-001",
     page_state_id: "workspace",
     discovery_id: issued.receipt.discovery_id,
-    receipt_path: "discovery/LOGIN-001/discovery-receipt.json",
+    receipt_path: `discovery/${discoveryCaseDirectory("LOGIN-001")}/discovery-receipt.json`,
     receipt_sha256: createHash("sha256").update(await readFile(issued.receiptPath)).digest("hex"),
   }]);
 });
@@ -514,7 +518,7 @@ test("old discovery artifact cannot be refreshed into a current-session receipt"
   const loaded = await loadExecutionPackage(f.package);
   const session = await (discoveryReceiptRuntime as any).createActiveRuntimeSession(f.output, RECEIPT_NOW);
   const approvalPath = await writeDiscoveryApproval(f, loaded.package_sha256);
-  const discoveryDir = path.join(f.output, "discovery", "LOGIN-001");
+  const discoveryDir = path.join(f.output, "discovery", discoveryCaseDirectory("LOGIN-001"));
   await mkdir(discoveryDir, { recursive: true });
   await writeFile(path.join(discoveryDir, "web-discovery.json"), `${JSON.stringify({
     url: "https://example.test/workspace",
@@ -533,18 +537,18 @@ test("old discovery artifact cannot be refreshed into a current-session receipt"
   await assert.rejects(() => readFile(path.join(discoveryDir, "discovery-receipt.json")), /ENOENT/);
 });
 
-test("transition case traversal is rejected before discovery writes", async (t) => {
+test("path-like transition case IDs are encoded beneath the discovery root", async (t) => {
   const f = await setup();
   t.after(() => rm(f.root, { recursive: true, force: true }));
   await compilePackage({ input: f.input, output: f.package });
   const loaded = await loadExecutionPackage(f.package);
   const session = await (discoveryReceiptRuntime as any).createActiveRuntimeSession(f.output, RECEIPT_NOW);
-  const approvalPath = await writeDiscoveryApproval(f, loaded.package_sha256);
-  await assert.rejects(() => (discoveryReceiptRuntime as any).discoverAndIssueReceipt({
+  const issued = await (discoveryReceiptRuntime as any).discoverAndIssueReceipt({
     session, page: fakeDiscoveryPage(), packageSha256: loaded.package_sha256, sourceCaseIds: ["LOGIN-001"],
     transitionCaseId: "../../escape", transitionActions: DEFAULT_TRANSITION_ACTIONS, targetOrigin: "https://example.test",
-    requestedUrl: "https://example.test/login", pageStateId: "workspace", approvalPath, now: RECEIPT_NOW,
-  }), /transition_case_id_path_invalid/);
+    requestedUrl: "https://example.test/login", pageStateId: "workspace", approvalPath: await writeDiscoveryApproval(f, loaded.package_sha256, DEFAULT_TRANSITION_ACTIONS as never[], { transition_case_id: "../../escape" }), now: RECEIPT_NOW,
+  });
+  assert.equal(path.relative(f.output, path.dirname(issued.receiptPath)), path.join("discovery", discoveryCaseDirectory("../../escape")));
   await assert.rejects(() => readFile(path.join(f.root, "escape", "discovery-receipt.json")), /ENOENT/);
 });
 
@@ -558,13 +562,53 @@ test("discovery writes reject a symlink or junction escape", async (t) => {
   const session = await (discoveryReceiptRuntime as any).createActiveRuntimeSession(f.output, RECEIPT_NOW);
   const approvalPath = await writeDiscoveryApproval(f, loaded.package_sha256);
   await mkdir(path.join(f.output, "discovery"), { recursive: true });
-  await symlink(outside, path.join(f.output, "discovery", "LOGIN-001"), process.platform === "win32" ? "junction" : "dir");
+  await symlink(outside, path.join(f.output, "discovery", discoveryCaseDirectory("LOGIN-001")), process.platform === "win32" ? "junction" : "dir");
   await assert.rejects(() => (discoveryReceiptRuntime as any).discoverAndIssueReceipt({
     session, page: fakeDiscoveryPage(), packageSha256: loaded.package_sha256, sourceCaseIds: ["LOGIN-001"],
     transitionCaseId: "LOGIN-001", transitionActions: DEFAULT_TRANSITION_ACTIONS, targetOrigin: "https://example.test",
     requestedUrl: "https://example.test/login", pageStateId: "workspace", approvalPath, now: RECEIPT_NOW,
   }), /discovery_directory_outside_current_run/);
   await assert.rejects(() => readFile(path.join(outside, "discovery-receipt.json")), /ENOENT/);
+});
+
+test("post-create identity verification rejects a swapped discovery file", async (t) => {
+  const f = await setup();
+  t.after(() => rm(f.root, { recursive: true, force: true }));
+  await compilePackage({ input: f.input, output: f.package });
+  const loaded = await loadExecutionPackage(f.package);
+  const session = await (discoveryReceiptRuntime as any).createActiveRuntimeSession(f.output, RECEIPT_NOW);
+  const approvalPath = await writeDiscoveryApproval(f, loaded.package_sha256);
+  await assert.rejects(() => (discoveryReceiptRuntime as any).discoverAndIssueReceipt({
+    session, page: fakeDiscoveryPage(), packageSha256: loaded.package_sha256, sourceCaseIds: ["LOGIN-001"],
+    transitionCaseId: "LOGIN-001", transitionActions: DEFAULT_TRANSITION_ACTIONS, targetOrigin: "https://example.test",
+    requestedUrl: "https://example.test/login", pageStateId: "workspace", approvalPath, now: RECEIPT_NOW,
+    afterExclusiveCreate: async (kind: string, file: string) => {
+      if (kind !== "artifact") return;
+      await rm(file, { force: true });
+      await writeFile(file, "attacker replacement", "utf8");
+    },
+  }), /artifact_identity_changed/);
+  const directory = path.join(f.output, "discovery", discoveryCaseDirectory("LOGIN-001"));
+  await assert.rejects(() => readFile(path.join(directory, "web-discovery.json")), /ENOENT/);
+  await assert.rejects(() => readFile(path.join(directory, "discovery-receipt.json")), /ENOENT/);
+});
+
+test("non-ASCII case IDs retain their exact value while using a safe hashed directory", async (t) => {
+  const f = await setup();
+  t.after(() => rm(f.root, { recursive: true, force: true }));
+  await compilePackage({ input: f.input, output: f.package });
+  const loaded = await loadExecutionPackage(f.package);
+  const session = await (discoveryReceiptRuntime as any).createActiveRuntimeSession(f.output, RECEIPT_NOW);
+  const caseId = "登录用例-甲";
+  const approvalPath = await writeDiscoveryApproval(f, loaded.package_sha256, DEFAULT_TRANSITION_ACTIONS as never[], { transition_case_id: caseId });
+  const issued = await (discoveryReceiptRuntime as any).discoverAndIssueReceipt({
+    session, page: fakeDiscoveryPage(), packageSha256: loaded.package_sha256, sourceCaseIds: ["LOGIN-001"],
+    transitionCaseId: caseId, transitionActions: DEFAULT_TRANSITION_ACTIONS, targetOrigin: "https://example.test",
+    requestedUrl: "https://example.test/login", pageStateId: "workspace", approvalPath, now: RECEIPT_NOW,
+  });
+  assert.equal(issued.receipt.transition_case_id, caseId);
+  assert.equal(path.relative(f.output, path.dirname(issued.receiptPath)), path.join("discovery", discoveryCaseDirectory(caseId)));
+  assert.doesNotMatch(path.relative(f.output, issued.receiptPath), /登录|用例|甲/);
 });
 
 test("forged discovery receipt is rejected", async (t) => {
@@ -613,7 +657,7 @@ test("cross-run-nonce discovery receipt is rejected", async (t) => {
   t.after(() => rm(f.root, { recursive: true, force: true }));
   t.after(() => rm(otherRoot, { recursive: true, force: true }));
   const otherSession = await (discoveryReceiptRuntime as any).createActiveRuntimeSession(otherRun, RECEIPT_NOW);
-  const otherDiscovery = path.join(otherRun, "discovery", "LOGIN-001");
+  const otherDiscovery = path.dirname(path.join(otherRun, path.relative(f.output, receipt)));
   await mkdir(otherDiscovery, { recursive: true });
   const copiedReceipt = path.join(otherDiscovery, "discovery-receipt.json");
   const copiedArtifact = path.join(otherDiscovery, "web-discovery.json");
