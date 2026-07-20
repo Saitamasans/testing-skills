@@ -4,6 +4,7 @@ import { pathToFileURL } from "node:url";
 import { Command } from "commander";
 
 import { runApproveCommand } from "./commands/approve.js";
+import { runDiscoverPlanCommand } from "./commands/discover-plan.js";
 import { runDiscoverWebCommand } from "./commands/discover-web.js";
 import { runPlanCommand } from "./commands/plan.js";
 import {
@@ -76,16 +77,38 @@ export async function runCli(argv = process.argv): Promise<void> {
     .requiredOption("--output-dir <dir>")
     .option("--mapping-approval <file>")
     .option("--discovery-receipt <file>", "current-session target-state discovery receipt", collect, [] as string[])
-    .option("--discovery-approval-reference <reference>")
+    .option("--discovery-approval <file>", "validated target-state discovery approval artifact")
     .action(async (options: {
       input: string;
       profile: string;
       outputDir: string;
       mappingApproval?: string;
       discoveryReceipt: string[];
-      discoveryApprovalReference?: string;
+      discoveryApproval?: string;
     }) => {
       await runPlanCommand({ ...options, discoveryReceipts: options.discoveryReceipt });
+    });
+
+  program.command("discover-plan")
+    .description("Discover a target page and plan with one live RuntimeSession capability")
+    .requiredOption("--input <file>")
+    .requiredOption("--profile <file>")
+    .requiredOption("--output-dir <dir>")
+    .requiredOption("--discovery-approval <file>")
+    .requiredOption("--transition-case-id <case-id>")
+    .option("--browser <visibility>", "visible or headless", "headless")
+    .action(async (options: {
+      input: string;
+      profile: string;
+      outputDir: string;
+      discoveryApproval: string;
+      transitionCaseId: string;
+      browser: string;
+    }) => {
+      if (options.browser !== "visible" && options.browser !== "headless") {
+        throw browserConfigurationError("discover-plan browser must be visible or headless");
+      }
+      await runDiscoverPlanCommand({ ...options, browser: options.browser });
     });
 
   program.command("discover-web")

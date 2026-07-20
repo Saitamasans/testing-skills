@@ -20,7 +20,7 @@ import {
 import type { ExecutionProfile, NormalizedCaseSet, RunManifest, SourceSnapshot } from "../types.js";
 import { readExecutionPackage } from "../input/execution-package.js";
 import type { ContractCase } from "@saitamasans/testing-contract-compiler";
-import { verifyDiscoveryReceipts } from "../security/discovery-receipt.js";
+import { verifyDiscoveryReceipts, type ActiveRuntimeSession } from "../security/discovery-receipt.js";
 
 export interface PlanCommandOptions {
   input: string;
@@ -29,7 +29,8 @@ export interface PlanCommandOptions {
   mappingApproval?: string;
   legacyInput?: boolean;
   discoveryReceipts?: string[];
-  discoveryApprovalReference?: string;
+  discoveryApproval?: string;
+  runtimeSession?: ActiveRuntimeSession;
   now?: Date;
 }
 
@@ -54,6 +55,9 @@ type ReadCasesResult =
 const MAPPING_APPROVAL_REQUIRED_MESSAGE = "Nonstandard Excel requires --mapping-approval before manifest planning";
 
 export async function runPlanCommand(options: PlanCommandOptions): Promise<PlanCommandResult> {
+  if (options.runtimeSession && path.resolve(options.outputDir).toLowerCase() !== options.runtimeSession.runRoot.toLowerCase()) {
+    throw new Error("runtime_session_output_dir_mismatch");
+  }
   await mkdir(options.outputDir, { recursive: true });
   const profile = await readProfile(options.profile);
   if (!options.input.toLowerCase().endsWith(".execution-package.zip") && options.legacyInput !== true) {
@@ -96,13 +100,13 @@ async function runPackagePlan(options: PlanCommandOptions, profile: ExecutionPro
   const binding_ms = performance.now() - bindingStarted;
   const transitionStarted = performance.now();
   const discoveryReceipts = await verifyDiscoveryReceipts({
-    runDir: options.outputDir,
+    ...(options.runtimeSession ? { session: options.runtimeSession } : {}),
     receiptPaths: options.discoveryReceipts ?? [],
     packageSha256: loaded.package_sha256,
     sourceCaseIds: loaded.contract.cases.map(({ source_case_id }) => source_case_id),
     contractCases: loaded.contract.cases,
     profile,
-    ...(options.discoveryApprovalReference ? { approvalReference: options.discoveryApprovalReference } : {}),
+    ...(options.discoveryApproval ? { approvalPath: options.discoveryApproval } : {}),
     ...(options.now ? { now: options.now } : {}),
   });
   const transition_discovery_ms = performance.now() - transitionStarted;
@@ -208,7 +212,7 @@ function validateContractBindings(cases: ContractCase[], profile: ExecutionProfi
   }
 }
 
-async function readProfile(file: string): Promise<ExecutionProfileWithPlans> {
+export async function readProfile(file: string): Promise<ExecutionProfileWithPlans> {
   const raw = JSON.parse(await readFile(file, "utf8")) as ExecutionProfileWithPlans;
   validateDocument<ExecutionProfile>("execution-profile", raw);
   if (!raw.case_plans || Object.keys(raw.case_plans).length === 0) {

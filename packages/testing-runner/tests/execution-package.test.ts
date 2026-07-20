@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { createHash, randomBytes } from "node:crypto";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -25,7 +25,7 @@ async function setup(expected = "工作台可见") {
   sheet.addRow(["用例 ID", "所属模块", "用例标题", "验证功能点", "前置条件", "测试步骤", "预期结果", "优先级", "实际结果", "执行结果"]);
   sheet.addRow(["LOGIN-001", "登录", "登录", "登录", "匿名登录页", "提交有效凭据", expected, "P0", "", "未执行"]);
   await workbook.xlsx.writeFile(input);
-  return { root, input, package: path.join(root, "cases.execution-package.zip"), profile: path.join(root, "profile.json"), output: path.join(root, "plan") };
+  return { root, input, package: path.join(root, "cases.execution-package.zip"), profile: path.join(root, "profile.json"), output: path.join(root, ".testing-run") };
 }
 
 async function writeProfile(file: string, options: { mapAssertion?: boolean; discovered?: boolean } = {}) {
@@ -42,6 +42,71 @@ async function writeProfile(file: string, options: { mapAssertion?: boolean; dis
 
 const DISCOVERY_APPROVAL_REFERENCE = "approval-target-state-workspace";
 const RECEIPT_NOW = new Date("2026-07-21T00:00:00.000Z");
+const DEFAULT_TRANSITION_ACTIONS = [{
+  type: "web.goto" as const, action_id: "goto-login", target_alias: "web", url: "https://example.test/login" as const, risk: "R0" as const, source_step: "LOGIN-001-A1",
+}];
+
+function fakeDiscoveryPage(url = "https://example.test/workspace", dom = "<html><body>workspace</body></html>") {
+  return {
+    url: () => url,
+    title: async () => "Workspace",
+    content: async () => dom,
+    locator: (selector: string) => selector === "body"
+      ? { ariaSnapshot: async () => "- main: workspace" }
+      : { evaluateAll: async () => [] },
+  } as never;
+}
+
+async function writeDiscoveryApproval(
+  f: Awaited<ReturnType<typeof setup>>,
+  packageSha256: string,
+  transitionActions = DEFAULT_TRANSITION_ACTIONS as never[],
+  overrides: Record<string, unknown> = {},
+  now = RECEIPT_NOW,
+): Promise<string> {
+  await mkdir(f.output, { recursive: true });
+  const approvalPath = path.join(f.output, "discovery-approval.json");
+  await writeFile(approvalPath, `${JSON.stringify({
+    approval_schema_version: "1.0.0",
+    approval_id: DISCOVERY_APPROVAL_REFERENCE,
+    source_package_sha256: packageSha256,
+    source_case_ids: ["LOGIN-001"],
+    transition_case_id: "LOGIN-001",
+    transition_actions_sha256: sha256Canonical(transitionActions),
+    target_origin: "https://example.test",
+    requested_url: "https://example.test/login",
+    page_state_id: "workspace",
+    issued_by: "reviewer",
+    issued_at: now.toISOString(),
+    expires_at: new Date(now.getTime() + 10 * 60_000).toISOString(),
+    ...overrides,
+  }, null, 2)}\n`, "utf8");
+  return approvalPath;
+}
+
+async function issueLiveReceipt(
+  f: Awaited<ReturnType<typeof setup>>,
+  transitionActions = DEFAULT_TRANSITION_ACTIONS as never[],
+  now = RECEIPT_NOW,
+) {
+  const loaded = await loadExecutionPackage(f.package);
+  const session = await (discoveryReceiptRuntime as any).createActiveRuntimeSession(f.output, now);
+  const approval = await writeDiscoveryApproval(f, loaded.package_sha256, transitionActions, {}, now);
+  const issued = await (discoveryReceiptRuntime as any).discoverAndIssueReceipt({
+    session,
+    page: fakeDiscoveryPage(),
+    packageSha256: loaded.package_sha256,
+    sourceCaseIds: ["LOGIN-001"],
+    transitionCaseId: "LOGIN-001",
+    transitionActions,
+    targetOrigin: "https://example.test",
+    requestedUrl: "https://example.test/login",
+    pageStateId: "workspace",
+    approvalPath: approval,
+    now,
+  });
+  return { session, approval, ...issued };
+}
 
 async function writeIssuedDiscoveryReceipt(
   f: Awaited<ReturnType<typeof setup>>,
@@ -119,8 +184,8 @@ test("READY package enters package-first path and skips semantic compilation", a
   t.after(() => rm(f.root, { recursive: true, force: true }));
   await compilePackage({ input: f.input, output: f.package, overrides: { "LOGIN-001": { effects: { browser_state: { target_state: "workspace" }, identity_state: null, account_data: null, shared_business_data: null, global_environment: null, external_system: null } } } });
   await writeProfile(f.profile);
-  const receipt = await writeIssuedDiscoveryReceipt(f);
-  const result = await runPlanCommand({ input: f.package, profile: f.profile, outputDir: f.output, discoveryReceipts: [receipt], discoveryApprovalReference: DISCOVERY_APPROVAL_REFERENCE, now: RECEIPT_NOW });
+  const issued = await issueLiveReceipt(f);
+  const result = await runPlanCommand({ input: f.package, profile: f.profile, outputDir: f.output, discoveryReceipts: [issued.receiptPath], discoveryApproval: issued.approval, runtimeSession: issued.session, now: RECEIPT_NOW });
   assert.equal(result.manifest.cases.length, 1);
   assert.equal(result.manifest.cases[0]?.case_id, "LOGIN-001");
   assert.equal(result.manifest.cases[0]?.original["优先级"], "P0");
@@ -175,9 +240,9 @@ test("READY package enters package-first path and skips semantic compilation", a
   assert.deepEqual(result.manifest.discovery_receipts, [{
     case_id: "LOGIN-001",
     page_state_id: "workspace",
-    discovery_id: "discovery-login-001-workspace",
-    receipt_path: "discovery/discovery-receipt.json",
-    receipt_sha256: createHash("sha256").update(await readFile(receipt)).digest("hex"),
+    discovery_id: issued.receipt.discovery_id,
+    receipt_path: "discovery/LOGIN-001/discovery-receipt.json",
+    receipt_sha256: createHash("sha256").update(await readFile(issued.receiptPath)).digest("hex"),
   }]);
 });
 
@@ -228,11 +293,12 @@ test("conserves every execution contract field through manifest, runtime result 
   }, null, 2));
 
   const source = await loadExecutionPackage(f.package);
-  const receipt = await writeIssuedDiscoveryReceipt(f, { transition_actions: [
+  const conservationTransitions = [
     { type: "web.goto", action_id: "setup-login", target_alias: "web", url: "https://example.test/login", risk: "R0", source_step: "LOGIN-001-S1" },
     { type: "web.click", action_id: "submit-login", target_alias: "web", locator: "button[type=submit]", risk: "R0", source_step: "LOGIN-001-A1" },
-  ] });
-  const planned = await runPlanCommand({ input: f.package, profile: f.profile, outputDir: f.output, discoveryReceipts: [receipt], discoveryApprovalReference: DISCOVERY_APPROVAL_REFERENCE, now: RECEIPT_NOW });
+  ] as never[];
+  const conservationReceipt = await issueLiveReceipt(f, conservationTransitions);
+  const planned = await runPlanCommand({ input: f.package, profile: f.profile, outputDir: f.output, discoveryReceipts: [conservationReceipt.receiptPath], discoveryApproval: conservationReceipt.approval, runtimeSession: conservationReceipt.session, now: RECEIPT_NOW });
   assert.deepEqual(source.contract.cases[0], expectedContract, "Contract");
   assert.deepEqual(planned.manifest.cases[0]?.execution_contract, expectedContract, "Manifest");
   assert.equal(planned.manifest.contract_version, "1.0.0");
@@ -374,34 +440,45 @@ test("profile target-state markers cannot forge discovery", async (t) => {
   );
 });
 
+test("rewriting both disk receipt and disk session ledger cannot forge discovery", async (t) => {
+  const f = await setup();
+  t.after(() => rm(f.root, { recursive: true, force: true }));
+  await compilePackage({ input: f.input, output: f.package, overrides: { "LOGIN-001": { effects: { browser_state: { target_state: "workspace" }, identity_state: null, account_data: null, shared_business_data: null, global_environment: null, external_system: null } } } });
+  await writeProfile(f.profile);
+  const receipt = await writeIssuedDiscoveryReceipt(f);
+  await assert.rejects(
+    () => runPlanCommand({ input: f.package, profile: f.profile, outputDir: f.output, discoveryReceipts: [receipt], discoveryApproval: path.join(f.output, "fake-approval.json"), now: RECEIPT_NOW }),
+    /runtime_session_required/,
+  );
+});
+
+test("discovery receipt authority requires an active in-memory RuntimeSession capability", () => {
+  const createSession = (discoveryReceiptRuntime as unknown as { createActiveRuntimeSession?: unknown }).createActiveRuntimeSession;
+  assert.equal(typeof createSession, "function");
+});
+
 async function prepareReceiptPlan(overrides: Record<string, unknown> = {}) {
   const f = await setup();
   await compilePackage({ input: f.input, output: f.package, overrides: { "LOGIN-001": { effects: { browser_state: { target_state: "workspace" }, identity_state: null, account_data: null, shared_business_data: null, global_environment: null, external_system: null } } } });
   await writeProfile(f.profile);
-  const receipt = await writeIssuedDiscoveryReceipt(f, overrides);
-  const plan = () => runPlanCommand({ input: f.package, profile: f.profile, outputDir: f.output, discoveryReceipts: [receipt], discoveryApprovalReference: DISCOVERY_APPROVAL_REFERENCE, now: RECEIPT_NOW });
-  return { f, receipt, plan };
+  const issued = await issueLiveReceipt(f);
+  const plan = () => runPlanCommand({ input: f.package, profile: f.profile, outputDir: f.output, discoveryReceipts: [issued.receiptPath], discoveryApproval: issued.approval, runtimeSession: issued.session, now: RECEIPT_NOW });
+  return { f, ...issued, receipt: issued.receiptPath, artifact: issued.artifactPath, plan, overrides };
 }
 
 test("Testing Runtime issues a cryptographically random current-session discovery receipt", async (t) => {
-  const issue = (discoveryReceiptRuntime as unknown as { issueDiscoveryReceipt?: (input: Record<string, unknown>) => Promise<{ receiptPath: string }> }).issueDiscoveryReceipt;
+  const issue = (discoveryReceiptRuntime as unknown as { discoverAndIssueReceipt?: (input: Record<string, unknown>) => Promise<{ receiptPath: string }> }).discoverAndIssueReceipt;
   assert.equal(typeof issue, "function");
   const f = await setup();
   t.after(() => rm(f.root, { recursive: true, force: true }));
   await compilePackage({ input: f.input, output: f.package, overrides: { "LOGIN-001": { effects: { browser_state: { target_state: "workspace" }, identity_state: null, account_data: null, shared_business_data: null, global_environment: null, external_system: null } } } });
   await writeProfile(f.profile);
   const loaded = await loadExecutionPackage(f.package);
-  const discoveryDir = path.join(f.output, "runtime-issued");
-  await mkdir(discoveryDir, { recursive: true });
-  const artifactPath = path.join(discoveryDir, "web-discovery.json");
-  await writeFile(artifactPath, `${JSON.stringify({
-    url: "https://example.test/workspace", title: "Workspace", discovered_at: RECEIPT_NOW.toISOString(), requires_user_confirmation: true,
-    interaction_policy: "read-only-dom-and-accessibility", dom_sha256: "a".repeat(64), accessibility_sha256: "b".repeat(64), elements: [],
-  }, null, 2)}\n`, "utf8");
+  const session = await (discoveryReceiptRuntime as any).createActiveRuntimeSession(f.output, RECEIPT_NOW);
+  const approvalPath = await writeDiscoveryApproval(f, loaded.package_sha256);
   const issued = await issue!({
-    runDir: f.output,
-    artifactPath,
-    outputPath: path.join(discoveryDir, "discovery-receipt.json"),
+    session,
+    page: fakeDiscoveryPage(),
     packageSha256: loaded.package_sha256,
     sourceCaseIds: ["LOGIN-001"],
     transitionCaseId: "LOGIN-001",
@@ -409,7 +486,7 @@ test("Testing Runtime issues a cryptographically random current-session discover
     targetOrigin: "https://example.test",
     requestedUrl: "https://example.test/login",
     pageStateId: "workspace",
-    approvalReference: DISCOVERY_APPROVAL_REFERENCE,
+    approvalPath,
     now: RECEIPT_NOW,
   });
   const receipt = JSON.parse(await readFile(issued.receiptPath, "utf8"));
@@ -422,9 +499,36 @@ test("Testing Runtime issues a cryptographically random current-session discover
   assert.match(receipt.run_nonce, /^[a-f0-9]{64}$/);
   assert.equal(receipt.generated_by, "@saitamasans/testing-runtime");
   assert.equal(receipt.purpose, "target_state_discovery_only");
-  const session = JSON.parse(await readFile(path.join(f.output, "runtime-session.json"), "utf8"));
-  assert.equal(receipt.run_nonce, session.run_nonce);
+  const sessionAudit = JSON.parse(await readFile(path.join(f.output, "runtime-session.json"), "utf8"));
+  assert.equal(receipt.run_nonce, sessionAudit.run_nonce);
+  assert.equal(sessionAudit.authority, "in_memory_capability_required");
   assert.equal(Object.hasOwn(receipt, "business_status"), false);
+});
+
+test("old discovery artifact cannot be refreshed into a current-session receipt", async (t) => {
+  const f = await setup();
+  t.after(() => rm(f.root, { recursive: true, force: true }));
+  await compilePackage({ input: f.input, output: f.package, overrides: { "LOGIN-001": { effects: { browser_state: { target_state: "workspace" }, identity_state: null, account_data: null, shared_business_data: null, global_environment: null, external_system: null } } } });
+  const loaded = await loadExecutionPackage(f.package);
+  const session = await (discoveryReceiptRuntime as any).createActiveRuntimeSession(f.output, RECEIPT_NOW);
+  const approvalPath = await writeDiscoveryApproval(f, loaded.package_sha256);
+  const discoveryDir = path.join(f.output, "discovery", "LOGIN-001");
+  await mkdir(discoveryDir, { recursive: true });
+  await writeFile(path.join(discoveryDir, "web-discovery.json"), `${JSON.stringify({
+    url: "https://example.test/workspace",
+    discovered_at: "2026-07-20T00:00:00.000Z",
+    dom_sha256: "a".repeat(64),
+    accessibility_sha256: "b".repeat(64),
+  }, null, 2)}\n`, "utf8");
+  await assert.rejects(
+    () => (discoveryReceiptRuntime as any).discoverAndIssueReceipt({
+      session, page: fakeDiscoveryPage(), packageSha256: loaded.package_sha256, sourceCaseIds: ["LOGIN-001"],
+      transitionCaseId: "LOGIN-001", transitionActions: DEFAULT_TRANSITION_ACTIONS, targetOrigin: "https://example.test",
+      requestedUrl: "https://example.test/login", pageStateId: "workspace", approvalPath, now: RECEIPT_NOW,
+    }),
+    /EEXIST/,
+  );
+  await assert.rejects(() => readFile(path.join(discoveryDir, "discovery-receipt.json")), /ENOENT/);
 });
 
 test("forged discovery receipt is rejected", async (t) => {
@@ -433,7 +537,7 @@ test("forged discovery receipt is rejected", async (t) => {
   const forged = JSON.parse(await readFile(receipt, "utf8"));
   forged.page_state_id = "forged-state";
   await writeFile(receipt, `${JSON.stringify(forged, null, 2)}\n`, "utf8");
-  await assert.rejects(plan, /discovery_receipt_invalid.*receipt_not_issued/);
+  await assert.rejects(plan, /discovery_receipt_invalid.*receipt_not_issued_by_active_session/);
 });
 
 test("discovery receipt schema cannot claim business success", async (t) => {
@@ -441,36 +545,58 @@ test("discovery receipt schema cannot claim business success", async (t) => {
   t.after(() => rm(f.root, { recursive: true, force: true }));
   const document = JSON.parse(await readFile(receipt, "utf8"));
   document.business_status = "passed";
-  const receiptBytes = Buffer.from(`${JSON.stringify(document, null, 2)}\n`, "utf8");
-  await writeFile(receipt, receiptBytes);
-  const sessionPath = path.join(f.output, "runtime-session.json");
-  const session = JSON.parse(await readFile(sessionPath, "utf8"));
-  session.issued_receipts[0].receipt_sha256 = createHash("sha256").update(receiptBytes).digest("hex");
-  await writeFile(sessionPath, `${JSON.stringify(session, null, 2)}\n`, "utf8");
+  await writeFile(receipt, `${JSON.stringify(document, null, 2)}\n`, "utf8");
   await assert.rejects(plan, /Invalid discovery-receipt document.*business_status/);
 });
 
 test("cross-origin discovery receipt is rejected", async (t) => {
-  const { f, plan } = await prepareReceiptPlan({ target_origin: "https://attacker.test" });
+  const { f, plan } = await prepareReceiptPlan();
   t.after(() => rm(f.root, { recursive: true, force: true }));
+  const profile = JSON.parse(await readFile(f.profile, "utf8"));
+  profile.targets.web.origin = "https://attacker.test";
+  await writeFile(f.profile, `${JSON.stringify(profile, null, 2)}\n`, "utf8");
   await assert.rejects(plan, /discovery_receipt_invalid.*origin/);
 });
 
 test("cross-package discovery receipt is rejected", async (t) => {
-  const { f, plan } = await prepareReceiptPlan({ source_package_sha256: "3".repeat(64) });
+  const { f, session, approval, receipt } = await prepareReceiptPlan();
+  const other = await setup("不同的预期结果");
   t.after(() => rm(f.root, { recursive: true, force: true }));
-  await assert.rejects(plan, /discovery_receipt_invalid.*package/);
+  t.after(() => rm(other.root, { recursive: true, force: true }));
+  await compilePackage({ input: other.input, output: other.package, overrides: { "LOGIN-001": { effects: { browser_state: { target_state: "workspace" }, identity_state: null, account_data: null, shared_business_data: null, global_environment: null, external_system: null } } } });
+  await assert.rejects(
+    () => runPlanCommand({ input: other.package, profile: f.profile, outputDir: f.output, discoveryReceipts: [receipt], discoveryApproval: approval, runtimeSession: session, now: RECEIPT_NOW }),
+    /discovery_receipt_invalid.*package/,
+  );
 });
 
 test("cross-run-nonce discovery receipt is rejected", async (t) => {
-  const { f, plan } = await prepareReceiptPlan({ session_run_nonce: "4".repeat(64), run_nonce: "5".repeat(64) });
+  const { f, receipt, artifact, approval } = await prepareReceiptPlan();
+  const otherRoot = await mkdtemp(path.join(os.tmpdir(), "runner-cross-session-"));
+  const otherRun = path.join(otherRoot, ".testing-run");
   t.after(() => rm(f.root, { recursive: true, force: true }));
-  await assert.rejects(plan, /discovery_receipt_invalid.*run_nonce/);
+  t.after(() => rm(otherRoot, { recursive: true, force: true }));
+  const otherSession = await (discoveryReceiptRuntime as any).createActiveRuntimeSession(otherRun, RECEIPT_NOW);
+  const otherDiscovery = path.join(otherRun, "discovery", "LOGIN-001");
+  await mkdir(otherDiscovery, { recursive: true });
+  const copiedReceipt = path.join(otherDiscovery, "discovery-receipt.json");
+  const copiedArtifact = path.join(otherDiscovery, "web-discovery.json");
+  const copiedApproval = path.join(otherRun, "discovery-approval.json");
+  await copyFile(receipt, copiedReceipt);
+  await copyFile(artifact, copiedArtifact);
+  await copyFile(approval, copiedApproval);
+  await assert.rejects(
+    () => runPlanCommand({ input: f.package, profile: f.profile, outputDir: otherRun, discoveryReceipts: [copiedReceipt], discoveryApproval: copiedApproval, runtimeSession: otherSession, now: RECEIPT_NOW }),
+    /discovery_receipt_invalid.*active_session/,
+  );
 });
 
 test("transition action mismatch invalidates discovery receipt", async (t) => {
-  const { f, plan } = await prepareReceiptPlan({ transition_actions_sha256: "6".repeat(64) });
+  const { f, plan } = await prepareReceiptPlan();
   t.after(() => rm(f.root, { recursive: true, force: true }));
+  const profile = JSON.parse(await readFile(f.profile, "utf8"));
+  profile.case_plans["LOGIN-001"][0].url = "https://example.test/changed";
+  await writeFile(f.profile, `${JSON.stringify(profile, null, 2)}\n`, "utf8");
   await assert.rejects(plan, /discovery_receipt_invalid.*actions/);
 });
 
@@ -486,21 +612,21 @@ test("page change invalidates stale discovery receipt fingerprint", async (t) =>
 });
 
 test("expired discovery receipt and old runtime session are rejected", async (t) => {
-  const { f, plan } = await prepareReceiptPlan({
-    generated_at: "2026-07-20T00:00:00.000Z",
-    expires_at: "2026-07-20T00:10:00.000Z",
-  });
+  const { f, receipt, approval, session } = await prepareReceiptPlan();
   t.after(() => rm(f.root, { recursive: true, force: true }));
-  await assert.rejects(plan, /discovery_receipt_invalid.*(?:expired|old_session)/);
+  await assert.rejects(
+    () => runPlanCommand({ input: f.package, profile: f.profile, outputDir: f.output, discoveryReceipts: [receipt], discoveryApproval: approval, runtimeSession: session, now: new Date(RECEIPT_NOW.getTime() + 20 * 60_000) }),
+    /runtime_session_expired/,
+  );
 });
 
 test("receipt outside the current run directory is rejected", async (t) => {
-  const { f, receipt } = await prepareReceiptPlan();
+  const { f, receipt, session, approval } = await prepareReceiptPlan();
   t.after(() => rm(f.root, { recursive: true, force: true }));
   const outside = path.join(f.root, "outside-discovery-receipt.json");
   await writeFile(outside, await readFile(receipt));
   await assert.rejects(
-    () => runPlanCommand({ input: f.package, profile: f.profile, outputDir: f.output, discoveryReceipts: [outside], discoveryApprovalReference: DISCOVERY_APPROVAL_REFERENCE, now: RECEIPT_NOW }),
+    () => runPlanCommand({ input: f.package, profile: f.profile, outputDir: f.output, discoveryReceipts: [outside], discoveryApproval: approval, runtimeSession: session, now: RECEIPT_NOW }),
     /discovery_receipt_invalid.*outside_current_run/,
   );
 });
@@ -513,12 +639,23 @@ test("receipt with a missing discovery artifact is rejected", async (t) => {
   await assert.rejects(plan, /discovery_receipt_invalid.*artifact_path_missing/);
 });
 
-test("receipt approval reference must match the planning gate", async (t) => {
-  const { f, receipt } = await prepareReceiptPlan();
+test("fake discovery approval artifact is rejected", async (t) => {
+  const { f, receipt, session } = await prepareReceiptPlan();
+  t.after(() => rm(f.root, { recursive: true, force: true }));
+  const fakeApproval = path.join(f.output, "fake-discovery-approval.json");
+  await writeFile(fakeApproval, `${JSON.stringify({ approval_id: "arbitrary-string" }, null, 2)}\n`, "utf8");
+  await assert.rejects(
+    () => runPlanCommand({ input: f.package, profile: f.profile, outputDir: f.output, discoveryReceipts: [receipt], discoveryApproval: fakeApproval, runtimeSession: session, now: RECEIPT_NOW }),
+    /Invalid discovery-approval document/,
+  );
+});
+
+test("active RuntimeSession rejects an arbitrary caller output directory", async (t) => {
+  const { f, receipt, session, approval } = await prepareReceiptPlan();
   t.after(() => rm(f.root, { recursive: true, force: true }));
   await assert.rejects(
-    () => runPlanCommand({ input: f.package, profile: f.profile, outputDir: f.output, discoveryReceipts: [receipt], discoveryApprovalReference: "different-approval", now: RECEIPT_NOW }),
-    /discovery_receipt_invalid.*approval_reference/,
+    () => runPlanCommand({ input: f.package, profile: f.profile, outputDir: path.join(f.root, "arbitrary-output"), discoveryReceipts: [receipt], discoveryApproval: approval, runtimeSession: session, now: RECEIPT_NOW }),
+    /runtime_session_output_dir_mismatch/,
   );
 });
 

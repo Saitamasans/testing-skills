@@ -9,7 +9,7 @@
     "target_origin", "requested_url", "final_url", "page_state_id", "dom_sha256", "accessibility_sha256",
     "page_fingerprint_sha256", "discovery_artifact_path", "discovery_artifact_sha256", "generated_at", "expires_at",
     "source_package_sha256", "source_case_ids", "transition_case_id", "transition_actions_sha256",
-    "approval_reference", "purpose"
+    "approval_reference", "approval_sha256", "purpose", "session_mac"
   ],
   "properties": {
     "receipt_schema_version": { "const": "1.0.0" },
@@ -39,7 +39,9 @@
     "transition_case_id": { "$ref": "#/$defs/nonEmpty" },
     "transition_actions_sha256": { "$ref": "#/$defs/sha256" },
     "approval_reference": { "$ref": "#/$defs/nonEmpty" },
-    "purpose": { "const": "target_state_discovery_only" }
+    "approval_sha256": { "$ref": "#/$defs/sha256" },
+    "purpose": { "const": "target_state_discovery_only" },
+    "session_mac": { "$ref": "#/$defs/sha256" }
   },
   "$defs": {
     "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },

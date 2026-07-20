@@ -3,6 +3,7 @@ import type { ContractCase } from "@saitamasans/testing-contract-compiler";
 export type SchemaId =
   | "report"
   | "execution-profile"
+  | "discovery-approval"
   | "discovery-receipt"
   | "run-manifest"
   | "approval"

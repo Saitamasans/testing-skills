@@ -14,6 +14,7 @@ interface JsonSchema {
 const schemaFiles: Record<SchemaId, string> = {
   report: "report.schema.json",
   "execution-profile": "execution-profile.schema.json",
+  "discovery-approval": "discovery-approval.schema.json",
   "discovery-receipt": "discovery-receipt.schema.json",
   "run-manifest": "run-manifest.schema.json",
   approval: "approval.schema.json",
@@ -21,6 +22,7 @@ const schemaFiles: Record<SchemaId, string> = {
 };
 const semanticSchemaIds = new Set<SchemaId>([
   "execution-profile",
+  "discovery-approval",
   "discovery-receipt",
   "run-manifest",
   "approval",

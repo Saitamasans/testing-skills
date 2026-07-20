@@ -84,7 +84,7 @@ function candidateSpecs(item: RawElement): Array<Pick<DiscoveryCandidate, "locat
   );
 }
 
-export async function discoverCurrentPage(page: Page): Promise<WebDiscoveryResult> {
+export async function discoverCurrentPage(page: Page, options: { now?: Date } = {}): Promise<WebDiscoveryResult> {
   const rawElements = await page.locator(
     'input:not([type="hidden"]),button,select,textarea,a[href],[role="button"],[role="link"],[role="textbox"],[role="searchbox"],[role="combobox"]',
   ).evaluateAll((nodes) => nodes.filter((node) => {
@@ -155,7 +155,7 @@ export async function discoverCurrentPage(page: Page): Promise<WebDiscoveryResul
   return {
     url: page.url(),
     title: await page.title(),
-    discovered_at: new Date().toISOString(),
+    discovered_at: (options.now ?? new Date()).toISOString(),
     requires_user_confirmation: true,
     interaction_policy: "read-only-dom-and-accessibility",
     dom_sha256: hashEvidence(dom),
