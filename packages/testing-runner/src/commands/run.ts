@@ -36,6 +36,7 @@ import type {
   CaseStatus,
   ExecutionProfile,
   HttpUrl,
+  RunCaseResult,
   RunManifest,
   RunResult,
   RunStatus,
@@ -130,6 +131,8 @@ function blockedResult(manifest: RunManifest, runStatus: RunStatus, reason: stri
     protocol_version: "1.0.0",
     run_id: `run-${manifest.manifest_id}`,
     manifest_hash: sha256Canonical(manifest),
+    ...(manifest.contract_version ? { contract_version: manifest.contract_version } : {}),
+    ...(manifest.package_sha256 ? { package_sha256: manifest.package_sha256 } : {}),
     run_status: runStatus,
     started_at: now,
     completed_at: now,
@@ -139,6 +142,12 @@ function blockedResult(manifest: RunManifest, runStatus: RunStatus, reason: stri
       run_status: "blocked",
       assertions: [{ assertion_id: "preflight", passed: false, actual: reason }],
       evidence: [],
+      ...(item.execution_contract ? {
+        execution_contract: structuredClone(item.execution_contract),
+        contract_field_status: Object.fromEntries(
+          Object.keys(item.execution_contract).map((field) => [field, "blocked"]),
+        ) as NonNullable<RunCaseResult["contract_field_status"]>,
+      } : {}),
     })),
   };
 }

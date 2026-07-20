@@ -120,6 +120,20 @@ function createDetailEvidenceSheet(result: RunResult): NativeReportSheet {
   };
 }
 
+function createContractSemanticsSheet(result: RunResult): NativeReportSheet {
+  return {
+    name: "Execution contract semantics",
+    kind: "supplementary",
+    columns: ["Case ID", "Contract field", "Runtime status", "Contract value JSON"],
+    rows: result.cases.flatMap((item) => {
+      if (!item.execution_contract || !item.contract_field_status) return [];
+      return Object.entries(item.execution_contract).map(([field, value]) => ({
+        values: [item.case_id, field, item.contract_field_status![field as keyof typeof item.contract_field_status], JSON.stringify(value)],
+      }));
+    }),
+  };
+}
+
 function rowsByName(report: TestingSkillsReport, name: string): NativeReportRow[] | undefined {
   const matching = report.sheets.filter((sheet) => sheet.name === name);
   return matching.length === 1 ? matching[0]!.rows : undefined;
@@ -177,6 +191,11 @@ export function verifyExecutionDetailProjection(input: ProjectExecutionReportInp
       createDetailEvidenceSheet(input.result).rows,
       rowsByName(input.report, "Evidence references"),
     ),
+    ...compareDetailRows(
+      "contract semantics",
+      createContractSemanticsSheet(input.result).rows,
+      rowsByName(input.report, "Execution contract semantics"),
+    ),
   ];
   return { valid: errors.length === 0, errors };
 }
@@ -191,6 +210,8 @@ function createOverviewSheet(result: RunResult): NativeReportSheet {
     rows: [
       { values: ["run_id", result.run_id] },
       { values: ["manifest_hash", result.manifest_hash] },
+      { values: ["contract_version", result.contract_version ?? ""] },
+      { values: ["package_sha256", result.package_sha256 ?? ""] },
       { values: ["run_status", result.run_status] },
       { values: ["started_at", result.started_at] },
       { values: ["completed_at", result.completed_at ?? ""] },
@@ -268,6 +289,7 @@ export function projectExecutionReport(input: ProjectExecutionReportInput): Test
     createEvidenceSheet(input.result),
     createAssertionSheet(input.result),
     createDetailEvidenceSheet(input.result),
+    createContractSemanticsSheet(input.result),
   );
   return projected;
 }

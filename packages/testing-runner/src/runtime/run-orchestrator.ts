@@ -1,6 +1,7 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 
+import type { ContractFieldStatus } from "../types.js";
 import type { AssertionResult, EvidenceReference, JsonValue, RunManifest, RunResult } from "../types.js";
 import { sha256Canonical } from "../compiler/canonical-json.js";
 import type { ActionOutcome } from "./execution-context.js";
@@ -96,6 +97,53 @@ function isCleanupAction(action: ManifestAction): boolean {
   return action.type === "cleanup.api" || action.type === "cleanup.web";
 }
 
+type ContractCase = NonNullable<ManifestCase["execution_contract"]>;
+type ContractFieldStatusMap = Record<keyof ContractCase, ContractFieldStatus>;
+
+const CONTRACT_FIELDS = [
+  "case_id", "source_case_id", "source_sheet", "title", "module", "priority", "execution_type",
+  "automation_status", "isolation_scope", "flow_group", "start_state", "auth_profile", "setup", "actions",
+  "assertions", "effects", "cleanup", "dependencies", "resource_locks", "evidence_policy", "unresolved",
+] as const satisfies readonly (keyof ContractCase)[];
+
+function contractFieldStatus(contract: ContractCase): ContractFieldStatusMap {
+  const result = Object.fromEntries(CONTRACT_FIELDS.map((field) => [field, "skipped"])) as ContractFieldStatusMap;
+  for (const field of ["case_id", "source_case_id", "source_sheet", "title", "module", "priority", "execution_type", "isolation_scope", "flow_group"] as const) {
+    result[field] = "executed";
+  }
+  result.automation_status = contract.automation_status === "auto_ready" ? "executed" : "blocked";
+  result.unresolved = contract.unresolved.length === 0 ? "skipped" : "blocked";
+  result.dependencies = contract.dependencies.length === 0 ? "skipped" : "executed";
+  result.resource_locks = contract.resource_locks.length === 0 ? "skipped" : "executed";
+  result.setup = contract.setup.length === 0 ? "skipped" : "blocked";
+  result.actions = contract.actions.length === 0 ? "skipped" : "blocked";
+  result.assertions = contract.assertions.length === 0 ? "skipped" : "blocked";
+  result.cleanup = contract.cleanup.business_cleanup.length === 0 ? "skipped" : "blocked";
+  return result;
+}
+
+function semanticId(entry: unknown): string | undefined {
+  if (!entry || typeof entry !== "object") return undefined;
+  const value = entry as { action_id?: unknown; assertion_id?: unknown; setup_id?: unknown; cleanup_id?: unknown };
+  return [value.action_id, value.assertion_id, value.setup_id, value.cleanup_id]
+    .find((candidate): candidate is string => typeof candidate === "string");
+}
+
+function contractFieldForAction(contract: ContractCase, action: ManifestAction): "setup" | "actions" | "assertions" | "cleanup" | undefined {
+  const sourceStep = action.source_step;
+  if (!sourceStep) return undefined;
+  if (contract.setup.some((entry) => semanticId(entry) === sourceStep)) return "setup";
+  if (contract.actions.some((entry) => semanticId(entry) === sourceStep)) return "actions";
+  if (contract.assertions.some((entry) => semanticId(entry) === sourceStep)) return "assertions";
+  if (contract.cleanup.business_cleanup.some((entry) => semanticId(entry) === sourceStep)) return "cleanup";
+  return undefined;
+}
+
+function contractProjection(item: ManifestCase, status: ContractFieldStatusMap | undefined): Pick<CaseResult, "execution_contract" | "contract_field_status"> | Record<string, never> {
+  if (!item.execution_contract || !status) return {};
+  return { execution_contract: structuredClone(item.execution_contract), contract_field_status: { ...status } };
+}
+
 async function storeOutcomeAttachments(
   runDir: string,
   caseId: string,
@@ -137,6 +185,7 @@ export async function runApprovedManifest(input: RunInput): Promise<RunResult> {
   });
 
   for (const [caseOffset, item] of input.manifest.cases.entries()) {
+    const fieldStatus = item.execution_contract ? contractFieldStatus(item.execution_contract) : undefined;
     const caseEvent = {
       run_id,
       manifest_hash,
@@ -150,6 +199,37 @@ export async function runApprovedManifest(input: RunInput): Promise<RunResult> {
     await input.observer?.caseStarted?.(caseEvent);
     const assertions: AssertionResult[] = [];
     const evidence: EvidenceReference[] = [];
+    let contractBlockReason: string | undefined;
+    if (item.execution_contract?.automation_status !== undefined && item.execution_contract.automation_status !== "auto_ready") {
+      contractBlockReason = `Execution Contract automation_status is ${item.execution_contract.automation_status}.`;
+    } else if ((item.execution_contract?.unresolved.length ?? 0) > 0) {
+      contractBlockReason = `Execution Contract has unresolved fields: ${item.execution_contract!.unresolved.map(({ field }) => field).join(", ")}.`;
+    } else {
+      const failedDependency = item.execution_contract?.dependencies.find((dependency) => {
+        const dependencyResult = cases.find(({ case_id }) => case_id === dependency);
+        return dependencyResult?.case_status !== PASSED;
+      });
+      if (failedDependency) contractBlockReason = `Execution Contract dependency did not pass: ${failedDependency}.`;
+    }
+    if (contractBlockReason) {
+      if (fieldStatus) {
+        if (item.execution_contract?.automation_status !== "auto_ready") fieldStatus.automation_status = "blocked";
+        else if ((item.execution_contract?.unresolved.length ?? 0) > 0) fieldStatus.unresolved = "blocked";
+        else fieldStatus.dependencies = "blocked";
+      }
+      const caseResult: CaseResult = {
+        case_id: item.case_id,
+        case_status: NOT_EXECUTED,
+        run_status: "blocked",
+        assertions: [{ assertion_id: `${item.case_id}-contract-preflight`, passed: false, actual: contractBlockReason }],
+        evidence: [],
+        ...contractProjection(item, fieldStatus),
+      };
+      cases.push(caseResult);
+      runStatus = "blocked";
+      await input.observer?.caseCompleted?.({ ...caseEvent, result: caseResult });
+      continue;
+    }
     if (!hasVerdictRoute(item)) {
       const reason = "Case has no explicit business assertion; execution is blocked to prevent a false passing verdict.";
       const entry = await storeEvidence({
@@ -165,6 +245,7 @@ export async function runApprovedManifest(input: RunInput): Promise<RunResult> {
         run_status: "blocked",
         assertions: [{ assertion_id: `${item.case_id}-business-assertion`, passed: false, actual: reason }],
         evidence: [evidenceReference(entry)],
+        ...contractProjection(item, fieldStatus),
       };
       cases.push(caseResult);
       runStatus = "blocked";
@@ -198,6 +279,8 @@ export async function runApprovedManifest(input: RunInput): Promise<RunResult> {
         await writer.appendEvent({ run_id, case_id: item.case_id, action_id: action.action_id, attempt, type: "action.started" });
         await input.observer?.actionStarted?.(actionEvent);
         const outcome = await input.executeAction(action, attempt);
+        const contractField = item.execution_contract ? contractFieldForAction(item.execution_contract, action) : undefined;
+        if (fieldStatus && contractField) fieldStatus[contractField] = outcome.status === "passed" ? "executed" : outcome.status === "failed" || outcome.status === "executor_error" ? "failed" : "blocked";
         evidence.push(...await storeOutcomeAttachments(runDir, item.case_id, attempt, outcome));
         if (outcome.status === "passed") {
           await writer.appendEvent({ run_id, case_id: item.case_id, action_id: action.action_id, attempt, type: "action.passed", data: outcome.actual });
@@ -283,6 +366,8 @@ export async function runApprovedManifest(input: RunInput): Promise<RunResult> {
       await writer.appendEvent({ run_id, case_id: item.case_id, action_id: action.action_id, attempt, type: "cleanup.started" });
       await input.observer?.actionStarted?.(actionEvent);
       const outcome = await input.executeAction(action, attempt);
+      const contractField = item.execution_contract ? contractFieldForAction(item.execution_contract, action) : undefined;
+      if (fieldStatus && contractField) fieldStatus[contractField] = outcome.status === "passed" ? "executed" : outcome.status === "failed" || outcome.status === "executor_error" ? "failed" : "blocked";
       evidence.push(...await storeOutcomeAttachments(runDir, item.case_id, attempt, outcome));
       await input.observer?.actionCompleted?.({ ...actionEvent, outcome });
       if (outcome.status === "passed") {
@@ -309,6 +394,7 @@ export async function runApprovedManifest(input: RunInput): Promise<RunResult> {
       run_status: caseRunStatus,
       assertions,
       evidence,
+      ...contractProjection(item, fieldStatus),
     };
     cases.push(caseResult);
     await input.observer?.caseCompleted?.({ ...caseEvent, result: caseResult });
@@ -321,6 +407,8 @@ export async function runApprovedManifest(input: RunInput): Promise<RunResult> {
     protocol_version: "1.0.0",
     run_id,
     manifest_hash,
+    ...(input.manifest.contract_version ? { contract_version: input.manifest.contract_version } : {}),
+    ...(input.manifest.package_sha256 ? { package_sha256: input.manifest.package_sha256 } : {}),
     run_status: runStatus,
     started_at: startedAt,
     completed_at: new Date().toISOString(),

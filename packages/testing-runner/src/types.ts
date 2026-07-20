@@ -1,3 +1,5 @@
+import type { ContractCase } from "@saitamasans/testing-contract-compiler";
+
 export type SchemaId =
   | "report"
   | "execution-profile"
@@ -22,7 +24,7 @@ export type ActionType =
   | "cleanup.web";
 
 export type CaseStatus = "未执行" | "通过" | "不通过" | "待定";
-export type InputKind = "native-report" | "standard-excel" | "nonstandard-excel";
+export type InputKind = "native-report" | "standard-excel" | "nonstandard-excel" | "execution-package";
 export type TenColumnName =
   | "用例 ID"
   | "所属模块"
@@ -289,6 +291,9 @@ export type ManifestAction =
 
 export interface RunManifestCase {
   case_id: string;
+  isolation_scope?: "case" | "flow_group" | "suite" | "external_existing";
+  flow_group?: string | null;
+  execution_contract?: ContractCase;
   original: {
     "用例 ID": string;
     "所属模块": string;
@@ -312,6 +317,9 @@ export interface RunManifest {
   source: { path: string; sha256: string };
   targets?: HttpUrl[];
   rule_versions?: string[];
+  contract_version?: ProtocolVersion;
+  package_id?: string;
+  package_sha256?: string;
   cases: RunManifestCase[];
 }
 
@@ -348,7 +356,11 @@ export interface RunCaseResult {
   run_status: RunStatus;
   assertions: AssertionResult[];
   evidence: EvidenceReference[];
+  execution_contract?: ContractCase;
+  contract_field_status?: Record<keyof ContractCase, ContractFieldStatus>;
 }
+
+export type ContractFieldStatus = "executed" | "blocked" | "skipped" | "failed";
 
 export interface RootDefectSummary {
   defect_id: string;
@@ -361,6 +373,8 @@ export interface RunResult {
   protocol_version: ProtocolVersion;
   run_id: string;
   manifest_hash: string;
+  contract_version?: ProtocolVersion;
+  package_sha256?: string;
   run_status: RunStatus;
   started_at: string;
   completed_at?: string;
