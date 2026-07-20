@@ -370,6 +370,44 @@ test("package content scan rejects quoted JSON sensitive keys without echoing va
   assert.doesNotMatch(result.errors.join("\n"), /do not echo this value/i);
 });
 
+test("credential-like prefixes and suffixes cannot exempt plaintext sensitive JSON keys", async (t) => {
+  const f = await fixture();
+  t.after(() => rm(f.root, { recursive: true, force: true }));
+  await compilePackage({ input: f.input, output: f.output });
+  const original = await readFile(f.output);
+
+  for (const [key, secret] of [
+    ["credentialPassword", "prefix bypass must not be echoed"],
+    ["passwordCredential", "suffix bypass must not be echoed"],
+  ]) {
+    const zip = await JSZip.loadAsync(original);
+    zip.file("project-config.json", JSON.stringify({ nested: { [key]: secret } }));
+    await writeFile(f.output, await zip.generateAsync({ type: "nodebuffer" }));
+
+    const result = await validatePackage(f.output);
+    assert.equal(result.valid, false);
+    assert.ok(result.errors.includes("secret_value_forbidden"));
+    assert.doesNotMatch(result.errors.join("\n"), new RegExp(secret, "i"));
+  }
+});
+
+test("explicit environment suffixes and structured references remain non-secret references", async (t) => {
+  const f = await fixture();
+  t.after(() => rm(f.root, { recursive: true, force: true }));
+  await compilePackage({ input: f.input, output: f.output });
+  const zip = await JSZip.loadAsync(await readFile(f.output));
+  zip.file("project-config.json", JSON.stringify({
+    password_env: "TEST_PASSWORD",
+    apiToken: { source: "env", name: "TEST_API_TOKEN" },
+  }));
+  await writeFile(f.output, await zip.generateAsync({ type: "nodebuffer" }));
+
+  const result = await validatePackage(f.output);
+  assert.equal(result.valid, false, "the extra file still violates the fixed inventory");
+  assert.ok(result.errors.includes("package_inventory_mismatch"));
+  assert.ok(!result.errors.includes("secret_value_forbidden"));
+});
+
 test("script entries are inert and rejected without execution", async (t) => {
   const f = await fixture();
   t.after(() => rm(f.root, { recursive: true, force: true }));
