@@ -99,6 +99,7 @@ function isCleanupAction(action: ManifestAction): boolean {
 
 type ContractCase = NonNullable<ManifestCase["execution_contract"]>;
 type ContractFieldStatusMap = Record<keyof ContractCase, ContractFieldStatus>;
+type ExecutableContractField = "setup" | "actions" | "assertions" | "cleanup";
 
 const CONTRACT_FIELDS = [
   "case_id", "source_case_id", "source_sheet", "title", "module", "priority", "execution_type",
@@ -114,11 +115,11 @@ function contractFieldStatus(contract: ContractCase): ContractFieldStatusMap {
   result.automation_status = contract.automation_status === "auto_ready" ? "executed" : "blocked";
   result.unresolved = contract.unresolved.length === 0 ? "skipped" : "blocked";
   result.dependencies = contract.dependencies.length === 0 ? "skipped" : "executed";
-  result.resource_locks = contract.resource_locks.length === 0 ? "skipped" : "executed";
+  result.resource_locks = contract.resource_locks.length === 0 ? "skipped" : "blocked";
   result.setup = contract.setup.length === 0 ? "skipped" : "blocked";
   result.actions = contract.actions.length === 0 ? "skipped" : "blocked";
   result.assertions = contract.assertions.length === 0 ? "skipped" : "blocked";
-  result.cleanup = contract.cleanup.business_cleanup.length === 0 ? "skipped" : "blocked";
+  result.cleanup = contract.cleanup.technical_cleanup.length === 0 && contract.cleanup.business_cleanup.length === 0 ? "skipped" : "blocked";
   return result;
 }
 
@@ -129,7 +130,7 @@ function semanticId(entry: unknown): string | undefined {
     .find((candidate): candidate is string => typeof candidate === "string");
 }
 
-function contractFieldForAction(contract: ContractCase, action: ManifestAction): "setup" | "actions" | "assertions" | "cleanup" | undefined {
+function contractFieldForAction(contract: ContractCase, action: ManifestAction): ExecutableContractField | undefined {
   const sourceStep = action.source_step;
   if (!sourceStep) return undefined;
   if (contract.setup.some((entry) => semanticId(entry) === sourceStep)) return "setup";
@@ -137,6 +138,34 @@ function contractFieldForAction(contract: ContractCase, action: ManifestAction):
   if (contract.assertions.some((entry) => semanticId(entry) === sourceStep)) return "assertions";
   if (contract.cleanup.business_cleanup.some((entry) => semanticId(entry) === sourceStep)) return "cleanup";
   return undefined;
+}
+
+function mergeContractFieldStatus(current: ContractFieldStatus | undefined, next: ContractFieldStatus): ContractFieldStatus {
+  if (current === "failed" || next === "failed") return "failed";
+  if (current === "blocked" || next === "blocked") return "blocked";
+  if (current === "executed" || next === "executed") return "executed";
+  return "skipped";
+}
+
+function recordContractActionOutcome(
+  contract: ContractCase,
+  action: ManifestAction,
+  outcome: ActionOutcome,
+  fieldStatus: ContractFieldStatusMap,
+  observedStatus: Map<ExecutableContractField, ContractFieldStatus>,
+): void {
+  const field = contractFieldForAction(contract, action);
+  if (!field) return;
+  const outcomeStatus: ContractFieldStatus = outcome.status === "passed"
+    ? "executed"
+    : outcome.status === "failed" || outcome.status === "executor_error"
+      ? "failed"
+      : "blocked";
+  const aggregate = mergeContractFieldStatus(observedStatus.get(field), outcomeStatus);
+  observedStatus.set(field, aggregate);
+  fieldStatus[field] = field === "cleanup" && contract.cleanup.technical_cleanup.length > 0 && aggregate !== "failed"
+    ? "blocked"
+    : aggregate;
 }
 
 function contractProjection(item: ManifestCase, status: ContractFieldStatusMap | undefined): Pick<CaseResult, "execution_contract" | "contract_field_status"> | Record<string, never> {
@@ -186,6 +215,7 @@ export async function runApprovedManifest(input: RunInput): Promise<RunResult> {
 
   for (const [caseOffset, item] of input.manifest.cases.entries()) {
     const fieldStatus = item.execution_contract ? contractFieldStatus(item.execution_contract) : undefined;
+    const observedContractStatus = new Map<ExecutableContractField, ContractFieldStatus>();
     const caseEvent = {
       run_id,
       manifest_hash,
@@ -279,8 +309,7 @@ export async function runApprovedManifest(input: RunInput): Promise<RunResult> {
         await writer.appendEvent({ run_id, case_id: item.case_id, action_id: action.action_id, attempt, type: "action.started" });
         await input.observer?.actionStarted?.(actionEvent);
         const outcome = await input.executeAction(action, attempt);
-        const contractField = item.execution_contract ? contractFieldForAction(item.execution_contract, action) : undefined;
-        if (fieldStatus && contractField) fieldStatus[contractField] = outcome.status === "passed" ? "executed" : outcome.status === "failed" || outcome.status === "executor_error" ? "failed" : "blocked";
+        if (fieldStatus && item.execution_contract) recordContractActionOutcome(item.execution_contract, action, outcome, fieldStatus, observedContractStatus);
         evidence.push(...await storeOutcomeAttachments(runDir, item.case_id, attempt, outcome));
         if (outcome.status === "passed") {
           await writer.appendEvent({ run_id, case_id: item.case_id, action_id: action.action_id, attempt, type: "action.passed", data: outcome.actual });
@@ -366,8 +395,7 @@ export async function runApprovedManifest(input: RunInput): Promise<RunResult> {
       await writer.appendEvent({ run_id, case_id: item.case_id, action_id: action.action_id, attempt, type: "cleanup.started" });
       await input.observer?.actionStarted?.(actionEvent);
       const outcome = await input.executeAction(action, attempt);
-      const contractField = item.execution_contract ? contractFieldForAction(item.execution_contract, action) : undefined;
-      if (fieldStatus && contractField) fieldStatus[contractField] = outcome.status === "passed" ? "executed" : outcome.status === "failed" || outcome.status === "executor_error" ? "failed" : "blocked";
+      if (fieldStatus && item.execution_contract) recordContractActionOutcome(item.execution_contract, action, outcome, fieldStatus, observedContractStatus);
       evidence.push(...await storeOutcomeAttachments(runDir, item.case_id, attempt, outcome));
       await input.observer?.actionCompleted?.({ ...actionEvent, outcome });
       if (outcome.status === "passed") {

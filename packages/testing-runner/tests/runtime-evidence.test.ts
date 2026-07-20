@@ -404,3 +404,57 @@ test("orchestrator runs case setup and teardown around every case", async () => 
 
   assert.deepEqual(events, ["before:CASE-001", "after:CASE-001", "before:CASE-002", "after:CASE-002"]);
 });
+
+test("contract cleanup status keeps an earlier failure when a later cleanup passes", async () => {
+  const directory = await tempDir("runner-contract-cleanup-");
+  const subject = manifest();
+  subject.cases[0]!.execution_contract = {
+    case_id: "CASE-001",
+    source_case_id: "CASE-001",
+    source_sheet: "Cases",
+    title: "cleanup aggregation",
+    module: "runtime",
+    priority: "P0",
+    execution_type: "web_ui",
+    automation_status: "auto_ready",
+    isolation_scope: "case",
+    flow_group: null,
+    start_state: { description: "ready" },
+    auth_profile: { id: "anonymous" },
+    setup: [],
+    actions: [],
+    assertions: [{ assertion_id: "CASE-001-E1", description: "request passed" }],
+    effects: {},
+    cleanup: {
+      technical_cleanup: [],
+      business_cleanup: [
+        { cleanup_id: "CASE-001-C1", description: "first cleanup" },
+        { cleanup_id: "CASE-001-C2", description: "second cleanup" },
+      ],
+    },
+    dependencies: [],
+    resource_locks: [],
+    evidence_policy: {},
+    unresolved: [],
+  };
+  subject.cases[0]!.steps = [
+    { type: "api.assert", action_id: "assert", source_step: "CASE-001-E1", target_alias: "api", assertion: "status is 200", risk: "R0" },
+    { type: "cleanup.api", action_id: "cleanup-first", source_step: "CASE-001-C1", target_alias: "api", method: "DELETE", path: "/first", risk: "R0" },
+    { type: "cleanup.api", action_id: "cleanup-second", source_step: "CASE-001-C2", target_alias: "api", method: "DELETE", path: "/second", risk: "R0" },
+  ];
+
+  const result = await runApprovedManifest({
+    manifest: subject,
+    outputDir: directory,
+    executeAction: async (action) => ({
+      action_id: action.action_id,
+      started_at: new Date().toISOString(),
+      finished_at: new Date().toISOString(),
+      status: action.action_id === "cleanup-first" ? "failed" : "passed",
+      attachments: [],
+      ...(action.action_id === "cleanup-first" ? { error: { type: "cleanup_failed", message: "first cleanup failed" } } : { actual: { ok: true } }),
+    }),
+  });
+
+  assert.equal(result.cases[0]?.contract_field_status?.cleanup, "failed");
+});

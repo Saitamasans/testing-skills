@@ -139,9 +139,29 @@ test("conserves every execution contract field through manifest, runtime result 
   assert.equal(result.contract_version, "1.0.0");
   assert.equal(result.package_sha256, source.package_sha256);
   assert.deepEqual(result.cases[0]?.execution_contract, expectedContract, "Result");
-  assert.deepEqual(Object.keys(result.cases[0]?.contract_field_status ?? {}).sort(), Object.keys(expectedContract).sort());
-  assert.equal(result.cases[0]?.contract_field_status.setup, "executed");
-  assert.equal(result.cases[0]?.contract_field_status.cleanup, "executed");
+  assert.deepEqual(result.cases[0]?.contract_field_status, {
+    case_id: "executed",
+    source_case_id: "executed",
+    source_sheet: "executed",
+    title: "executed",
+    module: "executed",
+    priority: "executed",
+    execution_type: "executed",
+    automation_status: "executed",
+    isolation_scope: "executed",
+    flow_group: "executed",
+    start_state: "skipped",
+    auth_profile: "skipped",
+    setup: "executed",
+    actions: "executed",
+    assertions: "executed",
+    effects: "skipped",
+    cleanup: "blocked",
+    dependencies: "skipped",
+    resource_locks: "blocked",
+    evidence_policy: "skipped",
+    unresolved: "skipped",
+  }, "every Contract field has an explicit runtime state");
 
   const report = projectExecutionReport({
     report: {
@@ -155,6 +175,8 @@ test("conserves every execution contract field through manifest, runtime result 
   const semantics = report.sheets.find((sheet) => sheet.name === "Execution contract semantics");
   assert.deepEqual(semantics?.columns, ["Case ID", "Contract field", "Runtime status", "Contract value JSON"]);
   assert.equal(semantics?.rows.length, Object.keys(expectedContract).length);
+  assert.equal(semantics?.rows.find((row) => row.values[1] === "cleanup")?.values[2], "blocked");
+  assert.equal(semantics?.rows.find((row) => row.values[1] === "resource_locks")?.values[2], "blocked");
   assert.deepEqual(JSON.parse(String(semantics?.rows.find((row) => row.values[1] === "effects")?.values[3])), expectedContract.effects);
 });
 
