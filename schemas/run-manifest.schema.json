@@ -33,6 +33,11 @@
     "contract_version": { "const": "1.0.0" },
     "package_id": { "allOf": [{ "$ref": "#/$defs/nonSecretText" }, { "type": "string", "minLength": 1 }] },
     "package_sha256": { "$ref": "#/$defs/sha256" },
+    "discovery_receipts": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/discoveryReceiptReference" }
+    },
     "cases": {
       "type": "array",
       "minItems": 1,
@@ -250,6 +255,23 @@
       "type": "object", "unevaluatedProperties": false,
       "required": ["locator"],
       "properties": { "type": { "const": "cleanup.web" }, "locator": { "$ref": "#/$defs/nonSecretText" } }
+    },
+    "discoveryReceiptReference": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["case_id", "page_state_id", "discovery_id", "receipt_path", "receipt_sha256"],
+      "properties": {
+        "case_id": { "allOf": [{ "$ref": "#/$defs/nonSecretText" }, { "type": "string", "minLength": 1 }] },
+        "page_state_id": { "allOf": [{ "$ref": "#/$defs/nonSecretText" }, { "type": "string", "minLength": 1 }] },
+        "discovery_id": { "allOf": [{ "$ref": "#/$defs/nonSecretText" }, { "type": "string", "minLength": 1 }] },
+        "receipt_path": {
+          "allOf": [
+            { "$ref": "#/$defs/nonSecretText" },
+            { "type": "string", "pattern": "^(?![A-Za-z]:)(?![/\\\\])(?!.*(?:^|[/\\\\])\\.\\.(?:[/\\\\]|$)).+\\.json$" }
+          ]
+        },
+        "receipt_sha256": { "$ref": "#/$defs/sha256" }
+      }
     },
     "manifestCase": {
       "type": "object",

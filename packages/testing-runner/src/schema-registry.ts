@@ -14,12 +14,14 @@ interface JsonSchema {
 const schemaFiles: Record<SchemaId, string> = {
   report: "report.schema.json",
   "execution-profile": "execution-profile.schema.json",
+  "discovery-receipt": "discovery-receipt.schema.json",
   "run-manifest": "run-manifest.schema.json",
   approval: "approval.schema.json",
   "run-result": "run-result.schema.json",
 };
 const semanticSchemaIds = new Set<SchemaId>([
   "execution-profile",
+  "discovery-receipt",
   "run-manifest",
   "approval",
   "run-result",

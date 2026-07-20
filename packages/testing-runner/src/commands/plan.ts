@@ -20,6 +20,7 @@ import {
 import type { ExecutionProfile, NormalizedCaseSet, RunManifest, SourceSnapshot } from "../types.js";
 import { readExecutionPackage } from "../input/execution-package.js";
 import type { ContractCase } from "@saitamasans/testing-contract-compiler";
+import { verifyDiscoveryReceipts } from "../security/discovery-receipt.js";
 
 export interface PlanCommandOptions {
   input: string;
@@ -27,6 +28,9 @@ export interface PlanCommandOptions {
   outputDir: string;
   mappingApproval?: string;
   legacyInput?: boolean;
+  discoveryReceipts?: string[];
+  discoveryApprovalReference?: string;
+  now?: Date;
 }
 
 export interface PlanCommandResult {
@@ -91,7 +95,16 @@ async function runPackagePlan(options: PlanCommandOptions, profile: ExecutionPro
   validateContractBindings(loaded.contract.cases, profile);
   const binding_ms = performance.now() - bindingStarted;
   const transitionStarted = performance.now();
-  validateTargetStates(loaded.contract.cases, profile.rule_versions ?? []);
+  const discoveryReceipts = await verifyDiscoveryReceipts({
+    runDir: options.outputDir,
+    receiptPaths: options.discoveryReceipts ?? [],
+    packageSha256: loaded.package_sha256,
+    sourceCaseIds: loaded.contract.cases.map(({ source_case_id }) => source_case_id),
+    contractCases: loaded.contract.cases,
+    profile,
+    ...(options.discoveryApprovalReference ? { approvalReference: options.discoveryApprovalReference } : {}),
+    ...(options.now ? { now: options.now } : {}),
+  });
   const transition_discovery_ms = performance.now() - transitionStarted;
   const doctorStarted = performance.now();
   const runtimeProbe = defaultRuntimeProbe();
@@ -101,6 +114,7 @@ async function runPackagePlan(options: PlanCommandOptions, profile: ExecutionPro
   manifest.contract_version = loaded.contract.contract_version;
   manifest.package_id = loaded.manifest.package_id;
   manifest.package_sha256 = loaded.package_sha256;
+  if (discoveryReceipts.length > 0) manifest.discovery_receipts = discoveryReceipts;
   manifest.cases = manifest.cases.map((item) => {
     const contract = loaded.contract.cases.find(({ case_id }) => case_id === item.case_id)!;
     return {
@@ -191,15 +205,6 @@ function validateContractBindings(cases: ContractCase[], profile: ExecutionProfi
       ].filter(Boolean).join("; ");
       throw new Error(`contract_incomplete: ${item.case_id} source-step order or cardinality mismatch${details ? `; ${details}` : ""}`);
     }
-  }
-}
-
-function validateTargetStates(cases: ContractCase[], ruleVersions: string[]): void {
-  for (const item of cases) {
-    const browserState = item.effects.browser_state;
-    if (!browserState || typeof browserState !== "object" || !("target_state" in browserState)) continue;
-    const target = String((browserState as { target_state: unknown }).target_state);
-    if (!ruleVersions.includes(`target-state:${item.case_id}:${target}`)) throw new Error(`target_state_not_discovered: ${item.case_id}:${target}`);
   }
 }
 

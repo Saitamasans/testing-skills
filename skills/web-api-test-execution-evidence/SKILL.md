@@ -51,6 +51,8 @@ Do not trigger this Skill merely to generate test cases, clarify requirements, o
 
 需要展开输入识别、E0-E4、字段映射和材料提示时，读取 `references/input-and-readiness.md`。
 
+目标状态只能由当前 Testing Runtime 会话在当前 `.testing-run` 内生成的 discovery receipt 证明。禁止使用 `target_state_discovered=true`、`rule_versions` 中的手写 target-state 标记、ZIP 内预置 receipt 或运行目录外的文件。Runtime 生成随机 `run_nonce`，并把 receipt 精确绑定到当前 Runtime/Runner 版本、origin、请求/最终 URL、DOM/无障碍指纹、discovery artifact SHA、package SHA、来源用例、迁移用例与动作 SHA、时间窗口和 discovery approval reference；页面、动作、package、origin、会话或审批任一变化都必须重新 discovery。receipt 只证明已探测页面状态，绝不证明业务用例通过。
+
 ## 五、风险、凭据和数据
 
 - 优先使用用户提供的账号、密码、测试数据和数据库只读账号；其次使用已配置环境变量；不能把密钥写进 manifest、报告、日志、截图或 HTML。
@@ -125,6 +127,7 @@ CI 证据、报告一致性、上传产物和失败退出码读取 `references/c
 ## 十、最终自检
 
 - [ ] 是否只执行已有用例，没有生成新用例？
+- [ ] 目标状态是否只引用当前 `.testing-run`、当前 `run_nonce` 和当前 package/actions/page fingerprint 已校验的 Runtime receipt，且没有把 discovery 当作业务通过？
 - [ ] 是否展示主/辅 Skill 名称和分工，并在用户确认后才加载辅助 Skill？
 - [ ] 是否完成准备材料清点，且没有猜测正式服或测试服？
 - [ ] 是否对非标准 Excel 做了字段映射确认？

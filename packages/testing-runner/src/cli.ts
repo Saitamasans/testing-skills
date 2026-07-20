@@ -75,13 +75,17 @@ export async function runCli(argv = process.argv): Promise<void> {
     .requiredOption("--profile <file>")
     .requiredOption("--output-dir <dir>")
     .option("--mapping-approval <file>")
+    .option("--discovery-receipt <file>", "current-session target-state discovery receipt", collect, [] as string[])
+    .option("--discovery-approval-reference <reference>")
     .action(async (options: {
       input: string;
       profile: string;
       outputDir: string;
       mappingApproval?: string;
+      discoveryReceipt: string[];
+      discoveryApprovalReference?: string;
     }) => {
-      await runPlanCommand(options);
+      await runPlanCommand({ ...options, discoveryReceipts: options.discoveryReceipt });
     });
 
   program.command("discover-web")

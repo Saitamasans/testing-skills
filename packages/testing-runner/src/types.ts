@@ -3,6 +3,7 @@ import type { ContractCase } from "@saitamasans/testing-contract-compiler";
 export type SchemaId =
   | "report"
   | "execution-profile"
+  | "discovery-receipt"
   | "run-manifest"
   | "approval"
   | "run-result";
@@ -310,6 +311,14 @@ export interface RunManifestCase {
   steps: ManifestAction[];
 }
 
+export interface DiscoveryReceiptReference {
+  case_id: string;
+  page_state_id: string;
+  discovery_id: string;
+  receipt_path: string;
+  receipt_sha256: string;
+}
+
 export interface RunManifest {
   protocol_version: ProtocolVersion;
   manifest_id: string;
@@ -320,6 +329,7 @@ export interface RunManifest {
   contract_version?: ProtocolVersion;
   package_id?: string;
   package_sha256?: string;
+  discovery_receipts?: DiscoveryReceiptReference[];
   cases: RunManifestCase[];
 }
 

@@ -19,6 +19,10 @@
 
 目标状态 discovery 完成后，把迁移动作、候选目标定位器和终态断言写入待确认的正式 `case_plans`，重新生成 discovery/proposal hash、manifest hash、目标 origin、动作数和断言预览。目标状态 discovery 结果必须与正式 manifest 预览在第二次确认门禁一并确认，并重新经过第二次确认门禁；第二次确认前不能进入 E4 或正式执行，不再增加第三次确认。
 
+状态迁移探测结束后，必须由当前 Testing Runtime 会话在当前 `.testing-run` 目录生成 discovery receipt。receipt 至少记录 schema 版本、随机 `run_nonce`、discovery ID、生成器、Runtime/Runner 版本、精确 origin/请求 URL/最终 URL、目标 `page_state_id`、DOM 与无障碍指纹、artifact 路径与 SHA-256、生成与过期时间、当前 package SHA-256、来源用例 ID、迁移用例 ID、实际迁移动作 SHA-256 和 discovery approval reference。Runtime session 只登记本会话生成的 receipt 相对路径与精确 SHA；最终 manifest 只能引用通过当前 session、路径、时效、package、origin、URL、动作和页面指纹复核的 receipt。
+
+`target_state_discovered=true`、`rule_versions` 中的手写 target-state 标记、用户上传布尔值、Execution Package 内预置 receipt、运行目录外 receipt、旧 session/nonce、旧页面 fingerprint 或缺失 artifact 一律无效。没有有效 receipt 时返回 `target_state_not_discovered`。discovery receipt 的 `purpose` 固定为 `target_state_discovery_only`，schema 禁止写入业务通过状态；发现结果只证明页面被探测，不能作为正式用例的通过证据。
+
 ## 核心链路覆盖审查
 
 第一次确认门禁前统计测试用例总数、完整可执行用例数、blocked/manual 数、核心业务路径数、完整可执行核心路径数和终态断言覆盖。搜索场景至少包含“输入关键词 → 触发搜索 → 到达结果状态 → 观察结果业务断言”；只验证首页或输入不算覆盖搜索目标。
