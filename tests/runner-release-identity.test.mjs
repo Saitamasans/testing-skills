@@ -33,6 +33,10 @@ test("changed Runner bytes use the new 1.1.3 package, CLI, receipt, and release 
     path.join(REPO_ROOT, ".github", "workflows", "validate-runner-windows-release.yml"),
     "utf8",
   );
+  const mainValidationWorkflow = await readFile(
+    path.join(REPO_ROOT, ".github", "workflows", "validate-runner.yml"),
+    "utf8",
+  );
 
   assert.equal(runnerPackage.version, "1.1.3");
   assert.equal(rootLock.packages["packages/testing-runner"].version, "1.1.3");
@@ -53,6 +57,7 @@ test("changed Runner bytes use the new 1.1.3 package, CLI, receipt, and release 
   assert.match(validationWorkflow, /runner-1\.1\.3-release-lock\.json/);
   assert.doesNotMatch(validationWorkflow, /release-a\/saitamasans-testing-runner-1\.1\.2\.tgz/);
   assert.doesNotMatch(validationWorkflow, /Runner build differs from windows-runtime-lock\.json/);
+  assert.match(mainValidationWorkflow, /fetch-depth: 0/);
 
   const changed = execFileSync(
     "git",
