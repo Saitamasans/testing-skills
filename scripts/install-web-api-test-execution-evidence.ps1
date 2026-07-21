@@ -630,12 +630,34 @@ function Write-DownloadProgress {
         [long]$ResumeOffset
     )
 
+    if (-not $script:DownloadProgressState) {
+        $script:DownloadProgressState = @{}
+    }
+
     $elapsed = [Math]::Max(0.001, ([DateTime]::UtcNow - [DateTime]::FromFileTimeUtc([long]$StartedAt)).TotalSeconds)
     $transferred = [Math]::Max(0, $Downloaded - $ResumeOffset)
     $speed = [long]($transferred / $elapsed)
     $percent = if ($Total -gt 0) { [Math]::Min(100, [Math]::Round(($Downloaded * 100.0) / $Total, 1)) } else { 0 }
     $eta = if ($speed -gt 0) { [Math]::Ceiling(($Total - $Downloaded) / $speed) } else { "?" }
-    Write-Host "当前文件=$Artifact；总字节=$Total；已下载=$Downloaded；百分比=$percent%；字节/秒=$speed；ETA=$eta 秒；重试=$RetryCount；续传偏移=$ResumeOffset"
+    $now = [DateTime]::UtcNow
+    $key = $Artifact
+    $previous = $script:DownloadProgressState[$key]
+    $percentChanged = $null -eq $previous -or [Math]::Abs($percent - [double]$previous.Percent) -ge 0.1
+    $due = $null -eq $previous -or ($now - $previous.At).TotalMilliseconds -ge 200
+    $complete = $percent -ge 100
+    $line = "当前文件=$Artifact；总字节=$Total；已下载=$Downloaded；百分比=$percent%；字节/秒=$speed；ETA=$eta 秒；重试=$RetryCount；续传偏移=$ResumeOffset"
+    $interactive = $false
+    try { $interactive = [Environment]::UserInteractive -and -not [Console]::IsOutputRedirected } catch { $interactive = $false }
+    $nonInteractiveDue = $null -eq $previous -or [Math]::Abs($percent - [double]$previous.Percent) -ge 5 -or ($null -ne $previous -and ($now - $previous.At).TotalSeconds -ge 30)
+    if ($complete -or ($percentChanged -and $due -and ($interactive -or $nonInteractiveDue))) {
+        if ($interactive -and -not $complete) {
+            Write-Host ("`r" + $line.PadRight(180)) -NoNewline
+        }
+        else {
+            Write-Host $line
+        }
+        $script:DownloadProgressState[$key] = @{ Percent = $percent; At = $now }
+    }
 }
 
 function Test-FileIntegrity {
