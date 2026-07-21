@@ -10,6 +10,7 @@ import {
   openBrowserSession,
   resolveBrowserSettings,
 } from "../src/runtime/browser-session.js";
+import { runApprovedManifest } from "../src/runtime/run-orchestrator.js";
 import type { RunManifest, RunResult } from "../src/types.js";
 
 function manifestWith(actionType: string): RunManifest {
@@ -219,6 +220,37 @@ test("explicit flow group shares one context only inside the group", async () =>
   ]);
 });
 
+test("observer rendering follows the new Page after case context rotation", async () => {
+  const outputDir = await mkdtemp(path.join(os.tmpdir(), "observer-page-rotation-"));
+  const contexts: Array<{ id: number; closed: boolean; evaluations: number }> = [];
+  const browser = {
+    newContext: async () => {
+      const state = { id: contexts.length + 1, closed: false, evaluations: 0 };
+      contexts.push(state);
+      const page = {
+        evaluate: async () => {
+          if (state.closed) throw new Error(`page-${state.id}-closed`);
+          state.evaluations += 1;
+        },
+      } as unknown as Page;
+      return {
+        tracing: { start: async () => undefined, stop: async () => undefined },
+        newPage: async () => page,
+        close: async () => { state.closed = true; },
+      };
+    },
+    close: async () => undefined,
+  };
+  const manifest = orderedWebManifest(["CASE-1", "CASE-2"]);
+  const session = await openBrowserSession({ manifest, mode: "interactive", visibility: "visible", outputDir, launchBrowser: async () => browser as unknown as Browser });
+  await session?.prepareCase("CASE-1");
+  await session?.observer?.caseStarted?.({ item: manifest.cases[0], case_index: 1 } as never);
+  await session?.prepareCase("CASE-2");
+  await session?.observer?.caseStarted?.({ item: manifest.cases[1], case_index: 2 } as never);
+  assert.deepEqual(contexts.map(({ evaluations }) => evaluations), [1, 1]);
+  await session?.close();
+});
+
 test("a context close failure is recorded while the next independent case continues in a fresh context", async () => {
   const outputDir = await mkdtemp(path.join(os.tmpdir(), "close-failure-browser-"));
   let contexts = 0;
@@ -274,13 +306,14 @@ test("context close failures affect their owning cases without erasing business 
   ]);
 });
 
-for (const [name, outcomes] of [
-  ["failure/success/failure", ["failed", "passed", "failed"]],
-  ["success/failure/success", ["passed", "failed", "passed"]],
+for (const [name, caseIds, outcomes] of [
+  ["failure/success/failure", ["CASE-1", "CASE-2", "CASE-3"], ["failed", "passed", "failed"]],
+  ["success/failure/success", ["LOGIN-MINI-001", "LOGIN-MINI-002", "LOGIN-MINI-003"], ["passed", "failed", "passed"]],
 ] as const) {
-  test(`${name} ordering keeps case state isolated`, async () => {
+  test(`${name} Runner execution keeps every case isolated and observable`, async () => {
     const outputDir = await mkdtemp(path.join(os.tmpdir(), "case-state-ordering-"));
     const contextStates: Array<Record<string, string>> = [];
+    let currentPage: { context: number; state: Record<string, string> } | undefined;
     const browser = {
       newContext: async () => {
         const state: Record<string, string> = {};
@@ -294,16 +327,69 @@ for (const [name, outcomes] of [
       },
       close: async () => undefined,
     };
-    const session = await openBrowserSession({ manifest: manifestWith("web.goto"), mode: "ci", outputDir, launchBrowser: async () => browser as unknown as Browser });
-    for (const [index, outcome] of outcomes.entries()) {
-      const current = await session?.prepareCase(`CASE-${index + 1}`) as unknown as { context: number; state: Record<string, string> };
-      assert.deepEqual(current.state, {});
-      current.state.outcome = outcome;
-    }
+    const manifest = orderedWebManifest(caseIds);
+    const session = await openBrowserSession({ manifest, mode: "ci", outputDir, launchBrowser: async () => browser as unknown as Browser });
+    const observed: string[] = [];
+    const result = await runApprovedManifest({
+      manifest,
+      outputDir,
+      observer: {
+        caseStarted: ({ item }) => { observed.push(`started:${item.case_id}`); },
+        caseCompleted: ({ item }) => { observed.push(`completed:${item.case_id}`); },
+      },
+      beforeCase: async (item) => {
+        currentPage = await session?.prepareCase(item.case_id, { isolationScope: "case" }) as unknown as typeof currentPage;
+        assert.deepEqual(currentPage?.state, {});
+        currentPage!.state.case_id = item.case_id;
+      },
+      executeAction: async (action) => {
+        const index = caseIds.findIndex((caseId) => action.action_id.startsWith(caseId));
+        const outcome = outcomes[index]!;
+        currentPage!.state.outcome = outcome;
+        return {
+          action_id: action.action_id,
+          started_at: new Date().toISOString(),
+          finished_at: new Date().toISOString(),
+          status: outcome,
+          attachments: [],
+          ...(outcome === "failed" ? { error: { type: "business_assertion_failed", message: "declared failure" } } : { actual: { isolated: true } }),
+        };
+      },
+    });
     await session?.close();
     assert.deepEqual(contextStates.map((state) => state.outcome), outcomes);
     assert.equal(new Set((session?.contextRecords() ?? []).map(({ context_id }) => context_id)).size, 3);
+    assert.deepEqual(result.cases.map(({ case_id, case_status }) => ({ case_id, case_status })), caseIds.map((caseId, index) => ({
+      case_id: caseId,
+      case_status: outcomes[index] === "passed" ? "通过" : "不通过",
+    })));
+    assert.deepEqual(observed, caseIds.flatMap((caseId) => [`started:${caseId}`, `completed:${caseId}`]));
+    if (caseIds.includes("LOGIN-MINI-003")) {
+      assert.equal(result.cases.find(({ case_id }) => case_id === "LOGIN-MINI-002")?.case_status, "不通过");
+      assert.equal(result.cases.find(({ case_id }) => case_id === "LOGIN-MINI-003")?.case_status, "通过");
+      assert.equal(observed.includes("started:LOGIN-MINI-003"), true);
+    }
   });
+}
+
+function orderedWebManifest(caseIds: readonly string[]): RunManifest {
+  return {
+    protocol_version: "1.0.0",
+    manifest_id: "ordered-browser-cases",
+    runner: { version: "1.0.0" },
+    source: { path: "report.json", sha256: "a".repeat(64) },
+    cases: caseIds.map((caseId) => ({
+      case_id: caseId,
+      isolation_scope: "case",
+      flow_group: null,
+      original: {
+        "用例 ID": caseId, "所属模块": "browser", "用例标题": caseId,
+        "验证功能点": "context isolation", "前置条件": "clean context", "测试步骤": "assert",
+        "预期结果": "declared outcome", "优先级": "P0", "执行结果": "", "备注": "",
+      },
+      steps: [{ type: "web.assert", action_id: `${caseId}-assert`, target_alias: "web", assertion: "url=https://example.test/", risk: "R0" }],
+    })),
+  };
 }
 
 test("suite and external-existing context reuse require explicit approval", async () => {

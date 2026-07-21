@@ -18,6 +18,7 @@ import { createExecutionContext, type CreateExecutionContextInput } from "../run
 import {
   applyBrowserContextCleanupFailures,
   openBrowserSession,
+  type BrowserContextRecord,
   type BrowserSessionOptions,
   type BrowserVisibility,
 } from "../runtime/browser-session.js";
@@ -316,6 +317,47 @@ async function persistBlockedResult(
   return result;
 }
 
+export async function persistManualRequiredResult(input: {
+  outputDir: string;
+  manifest: RunManifest;
+  reason: string;
+  finalizeTraces?: () => Promise<string[]>;
+  contextRecords?: () => BrowserContextRecord[];
+}): Promise<RunResult> {
+  let result = validateDocument<RunResult>("run-result", blockedResult(input.manifest, "manual_required", input.reason));
+  if (input.finalizeTraces) {
+    try {
+      result = validateDocument<RunResult>("run-result", await finalizeResultForReporting({
+        result,
+        manifest: input.manifest,
+        outputDir: input.outputDir,
+        finalizeTraces: input.finalizeTraces,
+      }));
+    } catch {
+      // Trace evidence is optional during a manual handoff; the authoritative
+      // blocked result already exists and must still be persisted.
+    }
+  }
+  if (input.contextRecords) {
+    try {
+      await writeJson(path.join(input.outputDir, "browser-contexts.json"), input.contextRecords());
+    } catch {
+      // Continue independently with the authoritative result and reports.
+    }
+  }
+  try {
+    await writeJson(path.join(input.outputDir, "run-result.json"), result);
+  } catch {
+    // Report generation below is an independent best-effort attempt.
+  }
+  try {
+    await writeReports(input.outputDir, input.manifest, result);
+  } catch {
+    // JSON artifacts remain authoritative when presentation rendering fails.
+  }
+  return result;
+}
+
 export async function runRunCommand(options: RunCommandOptions): Promise<number> {
   const mode = options.mode ?? "interactive";
   await mkdir(options.outputDir, { recursive: true });
@@ -429,13 +471,15 @@ export async function runRunCommand(options: RunCommandOptions): Promise<number>
     return exitCodeForRunResult(result);
   } catch (error) {
     if (error instanceof Error && error.name === "ManualCredentialRequiredError") {
-      const result = await persistBlockedResult(
-        options.outputDir,
+      const result = await persistManualRequiredResult({
+        outputDir: options.outputDir,
         manifest,
-        "manual_required",
-        error.message,
-        browserSession?.finalizeTraces,
-      );
+        reason: error.message,
+        ...(browserSession ? {
+          finalizeTraces: browserSession.finalizeTraces,
+          contextRecords: browserSession.contextRecords,
+        } : {}),
+      });
       authoritativeResult = result;
       return exitCodeForRunResult(result);
     }

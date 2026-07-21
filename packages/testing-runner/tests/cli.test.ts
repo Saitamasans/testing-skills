@@ -7,7 +7,7 @@ import test from "node:test";
 
 import { TEN_COLUMNS } from "../src/input/detect-input.js";
 import { normalizeRunCliOptions, runCli } from "../src/cli.js";
-import { resolveSmokeNetworkOrigin } from "../src/commands/run.js";
+import { persistManualRequiredResult, resolveSmokeNetworkOrigin } from "../src/commands/run.js";
 import { createApproval } from "../src/security/approval.js";
 import type { ExecutionProfile, ManifestAction, RunManifest, RunManifestCase, RunResult } from "../src/types.js";
 import { startDemoApp } from "./fixtures/demo-app.js";
@@ -324,4 +324,42 @@ test("run command returns blocked exit code and writes an audit result when CI s
   } finally {
     await app.close();
   }
+});
+
+test("manual-required persistence keeps authoritative JSON artifacts when Trace finalization fails", async () => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), "runner-manual-trace-failure-"));
+  const sourcePath = path.join(directory, "report.json");
+  const sourceJson = `${JSON.stringify(reportFor("MANUAL-001", "manual handoff"), null, 2)}\n`;
+  await writeFile(sourcePath, sourceJson, "utf8");
+  const runManifest = manifest({
+    sourcePath,
+    sourceHash: sha256(sourceJson),
+    origin: "https://example.test",
+    caseId: "MANUAL-001",
+    title: "manual handoff",
+    actions: [{ type: "web.assert", action_id: "MANUAL-001-assert", target_alias: "web", assertion: "url=https://example.test/", risk: "R0" }],
+  });
+  const contextRecords = [{
+    case_id: "MANUAL-001",
+    browser_id: "browser-1",
+    context_id: "context-1",
+    context_created_at: "2026-07-21T00:00:00.000Z",
+    context_closed_at: null,
+    context_close_status: "open" as const,
+    context_reused: false,
+    isolation_scope: "case" as const,
+    flow_group: null,
+  }];
+
+  const result = await persistManualRequiredResult({
+    outputDir: directory,
+    manifest: runManifest,
+    reason: "manual credential handoff required",
+    finalizeTraces: async () => { throw new Error("trace-finalize-failed"); },
+    contextRecords: () => contextRecords,
+  });
+
+  assert.equal(result.run_status, "manual_required");
+  assert.equal((await readJson<RunResult>(path.join(directory, "run-result.json"))).run_status, "manual_required");
+  assert.deepEqual(await readJson(path.join(directory, "browser-contexts.json")), contextRecords);
 });

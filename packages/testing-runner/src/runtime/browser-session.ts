@@ -313,6 +313,7 @@ export async function openBrowserSession(
       currentFlowGroup = flowGroup;
       tracePromise = undefined;
       session.page = page;
+      progressController?.setPage(page);
       contextRecords.push({ case_id: caseId, browser_id: browserId, context_id: activeContextId, context_created_at: activeContextCreatedAt, context_closed_at: null, context_close_status: "open", context_reused: false, isolation_scope: isolationScope, flow_group: flowGroup });
       return page;
     },
