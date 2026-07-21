@@ -306,6 +306,77 @@ class CompleteInstallerTest(unittest.TestCase):
     def tearDown(self):
         self.temp.cleanup()
 
+    def run_progress_harness(self, body):
+        script = self.root / "progress-harness.ps1"
+        script.write_text(
+            ". '" + str(INSTALLER).replace("'", "''") + "'\n"
+            + body,
+            encoding="utf-8-sig",
+        )
+        return subprocess.run(
+            [str(POWERSHELL), "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", str(script)],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            check=False,
+        )
+
+    def test_interactive_progress_refreshes_in_place_and_finishes_with_newline(self):
+        diagnostics = self.root / "interactive-progress.log"
+        result = self.run_progress_harness(
+            "function Test-InteractiveConsole { return $true }\n"
+            f"Start-DownloadProgress -Artifact 'bundle.zip' -DiagnosticsPath '{diagnostics}'\n"
+            "Write-DownloadProgress -Artifact 'bundle.zip' -Total 10000 -Downloaded 1000 -StartedAt ([DateTime]::UtcNow.ToFileTimeUtc()) -RetryCount 0 -ResumeOffset 0\n"
+            "$script:DownloadProgressState.LastOutputAt = [DateTime]::UtcNow.AddMilliseconds(-250)\n"
+            "Write-DownloadProgress -Artifact 'bundle.zip' -Total 10000 -Downloaded 1005 -StartedAt ([DateTime]::UtcNow.ToFileTimeUtc()) -RetryCount 0 -ResumeOffset 0\n"
+            "$script:DownloadProgressState.LastOutputAt = [DateTime]::UtcNow.AddMilliseconds(-250)\n"
+            "Write-DownloadProgress -Artifact 'bundle.zip' -Total 10000 -Downloaded 1020 -StartedAt ([DateTime]::UtcNow.ToFileTimeUtc()) -RetryCount 0 -ResumeOffset 0\n"
+            "Write-DownloadProgress -Artifact 'bundle.zip' -Total 10000 -Downloaded 10000 -StartedAt ([DateTime]::UtcNow.ToFileTimeUtc()) -RetryCount 0 -ResumeOffset 0\n"
+        )
+        self.assertEqual(0, result.returncode, result.stderr.decode(errors="replace"))
+        self.assertGreaterEqual(result.stdout.count(b"\r"), 3, result.stdout)
+        self.assertNotIn(b"10.1%", result.stdout)
+        self.assertRegex(result.stdout, rb"\r[^\n]*100%[^\n]*\n$")
+
+    def test_noninteractive_progress_is_sparse_but_diagnostics_are_complete(self):
+        diagnostics = self.root / "noninteractive-progress.log"
+        calls = "\n".join(
+            f"Write-DownloadProgress -Artifact 'bundle.zip' -Total 10000 -Downloaded {value} -StartedAt ([DateTime]::UtcNow.ToFileTimeUtc()) -RetryCount 0 -ResumeOffset 0"
+            for value in (100, 200, 300, 400, 500, 600)
+        )
+        result = self.run_progress_harness(
+            "function Test-InteractiveConsole { return $false }\n"
+            f"Start-DownloadProgress -Artifact 'bundle.zip' -DiagnosticsPath '{diagnostics}'\n"
+            + calls + "\n"
+            "$script:DownloadProgressState.LastOutputAt = [DateTime]::UtcNow.AddSeconds(-31)\n"
+            "Write-DownloadProgress -Artifact 'bundle.zip' -Total 10000 -Downloaded 650 -StartedAt ([DateTime]::UtcNow.ToFileTimeUtc()) -RetryCount 0 -ResumeOffset 0\n"
+        )
+        output = result.stdout.decode("utf-8", errors="replace")
+        self.assertEqual(0, result.returncode, result.stderr.decode(errors="replace"))
+        self.assertLessEqual(output.count("当前文件="), 3, output)
+        self.assertEqual(7, diagnostics.read_text(encoding="utf-8-sig").count("当前文件="))
+
+    def test_messages_errors_and_file_switch_end_the_dynamic_line(self):
+        diagnostics = self.root / "multi-progress.log"
+        result = self.run_progress_harness(
+            "function Test-InteractiveConsole { return $true }\n"
+            f"Start-DownloadProgress -Artifact 'a.zip' -DiagnosticsPath '{diagnostics}'\n"
+            "Write-DownloadProgress -Artifact 'a.zip' -Total 100 -Downloaded 10 -StartedAt ([DateTime]::UtcNow.ToFileTimeUtc()) -RetryCount 0 -ResumeOffset 0\n"
+            "Write-InstallerMessage 'RETRY'\n"
+            "Write-DownloadProgress -Artifact 'a.zip' -Total 100 -Downloaded 20 -StartedAt ([DateTime]::UtcNow.ToFileTimeUtc()) -RetryCount 1 -ResumeOffset 10\n"
+            "Write-InstallerError 'ERROR'\n"
+            f"Start-DownloadProgress -Artifact 'b.zip' -DiagnosticsPath '{diagnostics}'\n"
+            "Write-DownloadProgress -Artifact 'b.zip' -Total 100 -Downloaded 10 -StartedAt ([DateTime]::UtcNow.ToFileTimeUtc()) -RetryCount 0 -ResumeOffset 0\n"
+            "Write-InstallerMessage 'ORDINARY'\n"
+        )
+        output = result.stdout.decode("utf-8", errors="replace")
+        errors = result.stderr.decode("utf-8", errors="replace")
+        self.assertEqual(0, result.returncode, errors)
+        self.assertRegex(output, r"当前文件=a\.zip[^\n]*\nRETRY")
+        self.assertRegex(output, r"当前文件=b\.zip[^\n]*\nORDINARY")
+        self.assertIn("ERROR", errors)
+        self.assertIn("a.zip", diagnostics.read_text(encoding="utf-8-sig"))
+        self.assertIn("b.zip", diagnostics.read_text(encoding="utf-8-sig"))
+
     def installer_command(self, server, *extra, state_root=None, architecture="x64"):
         selected_state_root = state_root or self.state_root
         return [
@@ -839,7 +910,7 @@ class CompleteInstallerTest(unittest.TestCase):
         first_command = (
             f". '{escaped}'; $lock=Enter-InstallerLock -InstallRoot '{normal}' -SkillName '{SKILL}'; "
             f"Set-Content -LiteralPath '{str(ready).replace("'", "''")}' -Value ready; "
-            "Start-Sleep -Milliseconds 1800; $lock.ReleaseMutex(); $lock.Dispose(); exit 0"
+            "Start-Sleep -Milliseconds 6000; $lock.ReleaseMutex(); $lock.Dispose(); exit 0"
         )
         first = subprocess.Popen(
             [str(POWERSHELL), "-NoProfile", "-Command", first_command],
@@ -948,7 +1019,7 @@ class CompleteInstallerStaticTest(unittest.TestCase):
             self.assertIn(phrase, text)
         self.assertIn("$defaultProxy = [Net.WebRequest]::DefaultWebProxy", text)
         self.assertIn("if ($defaultProxy)", text)
-        self.assertEqual(1, text.count(f'Write-Output "{SUCCESS}"'))
+        self.assertEqual(1, text.count(f'Write-InstallerMessage "{SUCCESS}"'))
 
     def test_installer_has_no_path_based_tool_invocation(self):
         text = INSTALLER.read_text(encoding="utf-8-sig")
