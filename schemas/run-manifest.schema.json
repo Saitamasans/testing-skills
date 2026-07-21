@@ -259,8 +259,10 @@
     "discoveryReceiptReference": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["case_id", "page_state_id", "discovery_id", "receipt_path", "receipt_sha256"],
+      "required": ["discovery_task_id", "source_case_id", "case_id", "page_state_id", "discovery_id", "receipt_path", "receipt_sha256"],
       "properties": {
+        "discovery_task_id": { "allOf": [{ "$ref": "#/$defs/nonSecretText" }, { "type": "string", "minLength": 1 }] },
+        "source_case_id": { "allOf": [{ "$ref": "#/$defs/nonSecretText" }, { "type": "string", "minLength": 1 }] },
         "case_id": { "allOf": [{ "$ref": "#/$defs/nonSecretText" }, { "type": "string", "minLength": 1 }] },
         "page_state_id": { "allOf": [{ "$ref": "#/$defs/nonSecretText" }, { "type": "string", "minLength": 1 }] },
         "discovery_id": { "allOf": [{ "$ref": "#/$defs/nonSecretText" }, { "type": "string", "minLength": 1 }] },

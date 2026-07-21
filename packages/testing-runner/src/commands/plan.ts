@@ -31,8 +31,10 @@ export interface PlanCommandOptions {
   legacyInput?: boolean;
   discoveryReceipts?: string[];
   discoveryApproval?: string;
+  discoveryApprovals?: string[];
   runtimeSession?: ActiveRuntimeSession;
   livePage?: Page;
+  livePages?: Page[];
   now?: Date;
   clock?: () => Date;
 }
@@ -110,7 +112,9 @@ async function runPackagePlan(options: PlanCommandOptions, profile: ExecutionPro
     contractCases: loaded.contract.cases,
     profile,
     ...(options.discoveryApproval ? { approvalPath: options.discoveryApproval } : {}),
+    ...(options.discoveryApprovals ? { approvalPaths: options.discoveryApprovals } : {}),
     ...(options.livePage ? { livePage: options.livePage } : {}),
+    ...(options.livePages ? { livePages: options.livePages } : {}),
     ...(options.now ? { now: options.now } : {}),
     ...(options.clock ? { clock: options.clock } : {}),
   });

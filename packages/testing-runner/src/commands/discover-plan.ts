@@ -1,10 +1,14 @@
+import { writeFile } from "node:fs/promises";
+import path from "node:path";
+
 import { chromium } from "playwright";
-import type { Page } from "playwright";
+import type { Browser, BrowserContext, Page } from "playwright";
 
 import { executeAction } from "../actions/action-registry.js";
 import { readExecutionPackage } from "../input/execution-package.js";
 import { createExecutionContext } from "../runtime/execution-context.js";
 import { resolveCredentials } from "../security/credential-resolver.js";
+import { planDiscoveryTasks, transitionActions, type DiscoveryTask } from "../discovery/discovery-task.js";
 import {
   createActiveRuntimeSession,
   discoverAndIssueReceipt,
@@ -17,108 +21,105 @@ export interface DiscoverPlanCommandOptions {
   input: string;
   profile: string;
   outputDir: string;
-  discoveryApproval: string;
-  transitionCaseId: string;
+  discoveryApproval: string | string[];
+  transitionCaseId?: string;
   browser?: "visible" | "headless";
   now?: Date;
   clock?: () => Date;
-  afterReceiptIssued?: (page: Page) => Promise<void>;
+  afterReceiptIssued?: (page: Page, task?: DiscoveryTask) => Promise<void>;
+  launchBrowser?: (options: { headless: boolean }) => Promise<Browser>;
 }
 
-function targetState(contractCase: Awaited<ReturnType<typeof readExecutionPackage>>["contract"]["cases"][number]): string {
-  const browserState = contractCase.effects.browser_state;
-  const value = browserState && typeof browserState === "object" && "target_state" in browserState
-    ? (browserState as { target_state?: unknown }).target_state
-    : undefined;
-  if (typeof value !== "string" || value.length === 0) throw new Error("transition_case_target_state_required");
-  return value;
+export interface DiscoverPlanCommandResult extends PlanCommandResult {
+  discovery_tasks: DiscoveryTask[];
 }
 
-function transitionActions(actions: ManifestAction[]): ManifestAction[] {
-  return actions.filter((action) => !action.type.endsWith(".assert") && !action.type.startsWith("cleanup.") && action.type !== "execution.blocked");
-}
-
-export async function runDiscoverPlanCommand(options: DiscoverPlanCommandOptions): Promise<PlanCommandResult> {
+export async function runDiscoverPlanCommand(options: DiscoverPlanCommandOptions): Promise<DiscoverPlanCommandResult> {
   if (!options.input.toLowerCase().endsWith(".execution-package.zip")) {
     throw new Error("discover_plan_execution_package_required");
   }
   const clock = options.clock ?? (options.now ? () => options.now! : () => new Date());
   const loaded = await readExecutionPackage(options.input);
   const profile = await readProfile(options.profile);
-  const targetStateCases = loaded.contract.cases.filter((item) => {
-    const browserState = item.effects.browser_state;
-    return Boolean(browserState && typeof browserState === "object" && "target_state" in browserState);
-  });
-  if (targetStateCases.length !== 1 || targetStateCases[0]?.case_id !== options.transitionCaseId) {
-    throw new Error("discover_plan_requires_exactly_one_matching_target_state_case");
+  const tasks = planDiscoveryTasks({ contractCases: loaded.contract.cases, profile, packageSha256: loaded.package_sha256 });
+  if (tasks.length === 0) throw new Error("transition_case_target_state_required");
+  if (options.transitionCaseId && (tasks.length !== 1 || tasks[0]?.transition_case_id !== options.transitionCaseId)) {
+    throw new Error("transition_case_id_only_supported_for_single_discovery_task");
   }
-  const contractCase = loaded.contract.cases.find(({ case_id }) => case_id === options.transitionCaseId);
-  if (!contractCase) throw new Error("transition_case_not_found");
-  const actions = transitionActions(profile.case_plans?.[options.transitionCaseId] ?? []);
-  if (actions.length === 0 || actions.some((action) => !action.type.startsWith("web."))) {
-    throw new Error("transition_discovery_execution_unsupported: only Runner web transition actions are allowed");
-  }
-  const gotoAction = actions.find((action) => action.type === "web.goto");
-  if (!gotoAction || gotoAction.type !== "web.goto") throw new Error("transition_discovery_goto_required");
-  const aliases = [...new Set(actions.map(({ target_alias }) => target_alias))];
-  if (aliases.length !== 1) throw new Error("transition_target_origin_ambiguous");
-  const target = profile.targets[aliases[0]!];
-  if (!target || target.kind !== "web") throw new Error("transition_target_web_origin_required");
-  const targetOrigin = new URL(target.origin).origin;
-  if (new URL(gotoAction.url).origin !== targetOrigin) throw new Error("transition_requested_url_origin_mismatch");
+  const approvals = Array.isArray(options.discoveryApproval) ? options.discoveryApproval : [options.discoveryApproval];
+  if (approvals.length !== tasks.length) throw new Error(`discovery_approval_count_mismatch: required=${tasks.length}:received=${approvals.length}`);
 
   const session = await createActiveRuntimeSession(options.outputDir, clock());
-  const approvalInput = {
-    session,
-    approvalPath: options.discoveryApproval,
-    packageSha256: loaded.package_sha256,
-    sourceCaseIds: loaded.contract.cases.map(({ source_case_id }) => source_case_id),
-    transitionCaseId: contractCase.case_id,
-    transitionActions: actions,
-    targetOrigin,
-    requestedUrl: gotoAction.url,
-    pageStateId: targetState(contractCase),
-  };
-  await validateDiscoveryApprovalForTransition({ ...approvalInput, now: clock() });
-  const browser = await chromium.launch({ headless: options.browser !== "visible" });
+  await writeFile(path.join(session.runRoot, "discovery-tasks.json"), `${JSON.stringify({ discovery_tasks: tasks }, null, 2)}\n`, "utf8");
+  const launchBrowser = options.launchBrowser ?? ((launchOptions: { headless: boolean }) => chromium.launch(launchOptions));
+  const browser = await launchBrowser({ headless: options.browser !== "visible" });
+  const contexts: BrowserContext[] = [];
+  const pages: Page[] = [];
+  const receiptPaths: string[] = [];
   try {
-    const page = await browser.newPage({ viewport: { width: 1920, height: 1080 } });
     const secrets = resolveCredentials(Object.entries(profile.credentials).map(([alias, ref]) => ({
       alias,
       source: "configured_env" as const,
       name: ref.name,
     })), process.env, { now: clock() });
-    const context = createExecutionContext({
-      targets: profile.targets,
-      approvedOrigins: [targetOrigin],
-      data: profile.data ?? {},
-      secrets,
-      page,
-      mode: "interactive",
-    });
-    for (const action of actions) {
-      const outcome = await executeAction(action, context);
-      if (outcome.status !== "passed") {
-        throw new Error(`transition_action_failed: ${action.action_id}:${outcome.status}:${outcome.error?.type ?? "unknown"}`);
+    for (const [index, task] of tasks.entries()) {
+      const actions = transitionActions(profile.case_plans?.[task.transition_case_id] ?? []);
+      const approvalInput = {
+        session,
+        approvalPath: approvals[index]!,
+        packageSha256: loaded.package_sha256,
+        sourceCaseIds: loaded.contract.cases.map(({ source_case_id }) => source_case_id),
+        sourceCaseId: task.source_case_id,
+        discoveryTaskId: task.discovery_task_id,
+        transitionCaseId: task.transition_case_id,
+        transitionActions: actions,
+        targetOrigin: task.origin,
+        requestedUrl: task.requested_url,
+        pageStateId: task.target_state,
+        isolationScope: task.isolation_scope,
+        requiredAuthProfile: task.required_auth_profile,
+      };
+      try {
+        await validateDiscoveryApprovalForTransition({ ...approvalInput, now: clock() });
+        const browserContext = await browser.newContext({ viewport: { width: 1920, height: 1080 } });
+        contexts.push(browserContext);
+        const page = await browserContext.newPage();
+        pages.push(page);
+        const context = createExecutionContext({
+          targets: profile.targets,
+          approvedOrigins: [task.origin],
+          data: profile.data ?? {},
+          secrets,
+          page,
+          mode: "interactive",
+        });
+        for (const action of actions) {
+          const outcome = await executeAction(action, context);
+          if (outcome.status !== "passed") {
+            throw new Error(`transition_action_failed: ${action.action_id}:${outcome.status}:${outcome.error?.type ?? "unknown"}`);
+          }
+        }
+        const issued = await discoverAndIssueReceipt({ ...approvalInput, page, clock });
+        receiptPaths.push(issued.receiptPath);
+        await options.afterReceiptIssued?.(page, task);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        throw new Error(`discovery_task_failed:${task.discovery_task_id}:${task.source_case_id}:${message}`);
       }
     }
-    const issued = await discoverAndIssueReceipt({
-      ...approvalInput,
-      page,
-      clock,
-    });
-    await options.afterReceiptIssued?.(page);
-    return await runPlanCommand({
+    const result = await runPlanCommand({
       input: options.input,
       profile: options.profile,
       outputDir: session.runRoot,
-      discoveryReceipts: [issued.receiptPath],
-      discoveryApproval: options.discoveryApproval,
+      discoveryReceipts: receiptPaths,
+      discoveryApprovals: approvals,
       runtimeSession: session,
-      livePage: page,
+      livePages: pages,
       clock,
     });
+    return { ...result, discovery_tasks: tasks };
   } finally {
+    await Promise.allSettled(contexts.map((context) => context.close()));
     await browser.close();
   }
 }

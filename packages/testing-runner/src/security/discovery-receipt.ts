@@ -6,6 +6,7 @@ import type { ContractCase } from "@saitamasans/testing-contract-compiler";
 import type { Page } from "playwright";
 
 import { canonicalize, sha256Canonical } from "../compiler/canonical-json.js";
+import { discoveryTaskId, planDiscoveryTasks, transitionActions, type DiscoveryTask } from "../discovery/discovery-task.js";
 import { discoverCurrentPage } from "../locator/page-discovery.js";
 import { validateDocument } from "../schema-registry.js";
 import type { DiscoveryReceiptReference, ExecutionProfile, ManifestAction } from "../types.js";
@@ -78,6 +79,8 @@ export interface DiscoveryReceipt {
   expires_at: string;
   source_package_sha256: string;
   source_case_ids: string[];
+  discovery_task_id: string;
+  source_case_id: string;
   transition_case_id: string;
   transition_actions_sha256: string;
   approval_reference: string;
@@ -98,11 +101,15 @@ export interface DiscoverAndIssueReceiptInput {
   page: Page;
   packageSha256: string;
   sourceCaseIds: string[];
+  sourceCaseId?: string;
+  discoveryTaskId?: string;
   transitionCaseId: string;
   transitionActions: ManifestAction[];
   targetOrigin: string;
   requestedUrl: string;
   pageStateId: string;
+  isolationScope?: ContractCase["isolation_scope"];
+  requiredAuthProfile?: string | null;
   approvalPath: string;
   now?: Date;
   clock?: () => Date;
@@ -117,7 +124,9 @@ export interface VerifyDiscoveryReceiptsInput {
   contractCases: ContractCase[];
   profile: ExecutionProfile;
   approvalPath?: string;
+  approvalPaths?: string[];
   livePage?: Page;
+  livePages?: Page[];
   now?: Date;
   clock?: () => Date;
 }
@@ -300,17 +309,6 @@ function parseObject(bytes: Buffer, label: string): Record<string, unknown> {
   }
 }
 
-function transitionActions(actions: ManifestAction[]): ManifestAction[] {
-  return actions.filter((action) => !action.type.endsWith(".assert") && !action.type.startsWith("cleanup.") && action.type !== "execution.blocked");
-}
-
-function targetState(item: ContractCase): string | null {
-  const browserState = item.effects.browser_state;
-  if (!browserState || typeof browserState !== "object" || !("target_state" in browserState)) return null;
-  const state = (browserState as { target_state?: unknown }).target_state;
-  return typeof state === "string" && state.length > 0 ? state : null;
-}
-
 function expectedWebBinding(profile: ExecutionProfile, actions: ManifestAction[]): { origin: string; requestedUrl: string } {
   const webActions = actions.filter((action) => action.type.startsWith("web."));
   const aliases = [...new Set(webActions.map(({ target_alias }) => target_alias))];
@@ -355,11 +353,15 @@ export interface ValidateDiscoveryApprovalInput {
   approvalPath: string;
   packageSha256: string;
   sourceCaseIds: string[];
+  sourceCaseId?: string;
+  discoveryTaskId?: string;
   transitionCaseId: string;
   transitionActions: ManifestAction[];
   targetOrigin: string;
   requestedUrl: string;
   pageStateId: string;
+  isolationScope?: ContractCase["isolation_scope"];
+  requiredAuthProfile?: string | null;
   now?: Date;
 }
 
@@ -403,6 +405,15 @@ export async function discoverAndIssueReceipt(input: DiscoverAndIssueReceiptInpu
     page_state_id: input.pageStateId,
   }, now);
   requireApprovedTransitionRisks(approval.approval, input.transitionActions);
+  const sourceCaseId = input.sourceCaseId ?? input.transitionCaseId;
+  const taskId = input.discoveryTaskId ?? discoveryTaskId({
+    packageSha256: input.packageSha256,
+    targetState: input.pageStateId,
+    transitionActionsSha256: sha256Canonical(input.transitionActions),
+    origin,
+    isolationScope: input.isolationScope ?? "case",
+    requiredAuthProfile: input.requiredAuthProfile ?? null,
+  });
 
   const discovery = await discoverCurrentPage(input.page, { now });
   if (discovery.discovered_at !== now.toISOString()) invalid("discovery_not_current");
@@ -433,6 +444,8 @@ export async function discoverAndIssueReceipt(input: DiscoverAndIssueReceiptInpu
     expires_at: input.session.expiresAt,
     source_package_sha256: input.packageSha256,
     source_case_ids: [...input.sourceCaseIds],
+    discovery_task_id: taskId,
+    source_case_id: sourceCaseId,
     transition_case_id: input.transitionCaseId,
     transition_actions_sha256: sha256Canonical(input.transitionActions),
     approval_reference: approval.approval.approval_id,
@@ -457,7 +470,7 @@ export async function discoverAndIssueReceipt(input: DiscoverAndIssueReceiptInpu
   return { receiptPath, artifactPath, receipt };
 }
 
-async function verifyOneReceipt(input: VerifyDiscoveryReceiptsInput, receiptPath: string, contractCase: ContractCase, clock: () => Date): Promise<DiscoveryReceiptReference> {
+async function verifyOneReceipt(input: VerifyDiscoveryReceiptsInput, receiptPath: string, task: DiscoveryTask, approvalPath: string, livePage: Page | undefined, clock: () => Date): Promise<DiscoveryReceiptReference> {
   const now = clock();
   const session = input.session!;
   const sessionState = stateFor(session, now);
@@ -476,22 +489,23 @@ async function verifyOneReceipt(input: VerifyDiscoveryReceiptsInput, receiptPath
   const generatedAt = requireDate(receipt.generated_at, "generated_at");
   if (now.getTime() - generatedAt.getTime() > DISCOVERY_SESSION_MAX_AGE_MS || now > new Date(receipt.expires_at)) invalid("expired");
 
-  const pageStateId = targetState(contractCase);
-  if (!pageStateId || receipt.transition_case_id !== contractCase.case_id || receipt.page_state_id !== pageStateId) invalid("page_state_mismatch");
   if (receipt.source_package_sha256 !== input.packageSha256) invalid("package_mismatch");
   if (JSON.stringify(receipt.source_case_ids) !== JSON.stringify(input.sourceCaseIds)) invalid("source_cases_mismatch");
-  const actions = transitionActions(input.profile.case_plans?.[contractCase.case_id] ?? []);
-  if (receipt.transition_actions_sha256 !== sha256Canonical(actions)) invalid("actions_mismatch");
+  const actions = transitionActions(input.profile.case_plans?.[task.transition_case_id] ?? []);
+  if (receipt.transition_actions_sha256 !== task.transition_actions_sha256 || receipt.transition_actions_sha256 !== sha256Canonical(actions)) invalid("actions_mismatch");
+  if (receipt.discovery_task_id !== task.discovery_task_id) invalid("discovery_task_mismatch");
+  if (receipt.source_case_id !== task.source_case_id) invalid("source_case_mismatch");
+  if (receipt.transition_case_id !== task.transition_case_id || receipt.page_state_id !== task.target_state) invalid("page_state_mismatch");
   const binding = expectedWebBinding(input.profile, actions);
-  if (receipt.target_origin !== binding.origin || receipt.requested_url !== binding.requestedUrl) invalid("origin_or_request_mismatch");
-  const approval = await readApproval(session, input.approvalPath ?? "", {
+  if (receipt.target_origin !== task.origin || receipt.requested_url !== task.requested_url || receipt.target_origin !== binding.origin || receipt.requested_url !== binding.requestedUrl) invalid("origin_or_request_mismatch");
+  const approval = await readApproval(session, approvalPath, {
     source_package_sha256: input.packageSha256,
     source_case_ids: input.sourceCaseIds,
-    transition_case_id: contractCase.case_id,
+    transition_case_id: task.transition_case_id,
     transition_actions_sha256: sha256Canonical(actions),
     target_origin: binding.origin,
     requested_url: binding.requestedUrl,
-    page_state_id: pageStateId,
+    page_state_id: task.target_state,
   }, now);
   requireApprovedTransitionRisks(approval.approval, actions);
   if (receipt.approval_reference !== approval.approval.approval_id || receipt.approval_sha256 !== approval.sha256) invalid("approval_binding_mismatch");
@@ -503,23 +517,34 @@ async function verifyOneReceipt(input: VerifyDiscoveryReceiptsInput, receiptPath
   if (discovery.url !== receipt.final_url || discovery.dom_sha256 !== receipt.dom_sha256 || discovery.accessibility_sha256 !== receipt.accessibility_sha256) invalid("page_fingerprint_mismatch");
   if (sha256Canonical({ dom_sha256: discovery.dom_sha256, accessibility_sha256: discovery.accessibility_sha256 }) !== receipt.page_fingerprint_sha256) invalid("page_fingerprint_mismatch");
   if (createHash("sha256").update(artifactBytes).digest("hex") !== receipt.discovery_artifact_sha256) invalid("artifact_sha_mismatch");
-  if (input.livePage) {
-    const live = await discoverCurrentPage(input.livePage, { now: clock() });
+  if (livePage) {
+    const live = await discoverCurrentPage(livePage, { now: clock() });
     if (live.url !== receipt.final_url || live.dom_sha256 !== receipt.dom_sha256 || live.accessibility_sha256 !== receipt.accessibility_sha256) {
       invalid("live_page_fingerprint_mismatch");
     }
   }
   stateFor(session, clock());
-  return { case_id: contractCase.case_id, page_state_id: pageStateId, discovery_id: receipt.discovery_id, receipt_path: located.relative, receipt_sha256: receiptSha };
+  return { discovery_task_id: task.discovery_task_id, source_case_id: task.source_case_id, case_id: task.transition_case_id, page_state_id: task.target_state, discovery_id: receipt.discovery_id, receipt_path: located.relative, receipt_sha256: receiptSha };
 }
 
 export async function verifyDiscoveryReceipts(input: VerifyDiscoveryReceiptsInput): Promise<DiscoveryReceiptReference[]> {
-  const required = input.contractCases.filter((item) => targetState(item) !== null);
+  let required: DiscoveryTask[];
+  try {
+    required = planDiscoveryTasks({ contractCases: input.contractCases, profile: input.profile, packageSha256: input.packageSha256 });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (/origin/i.test(message)) invalid("origin_or_request_mismatch");
+    invalid("task_binding_invalid");
+  }
   if (required.length === 0) return [];
-  if (input.receiptPaths.length === 0) throw new Error(`target_state_not_discovered: ${required[0]!.case_id}:${targetState(required[0]!)}`);
+  if (input.receiptPaths.length === 0) throw new Error(`target_state_not_discovered: ${required[0]!.source_case_id}:${required[0]!.target_state}`);
   if (!input.session) throw new Error("runtime_session_required");
   const clock = clockFor(input);
   stateFor(input.session, clock());
   if (input.receiptPaths.length !== required.length) invalid("receipt_count_mismatch");
-  return Promise.all(required.map((item, index) => verifyOneReceipt(input, input.receiptPaths[index]!, item, clock)));
+  const approvals = input.approvalPaths ?? (input.approvalPath ? [input.approvalPath] : []);
+  if (approvals.length !== required.length) invalid("approval_count_mismatch");
+  const livePages = input.livePages ?? (input.livePage ? [input.livePage] : []);
+  if (livePages.length !== 0 && livePages.length !== required.length) invalid("live_page_count_mismatch");
+  return Promise.all(required.map((task, index) => verifyOneReceipt(input, input.receiptPaths[index]!, task, approvals[index]!, livePages[index], clock)));
 }

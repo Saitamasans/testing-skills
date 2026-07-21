@@ -96,6 +96,8 @@ async function issueLiveReceipt(
   now = RECEIPT_NOW,
 ) {
   const loaded = await loadExecutionPackage(f.package);
+  const contractCase = loaded.contract.cases[0]!;
+  const authProfileId = typeof contractCase.auth_profile.id === "string" ? contractCase.auth_profile.id : null;
   const session = await (discoveryReceiptRuntime as any).createActiveRuntimeSession(f.output, now);
   const approval = await writeDiscoveryApproval(f, loaded.package_sha256, transitionActions, {}, now);
   const issued = await (discoveryReceiptRuntime as any).discoverAndIssueReceipt({
@@ -103,6 +105,9 @@ async function issueLiveReceipt(
     page: fakeDiscoveryPage(),
     packageSha256: loaded.package_sha256,
     sourceCaseIds: ["LOGIN-001"],
+    sourceCaseId: contractCase.source_case_id,
+    isolationScope: contractCase.isolation_scope,
+    requiredAuthProfile: authProfileId,
     transitionCaseId: "LOGIN-001",
     transitionActions,
     targetOrigin: "https://example.test",
@@ -244,6 +249,8 @@ test("READY package enters package-first path and skips semantic compilation", a
   for (const field of ["package_validation_ms", "contract_loading_ms", "runtime_doctor_ms", "binding_ms", "transition_discovery_ms", "manifest_assembly_ms"]) assert.equal(typeof metadata.timings[field], "number", field);
   for (const field of ["web_discovery_ms", "approval_wait_ms", "execution_ms", "report_ms"]) assert.equal(metadata.timings[field], null, field);
   assert.deepEqual(result.manifest.discovery_receipts, [{
+    discovery_task_id: issued.receipt.discovery_task_id,
+    source_case_id: "LOGIN-001",
     case_id: "LOGIN-001",
     page_state_id: "workspace",
     discovery_id: issued.receipt.discovery_id,
@@ -500,7 +507,7 @@ test("Testing Runtime issues a cryptographically random current-session discover
     "receipt_schema_version", "run_nonce", "discovery_id", "generated_by", "runtime_version", "runner_version",
     "target_origin", "requested_url", "final_url", "page_state_id", "dom_sha256", "accessibility_sha256",
     "page_fingerprint_sha256", "discovery_artifact_sha256", "generated_at", "source_package_sha256",
-    "source_case_ids", "transition_case_id", "transition_actions_sha256", "approval_reference",
+    "source_case_ids", "discovery_task_id", "source_case_id", "transition_case_id", "transition_actions_sha256", "approval_reference",
   ]) assert.equal(Object.hasOwn(receipt, field), true, field);
   assert.match(receipt.run_nonce, /^[a-f0-9]{64}$/);
   assert.equal(receipt.generated_by, "@saitamasans/testing-runtime");

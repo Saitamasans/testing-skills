@@ -93,19 +93,19 @@ export async function runCli(argv = process.argv): Promise<void> {
     });
 
   program.command("discover-plan")
-    .description("Discover a target page and plan with one live RuntimeSession capability")
+    .description("Discover all required target states and plan with one live RuntimeSession capability")
     .requiredOption("--input <file>")
     .requiredOption("--profile <file>")
     .requiredOption("--output-dir <dir>")
-    .requiredOption("--discovery-approval <file>")
-    .requiredOption("--transition-case-id <case-id>")
+    .requiredOption("--discovery-approval <file>", "validated target-state discovery approval artifact; repeat for multiple tasks", collect, [] as string[])
+    .option("--transition-case-id <case-id>", "legacy single-task compatibility selector")
     .option("--browser <visibility>", "visible or headless", "headless")
     .action(async (options: {
       input: string;
       profile: string;
       outputDir: string;
-      discoveryApproval: string;
-      transitionCaseId: string;
+      discoveryApproval: string[];
+      transitionCaseId?: string;
       browser: string;
     }) => {
       if (options.browser !== "visible" && options.browser !== "headless") {

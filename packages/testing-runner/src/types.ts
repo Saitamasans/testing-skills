@@ -328,6 +328,8 @@ export interface RunManifestCase {
 }
 
 export interface DiscoveryReceiptReference {
+  discovery_task_id: string;
+  source_case_id: string;
   case_id: string;
   page_state_id: string;
   discovery_id: string;
