@@ -3,6 +3,8 @@ import path from "node:path";
 
 import type { ContractFieldStatus } from "../types.js";
 import type { AssertionResult, EvidenceReference, JsonValue, RunManifest, RunResult } from "../types.js";
+import { PhaseTimer, type MonotonicClock } from "./execution-timings.js";
+import type { ExecutionTimingStates, ExecutionTimings } from "../types.js";
 import { sha256Canonical } from "../compiler/canonical-json.js";
 import type { ActionOutcome } from "./execution-context.js";
 import { EventWriter } from "./event-writer.js";
@@ -66,6 +68,9 @@ export interface RunInput {
   beforeCase?(item: ManifestCase): void | Promise<void>;
   afterCase?(item: ManifestCase): void | Promise<void>;
   executeAction(action: RunManifest["cases"][number]["steps"][number], attempt: number): Promise<ActionOutcome>;
+  clock?: MonotonicClock;
+  initialTimings?: ExecutionTimings;
+  initialTimingStates?: ExecutionTimingStates;
 }
 
 const PASSED = "通过" as const;
@@ -212,6 +217,8 @@ export async function runApprovedManifest(input: RunInput): Promise<RunResult> {
   const manifest_hash = sha256Canonical(input.manifest);
   const case_total = input.manifest.cases.length;
   const startedAt = new Date().toISOString();
+  const phaseTimer = new PhaseTimer(input.clock, input.initialTimings, input.initialTimingStates);
+  phaseTimer.start("execution_ms");
   await mkdir(runDir, { recursive: true });
   const writer = new EventWriter(path.join(runDir, "run-events.jsonl"));
   const cases: RunResult["cases"] = [];
@@ -346,6 +353,9 @@ export async function runApprovedManifest(input: RunInput): Promise<RunResult> {
         await writer.appendEvent({ run_id, case_id: item.case_id, action_id: action.action_id, attempt, type: "action.started" });
         await input.observer?.actionStarted?.(actionEvent);
         const outcome = await input.executeAction(action, attempt);
+        if (phaseTimer.elapsed("execution_ms") > 30_000) {
+          await writer.appendEvent({ run_id, case_id: item.case_id, attempt, type: "phase.progress", data: phaseTimer.progress("execution_ms", cases.length / Math.max(1, case_total), "execute next action") });
+        }
         if (fieldStatus && item.execution_contract) recordContractActionOutcome(item.execution_contract, action, outcome, fieldStatus, observedContractStatus);
         evidence.push(...await storeOutcomeAttachments(runDir, item.case_id, attempt, outcome));
         if (outcome.status === "passed") {
@@ -482,8 +492,14 @@ export async function runApprovedManifest(input: RunInput): Promise<RunResult> {
     run_status: runStatus,
     started_at: startedAt,
     completed_at: new Date().toISOString(),
+    timings: phaseTimer.timings,
+    timing_states: phaseTimer.states,
     cases,
   };
+  phaseTimer.finish("execution_ms");
+  result.timings = phaseTimer.timings;
+  result.timing_states = phaseTimer.states;
+  await writer.appendEvent({ run_id, attempt: 0, type: "phase.completed", data: { phase: "execution", duration_ms: result.timings.execution_ms, state: result.timing_states.execution_ms } });
   if (defects.size > 0) {
     result.defects = [...defects.entries()].map(([root_cause_key, summary], index) => ({
       defect_id: `DEFECT-${String(index + 1).padStart(3, "0")}`,

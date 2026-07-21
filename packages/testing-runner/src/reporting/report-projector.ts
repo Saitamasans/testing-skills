@@ -215,6 +215,8 @@ function createOverviewSheet(result: RunResult): NativeReportSheet {
       { values: ["run_status", result.run_status] },
       { values: ["started_at", result.started_at] },
       { values: ["completed_at", result.completed_at ?? ""] },
+      ...Object.entries(result.timings ?? {}).map(([phase, duration]) => ({ values: [`timing.${phase}`, duration === null ? "null" : String(duration)] })),
+      ...Object.entries(result.timing_states ?? {}).map(([phase, state]) => ({ values: [`timing_state.${phase}`, state] })),
       { values: ["case_status_counts", JSON.stringify(caseCounts)] },
       { values: ["run_status_counts", JSON.stringify(runCounts)] },
       { values: ["evidence_total", String(result.cases.reduce((sum, item) => sum + item.evidence.length, 0))] },

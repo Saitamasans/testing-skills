@@ -14,6 +14,8 @@
     "run_status": { "$ref": "#/$defs/runStatus" },
     "started_at": { "allOf": [{ "$ref": "https://saitamasans.dev/schemas/persisted-value.schema.json#/$defs/persistedString" }, { "type": "string", "minLength": 1 }] },
     "completed_at": { "allOf": [{ "$ref": "https://saitamasans.dev/schemas/persisted-value.schema.json#/$defs/persistedString" }, { "type": "string", "minLength": 1 }] },
+    "timings": { "$ref": "#/$defs/timings" },
+    "timing_states": { "$ref": "#/$defs/timingStates" },
     "cases": { "type": "array", "items": { "$ref": "#/$defs/caseResult" } },
     "defects": { "type": "array", "items": { "$ref": "#/$defs/rootDefect" } }
   },
@@ -21,6 +23,28 @@
     "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
     "contractFieldStatus": { "enum": ["executed", "blocked", "skipped", "failed"] },
     "runStatus": { "enum": ["planned", "running", "completed", "blocked", "executor_error", "infrastructure_error", "manual_required"] },
+    "timing": { "type": ["number", "null"], "minimum": 0 },
+    "timingState": { "enum": ["not_executed", "running", "completed", "blocked"] },
+    "timings": {
+      "type": "object", "additionalProperties": false,
+      "properties": {
+        "package_validation_ms": { "$ref": "#/$defs/timing" }, "contract_loading_ms": { "$ref": "#/$defs/timing" },
+        "runtime_doctor_ms": { "$ref": "#/$defs/timing" }, "web_discovery_ms": { "$ref": "#/$defs/timing" },
+        "binding_ms": { "$ref": "#/$defs/timing" }, "transition_discovery_ms": { "$ref": "#/$defs/timing" },
+        "manifest_assembly_ms": { "$ref": "#/$defs/timing" }, "approval_wait_ms": { "$ref": "#/$defs/timing" },
+        "execution_ms": { "$ref": "#/$defs/timing" }, "report_ms": { "$ref": "#/$defs/timing" }
+      }
+    },
+    "timingStates": {
+      "type": "object", "additionalProperties": false,
+      "properties": {
+        "package_validation_ms": { "$ref": "#/$defs/timingState" }, "contract_loading_ms": { "$ref": "#/$defs/timingState" },
+        "runtime_doctor_ms": { "$ref": "#/$defs/timingState" }, "web_discovery_ms": { "$ref": "#/$defs/timingState" },
+        "binding_ms": { "$ref": "#/$defs/timingState" }, "transition_discovery_ms": { "$ref": "#/$defs/timingState" },
+        "manifest_assembly_ms": { "$ref": "#/$defs/timingState" }, "approval_wait_ms": { "$ref": "#/$defs/timingState" },
+        "execution_ms": { "$ref": "#/$defs/timingState" }, "report_ms": { "$ref": "#/$defs/timingState" }
+      }
+    },
     "caseStatus": { "enum": ["未执行", "通过", "不通过", "待定"] },
     "assertion": {
       "type": "object",

@@ -42,6 +42,8 @@ import type {
   RunManifest,
   RunResult,
   RunStatus,
+  ExecutionTimings,
+  ExecutionTimingStates,
 } from "../types.js";
 
 export interface RunCommandOptions {
@@ -317,6 +319,15 @@ async function persistBlockedResult(
   return result;
 }
 
+async function readPriorTimings(outputDir: string): Promise<{ timings?: ExecutionTimings; states?: ExecutionTimingStates }> {
+  try {
+    const value = await readJson<{ timings?: ExecutionTimings }>(path.join(outputDir, "package-fast-path.json"));
+    if (!value.timings) return {};
+    const states = Object.fromEntries((Object.keys(value.timings) as Array<keyof ExecutionTimings>).map((key) => [key, value.timings![key] === null ? "not_executed" : "completed"])) as ExecutionTimingStates;
+    return { timings: value.timings, states };
+  } catch { return {}; }
+}
+
 export async function persistManualRequiredResult(input: {
   outputDir: string;
   manifest: RunManifest;
@@ -412,6 +423,7 @@ export async function runRunCommand(options: RunCommandOptions): Promise<number>
     };
     if (browserSession?.page) contextInput.page = browserSession.page;
     let context = createExecutionContext(contextInput);
+    const priorTimings = await readPriorTimings(options.outputDir);
     let result = validateDocument<RunResult>("run-result", await runApprovedManifest({
       manifest,
       outputDir: options.outputDir,
@@ -426,6 +438,8 @@ export async function runRunCommand(options: RunCommandOptions): Promise<number>
         context = createExecutionContext({ ...contextInput, page });
       },
       executeAction: (action) => executeRegisteredAction(action, context),
+      ...(priorTimings.timings ? { initialTimings: priorTimings.timings } : {}),
+      ...(priorTimings.states ? { initialTimingStates: priorTimings.states } : {}),
     }));
     authoritativeResult = result;
 
@@ -437,7 +451,12 @@ export async function runRunCommand(options: RunCommandOptions): Promise<number>
       ...(browserSession ? { finalizeTraces: browserSession.finalizeTraces } : {}),
     }));
     await writeJson(path.join(options.outputDir, "run-result.json"), result);
-    const artifacts = await writeReports(options.outputDir, manifest, result);
+    const reportStarted = performance.now();
+    let artifacts = await writeReports(options.outputDir, manifest, result);
+    result.timings = { ...(result.timings ?? {}), report_ms: Math.max(0, performance.now() - reportStarted) };
+    result.timing_states = { ...(result.timing_states ?? {}), report_ms: "completed" };
+    await writeJson(path.join(options.outputDir, "run-result.json"), result);
+    artifacts = await writeReports(options.outputDir, manifest, result);
     const traceReferences = [...new Set(result.cases.flatMap((item) => item.evidence
       .map(({ path: evidencePath }) => evidencePath)
       .filter((evidencePath) => evidencePath.endsWith("/playwright-trace.zip"))))];

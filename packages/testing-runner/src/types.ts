@@ -105,6 +105,21 @@ export type RunStatus =
   | "executor_error"
   | "infrastructure_error"
   | "manual_required";
+
+export type ExecutionTimingPhase =
+  | "package_validation_ms"
+  | "contract_loading_ms"
+  | "runtime_doctor_ms"
+  | "web_discovery_ms"
+  | "binding_ms"
+  | "transition_discovery_ms"
+  | "manifest_assembly_ms"
+  | "approval_wait_ms"
+  | "execution_ms"
+  | "report_ms";
+export type TimingState = "not_executed" | "running" | "completed" | "blocked";
+export type ExecutionTimings = Partial<Record<ExecutionTimingPhase, number | null>>;
+export type ExecutionTimingStates = Partial<Record<ExecutionTimingPhase, TimingState>>;
 export type RiskLevel = "R0" | "R1" | "R2" | "R3";
 export type ReadinessLevel = "E0" | "E1" | "E2" | "E3" | "E4";
 
@@ -391,6 +406,8 @@ export interface RunResult {
   run_status: RunStatus;
   started_at: string;
   completed_at?: string;
+  timings?: ExecutionTimings;
+  timing_states?: ExecutionTimingStates;
   cases: RunCaseResult[];
   defects?: RootDefectSummary[];
 }

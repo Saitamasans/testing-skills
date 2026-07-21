@@ -23,6 +23,7 @@ const HISTORICAL_RUNNER_1_1_2 = {
 test("changed Runner bytes use the new 1.1.3 package, CLI, receipt, and release identity", async () => {
   const runnerPackage = await json("packages/testing-runner/package.json");
   const rootLock = await json("package-lock.json");
+  const releasePackage = await json("packages/testing-runner/release/package.json");
   const releaseDependencyLock = await json("packages/testing-runner/release/package-lock.json");
   const receiptSchema = await json("schemas/discovery-receipt.schema.json");
   const source = await readFile(path.join(RUNNER_ROOT, "src", "version.ts"), "utf8");
@@ -31,6 +32,7 @@ test("changed Runner bytes use the new 1.1.3 package, CLI, receipt, and release 
 
   assert.equal(runnerPackage.version, "1.1.3");
   assert.equal(rootLock.packages["packages/testing-runner"].version, "1.1.3");
+  assert.equal(releasePackage.version, "1.1.3");
   assert.equal(releaseDependencyLock.version, "1.1.3");
   assert.equal(releaseDependencyLock.packages[""].version, "1.1.3");
   assert.equal(receiptSchema.properties.runtime_version.const, "1.0.3-dev");
