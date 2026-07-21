@@ -66,7 +66,7 @@ test("packed Runner loads its bundled schemas and rules outside the monorepo", a
     const manager = resolvePackageManager();
     const packArgs = manager.kind === "npm"
       ? ["pack", packageRoot, "--pack-destination", temporaryRoot, "--json"]
-      : ["pack", "--pack-destination", temporaryRoot, "--json"];
+      : ["pack", "--config.node-linker=hoisted", "--pack-destination", temporaryRoot, "--json"];
     const packOutput = runPackageManager(
       manager,
       packArgs,

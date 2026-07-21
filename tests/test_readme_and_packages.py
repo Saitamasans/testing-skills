@@ -46,6 +46,15 @@ class ReadmeAndPackagesTest(unittest.TestCase):
             readme,
         )
 
+    def test_readme_documents_package_first_execution_workflow(self):
+        readme = (ROOT / "README.md").read_text(encoding="utf-8")
+        self.assertIn("9 个 Agent Skill", readme)
+        self.assertIn("人工测试用例.xlsx", readme)
+        self.assertIn("test-case-execution-compiler", readme)
+        self.assertIn("*.execution-package.zip", readme)
+        self.assertIn("execution_contract_required", readme)
+        self.assertNotIn("上传十列 Excel 测试用例并输入：`调用第八个 Skill 执行`", readme)
+
     def test_only_five_packages_contain_renderer(self):
         manifest = load_manifest(ROOT)["skills"]
         for item in manifest:
@@ -89,7 +98,7 @@ class ReadmeAndPackagesTest(unittest.TestCase):
             "web-api-test-execution-evidence-1.0.2-windows-x64.zip",
             "SHA256SUMS.txt",
             "重启 Codex",
-            "调用第八个 Skill 执行",
+            "把该 ZIP 交给第八个 Skill 执行",
             "-Repair",
             r"%USERPROFILE%\.testing-skills\installations\web-api-test-execution-evidence.json",
             r"%USERPROFILE%\.testing-skills\diagnostics\web-api-test-execution-evidence",
@@ -101,7 +110,7 @@ class ReadmeAndPackagesTest(unittest.TestCase):
     def test_first_seven_skill_usage_guides_are_complete(self):
         readme = (ROOT / "README.md").read_text(encoding="utf-8")
         start_marker = '<a id="usage-guides"></a>'
-        end_marker = '<a id="execution-guide"></a>'
+        end_marker = '<a id="compiler-guide"></a>'
         self.assertIn(start_marker, readme)
         self.assertIn(end_marker, readme)
         usage_guides = readme.split(start_marker, 1)[1].split(end_marker, 1)[0]

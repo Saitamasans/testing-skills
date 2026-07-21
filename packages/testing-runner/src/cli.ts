@@ -79,6 +79,7 @@ export async function runCli(argv = process.argv): Promise<void> {
     .option("--mapping-approval <file>")
     .option("--discovery-receipt <file>", "current-session target-state discovery receipt", collect, [] as string[])
     .option("--discovery-approval <file>", "validated target-state discovery approval artifact")
+    .option("--legacy-input", "deprecated: regression-only raw Excel/JSON planning")
     .action(async (options: {
       input: string;
       profile: string;
@@ -86,6 +87,7 @@ export async function runCli(argv = process.argv): Promise<void> {
       mappingApproval?: string;
       discoveryReceipt: string[];
       discoveryApproval?: string;
+      legacyInput?: boolean;
     }) => {
       await runPlanCommand({ ...options, discoveryReceipts: options.discoveryReceipt });
     });

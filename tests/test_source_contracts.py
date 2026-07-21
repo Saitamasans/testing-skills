@@ -25,12 +25,20 @@ class SourceContractsTest(unittest.TestCase):
         cls.texts = {item["slug"]: (ROOT / item["source"]).read_text(encoding="utf-8") for item in cls.manifest}
 
     def test_exact_filenames_and_frontmatter(self):
-        self.assertEqual(8, len(self.manifest))
+        self.assertGreaterEqual(len(self.manifest), 1)
+        self.assertEqual(9, len(self.manifest))
         for item in self.manifest:
             meta, _ = parse_frontmatter(self.texts[item["slug"]])
             self.assertEqual({"name", "description"}, set(meta))
             self.assertEqual(item["slug"], meta["name"])
-        self.assertEqual(ORIGINAL_SEVEN, {item["slug"] for item in self.manifest if not item.get("execution_skill") and item["slug"] != "web-api-test-execution-evidence"})
+        self.assertEqual(
+            ORIGINAL_SEVEN,
+            {
+                item["slug"]
+                for item in self.manifest
+                if not item.get("execution_skill") and not item.get("compiler_skill")
+            },
+        )
 
     def test_mutually_exclusive_route_and_confirmation_language(self):
         for slug, text in self.texts.items():
@@ -46,7 +54,12 @@ class SourceContractsTest(unittest.TestCase):
                 for phrase in ["同一份报告 JSON", ".xlsx", ".html", "未执行 / 通过 / 不通过 / 待定", "localStorage"]:
                     self.assertIn(phrase, text, f"{item['slug']}: {phrase}")
             else:
-                self.assertIn("不生成正式测试用例", text)
+                expected = (
+                    "不生成新的正式业务用例"
+                    if item.get("compiler_skill")
+                    else "不生成正式测试用例"
+                )
+                self.assertIn(expected, text)
 
     def test_ability_contracts_are_preserved(self):
         contracts = json.loads((ROOT / "tooling/ability-contracts.json").read_text(encoding="utf-8"))

@@ -1,0 +1,11 @@
+{
+  "schema_version": 1,
+  "packages": [
+    {
+      "name": "@saitamasans/testing-contract-compiler",
+      "version": "1.0.0",
+      "source": "../../testing-contract-compiler",
+      "content_sha256": "b4d5dd55a9061c04401e9a273548bb5fdf7bccfcac091ef75ac6a38c7659c736"
+    }
+  ]
+}

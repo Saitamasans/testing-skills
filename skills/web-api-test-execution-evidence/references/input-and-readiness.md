@@ -2,9 +2,19 @@
 
 ## 输入类型
 
-- 正式输入：原生 `report.json`、标准十列 `.xlsx`、经确认映射的非标准 `.xlsx`。
-- 非正式输入：HTML、CSV、Markdown、截图、PRD、接口文档、口头描述。非正式输入只能用于提示用户补齐材料，不能直接执行。
-- 标准十列测试用例（Test Cases）是正式测试意图输入，但仍需补齐目标、数据、定位/接口/数据库契约和断言后才能成为机器执行清单。
+- 正式输入：由 `test-case-execution-compiler` 生成且 `package_status=READY` 的 `*.execution-package.zip`。
+- 非正式输入：原生 `report.json`、标准十/十一列 `.xlsx`、非标准 Excel、HTML、CSV、Markdown、截图、PRD、接口文档和口头描述。raw Excel 固定返回 `execution_contract_required`。
+- 标准十列测试用例（Test Cases）是人工测试意图输入，但必须先经过第九个 Skill；非标准 Excel 必须确认字段映射。底层 legacy 输入能力仅供 deprecated 回归测试，Skill 默认流程和 README 都不得调用。
+
+## Package 校验
+
+ZIP 必须无目录穿越、绝对路径和大小写重复路径；内部文件 SHA、原用例 SHA、用例数量和 ID 必须一致；`package_status` 必须为 READY；Contract 1.0.0 schema 必须合法。任一失败立即停止，NOT_READY 包不得进入 discovery 或 Runner。
+
+契约动作是业务事实，不得再次把人工步骤拆成另一套业务动作。环境绑定只把契约语义动作映射到实时定位器、页面状态指纹和已探测状态迁移；目标状态尚未探测时不得生成 final manifest。
+
+## BrowserContext 隔离
+
+一个 Browser 下，`isolation_scope=case` 的每条用例使用全新 BrowserContext，并在 finally 关闭。每条记录 `browser_id`、`context_id`、`context_created_at`、`context_closed_at`、`context_close_status`。只有显式 `flow_group` 可组内共享 Context；新 Page、点击退出登录、Excel 顺序或前例终态都不能替代隔离。单条失败后保存证据、关闭当前 Context，下一条创建全新 Context；Context 关闭失败时标记失败且绝不复用，只按显式 resource lock 决定局部阻塞。
 
 ## 准备度 E0-E4
 

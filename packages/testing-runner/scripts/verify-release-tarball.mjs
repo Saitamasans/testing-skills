@@ -1,6 +1,7 @@
 import { spawn } from "node:child_process";
 import { mkdir, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import http from "node:http";
+import { createRequire } from "node:module";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 
@@ -147,7 +148,16 @@ export async function verifyReleaseTarball(archive, workDir) {
   const packageOutsideWorkspace = workspaceRealpath ? true : null;
   const packageNodeModules = path.join(packageRoot, "node_modules");
   const cli = path.join(packageRoot, "dist", "cli.js");
+  const compilerCli = path.join(
+    packageRoot,
+    "node_modules",
+    "@saitamasans",
+    "testing-contract-compiler",
+    "dist",
+    "cli.js",
+  );
   const packageJson = JSON.parse(await readFile(path.join(packageRoot, "package.json"), "utf8"));
+  const requireFromTar = createRequire(path.join(packageRoot, "package.json"));
   const dependencyCheck = [
     "const {createRequire}=require('node:module');",
     "const fs=require('node:fs');",
@@ -173,19 +183,13 @@ export async function verifyReleaseTarball(archive, workDir) {
   try {
     const columns = [
       "\u7528\u4f8b ID", "\u6240\u5c5e\u6a21\u5757", "\u7528\u4f8b\u6807\u9898", "\u9a8c\u8bc1\u529f\u80fd\u70b9", "\u524d\u7f6e\u6761\u4ef6",
-      "\u6d4b\u8bd5\u6b65\u9aa4", "\u9884\u671f\u7ed3\u679c", "\u4f18\u5148\u7ea7", "\u6267\u884c\u7ed3\u679c", "\u5907\u6ce8",
+      "\u6d4b\u8bd5\u6b65\u9aa4", "\u9884\u671f\u7ed3\u679c", "\u4f18\u5148\u7ea7", "\u5b9e\u9645\u7ed3\u679c", "\u6267\u884c\u7ed3\u679c",
     ];
-    const report = {
-      title: "Packaged tar API smoke",
-      generated_at: "2026-07-19T00:00:00.000Z",
-      skill_invocation: "web-api-test-execution-evidence",
-      sheets: [{
-        name: "Cases",
-        kind: "test_cases",
-        columns,
-        rows: [{ values: ["TAR-API-001", "api", "local health", "status", "", "GET /health", "status is 200", "P0", "\u672a\u6267\u884c", ""] }],
-      }],
-    };
+    const ExcelJS = requireFromTar("exceljs");
+    const workbook = new ExcelJS.Workbook();
+    const sheet = workbook.addWorksheet("Cases");
+    sheet.addRow(columns);
+    sheet.addRow(["TAR-API-001", "api", "local health", "status", "local API available", "GET /health", "status is 200", "P0", "", "\u672a\u6267\u884c"]);
     const profile = {
       protocol_version: "1.0.0",
       profile_id: "packaged-tar-smoke",
@@ -193,17 +197,19 @@ export async function verifyReleaseTarball(archive, workDir) {
       credentials: {},
       case_plans: {
         "TAR-API-001": [
-          { type: "api.request", action_id: "TAR-API-001-request", target_alias: "api", method: "GET", path: "/health", risk: "R0" },
-          { type: "api.assert", action_id: "TAR-API-001-assert", target_alias: "api", assertion: "status is 200", risk: "R0" },
+          { type: "api.request", action_id: "TAR-API-001-request", target_alias: "api", method: "GET", path: "/health", risk: "R0", source_step: "TAR-API-001-A1" },
+          { type: "api.assert", action_id: "TAR-API-001-assert", target_alias: "api", assertion: "status is 200", risk: "R0", source_step: "TAR-API-001-E1" },
         ],
       },
       rule_versions: ["1.0.0"],
     };
-    const reportPath = path.join(fixtureDir, "report.json");
+    const workbookPath = path.join(fixtureDir, "cases.xlsx");
+    const executionPackagePath = path.join(fixtureDir, "cases.execution-package.zip");
     const profilePath = path.join(fixtureDir, "execution-profile.json");
-    await writeJson(reportPath, report);
+    await workbook.xlsx.writeFile(workbookPath);
     await writeJson(profilePath, profile);
-    await run(process.execPath, nodeArgs(["plan", "--input", reportPath, "--profile", profilePath, "--output-dir", planDir]), { cwd: packageRoot, env: environment });
+    await run(process.execPath, ["--require", guardPath, compilerCli, "compile", "--input", workbookPath, "--output", executionPackagePath], { cwd: packageRoot, env: environment });
+    await run(process.execPath, nodeArgs(["plan", "--input", executionPackagePath, "--profile", profilePath, "--output-dir", planDir]), { cwd: packageRoot, env: environment });
     const manifestPath = path.join(planDir, "run-manifest.json");
     const approvalPath = path.join(planDir, "approval.json");
     await run(process.execPath, nodeArgs(["approve", "--manifest", manifestPath, "--out", approvalPath, "--expires-at", "2999-01-01T00:00:00.000Z", "--confirmed-by", "packaged-tar-smoke"]), { cwd: packageRoot, env: environment });
@@ -237,7 +243,7 @@ export async function verifyReleaseTarball(archive, workDir) {
     NODE_PATH: environment.NODE_PATH ?? null,
     NODE_OPTIONS: environment.NODE_OPTIONS ?? null,
     dependencies,
-    commands: ["--version", "plan", "approve", "run", "verify-report"],
+    commands: ["--version", "compiler compile", "plan", "approve", "run", "verify-report"],
     network_policy: {
       mode: "loopback-only",
       denied_origins: [

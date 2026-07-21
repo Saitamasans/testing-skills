@@ -128,6 +128,17 @@ async function executeAssert(action: WebAssertAction, context: ExecutionContext)
     const expected = valueMatch[2]!;
     return { status: actual === expected ? "passed" : "failed", actual: { assertion, expected, actual } };
   }
+  const attributeMatch = assertion.match(/^attribute\((.+),([A-Za-z_:][A-Za-z0-9_.:-]*)\)=(.*)$/s);
+  if (attributeMatch) {
+    const locator = await resolveLocator(page, attributeMatch[1]!);
+    const attribute = attributeMatch[2]!;
+    const actual = await locator.getAttribute(attribute);
+    const expected = attributeMatch[3]!;
+    return {
+      status: actual === expected ? "passed" : "failed",
+      actual: { assertion, attribute, expected, actual },
+    };
+  }
   const countMatch = assertion.match(/^count\((.+)\)>=(\d+)$/);
   if (countMatch) {
     const locator = locatorForSpec(page, countMatch[1]!);

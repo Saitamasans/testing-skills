@@ -1,4 +1,5 @@
 import hashlib
+import json
 import os
 import re
 import subprocess
@@ -10,14 +11,10 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 INSTALLER = ROOT / "scripts" / "install.ps1"
 MANIFEST_SLUGS = {
-    "single-api-test-full",
-    "single-api-test-concise",
-    "multi-api-flow-test",
-    "requirement-test-workbench",
-    "production-verification-test",
-    "test-case-quality-audit",
-    "requirement-clarification-test",
-    "web-api-test-execution-evidence",
+    item["slug"]
+    for item in json.loads(
+        (ROOT / "tooling" / "skills-manifest.json").read_text(encoding="utf-8")
+    )["skills"]
 }
 
 
@@ -57,7 +54,7 @@ class NoNodeInstallerRuntimeTest(unittest.TestCase):
         ]
         return subprocess.run(command, capture_output=True, env=environment, check=False)
 
-    def test_installs_all_eight_skills_without_node_tools_on_path(self):
+    def test_installs_all_manifest_skills_without_node_tools_on_path(self):
         with tempfile.TemporaryDirectory() as directory:
             install_root = Path(directory) / "installed"
             result = self.run_installer(install_root, "-All")

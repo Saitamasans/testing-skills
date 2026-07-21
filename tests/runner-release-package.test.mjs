@@ -29,11 +29,42 @@ test("release packaging consumes a committed exact dependency lock", async () =>
     path.join(REPO_ROOT, "packages", "testing-runner", "scripts", "package-release.mjs"),
     "utf8",
   );
+  const bundledWorkspaces = JSON.parse(await readFile(
+    path.join(
+      REPO_ROOT,
+      "packages",
+      "testing-runner",
+      "release",
+      "bundled-workspaces.json",
+    ),
+    "utf8",
+  ));
+  const publicReleasePackage = JSON.parse(await readFile(
+    path.join(REPO_ROOT, "packages", "testing-runner", "release", "package.json"),
+    "utf8",
+  ));
+  const publicDependencies = { ...runnerPackage.dependencies };
+  delete publicDependencies["@saitamasans/testing-contract-compiler"];
 
   assert.equal(releaseLock.lockfileVersion, 3);
   assert.equal(releaseLock.packages[""].name, runnerPackage.name);
   assert.equal(releaseLock.packages[""].version, runnerPackage.version);
-  assert.deepEqual(releaseLock.packages[""].dependencies, runnerPackage.dependencies);
+  assert.deepEqual(releaseLock.packages[""].dependencies, publicDependencies);
+  assert.deepEqual(publicReleasePackage.dependencies, publicDependencies);
+  assert.deepEqual(
+    new Set(publicReleasePackage.bundledDependencies),
+    new Set(Object.keys(publicDependencies)),
+  );
+  assert.deepEqual(bundledWorkspaces, {
+    schema_version: 1,
+    packages: [{
+      name: "@saitamasans/testing-contract-compiler",
+      version: "1.0.0",
+      source: "../../testing-contract-compiler",
+      content_sha256: bundledWorkspaces.packages[0].content_sha256,
+    }],
+  });
+  assert.match(bundledWorkspaces.packages[0].content_sha256, /^[a-f0-9]{64}$/);
   assert.doesNotMatch(releaseScript, /package-lock-only/);
   assert.doesNotMatch(releaseScript, /pnpm/);
   assert.match(releaseScript, /release[\\/]+package-lock\.json/);
@@ -73,6 +104,9 @@ test("release tarball contains runner and bundled production dependencies", asyn
     "package/node_modules/commander/package.json",
     "package/node_modules/exceljs/package.json",
     "package/node_modules/node-sql-parser/package.json",
+    "package/node_modules/@saitamasans/testing-contract-compiler/package.json",
+    "package/node_modules/@saitamasans/testing-contract-compiler/dist/index.js",
+    "package/node_modules/jszip/package.json",
   ]) {
     assert.ok(entries.includes(required), required);
   }
@@ -138,5 +172,12 @@ test("release tarball verification rejects workspace execution and succeeds outs
   assert.equal(evidence.package_outside_workspace, true);
   assert.equal(evidence.NODE_PATH, null);
   assert.equal(evidence.NODE_OPTIONS, null);
-  assert.deepEqual(evidence.commands, ["--version", "plan", "approve", "run", "verify-report"]);
+  assert.deepEqual(evidence.commands, [
+    "--version",
+    "compiler compile",
+    "plan",
+    "approve",
+    "run",
+    "verify-report",
+  ]);
 });

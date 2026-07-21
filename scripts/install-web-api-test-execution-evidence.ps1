@@ -1060,7 +1060,11 @@ function Invoke-InstallationSmoke {
         }
         $fixturePath = (Resolve-Path -LiteralPath $FixtureScript -ErrorAction Stop).Path
         $powerShellExe = Join-Path $PSHOME "powershell.exe"
-        & $powerShellExe -NoProfile -ExecutionPolicy Bypass -File $fixturePath -BundleRoot $BundleRoot -DiagnosticsRoot $DiagnosticsRoot
+        $escapedFixture = $fixturePath.Replace("'", "''")
+        $escapedBundle = $BundleRoot.Replace("'", "''")
+        $escapedDiagnostics = $DiagnosticsRoot.Replace("'", "''")
+        $fixtureCommand = "Import-Module Microsoft.PowerShell.Utility -ErrorAction Stop; & '$escapedFixture' -BundleRoot '$escapedBundle' -DiagnosticsRoot '$escapedDiagnostics'"
+        & $powerShellExe -NoProfile -ExecutionPolicy Bypass -Command $fixtureCommand
     }
     else {
         $node = Join-Path $BundleRoot "node\node.exe"

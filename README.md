@@ -1,8 +1,8 @@
 # testing-skills
 
-面向中文功能测试用户的 8 个 Agent Skill，覆盖需求澄清、测试设计、用例审计、正式服验证，以及已有 Web/API 用例的自动执行和证据回填。
+面向中文功能测试用户的 9 个 Agent Skill，覆盖需求澄清、测试设计、用例审计、正式服验证、人工 Web UI 用例的可执行化编译，以及已有 Web/API 用例的自动执行和证据回填。
 
-[选择 Skill](#skills) · [安装](#install) · [第 1–7 个 Skill 使用指南](#usage-guides) · [第 8 个 Skill 专项指南](#execution-guide) · [输出文件](#outputs)
+[选择 Skill](#skills) · [安装](#install) · [第 1–7 个 Skill 使用指南](#usage-guides) · [第 9 个 Skill 专项指南](#compiler-guide) · [第 8 个 Skill 专项指南](#execution-guide) · [输出文件](#outputs)
 
 <a id="skills"></a>
 
@@ -18,6 +18,7 @@
 | 用例质量审计<br>`test-case-quality-audit` | 审计已有用例的可执行性、需求一致性、遗漏风险和冗余。 | [![Install](https://img.shields.io/badge/Install-2ea44f)](https://github.com/Saitamasans/testing-skills/releases/download/skill-installers-v1/install-test-case-quality-audit.cmd) |
 | 需求澄清<br>`requirement-clarification-test` | 在写用例前找出需求缺口并判断是否具备开测条件。 | [![Install](https://img.shields.io/badge/Install-2ea44f)](https://github.com/Saitamasans/testing-skills/releases/download/skill-installers-v1/install-requirement-clarification-test.cmd) |
 | 自动执行与证据回填<br>`web-api-test-execution-evidence` | 自动执行已有 Web/API 正式用例并回填 Excel、HTML 和证据。 | [![Install](https://img.shields.io/badge/Install-2ea44f)](https://github.com/Saitamasans/testing-skills/releases/download/web-api-test-execution-evidence-v1.0.2/install-web-api-test-execution-evidence.cmd) |
+| 测试用例可执行化编译<br>`test-case-execution-compiler` | 将已有 Web UI 人工用例编译为可审核、可追踪的 Execution Package。 | Runtime 1.0.3 发布后提供完整安装器。 |
 
 选择时以当前交付目标为准：一个任务只选择一个主 Skill，最多建议一个辅助 Skill；调用辅助 Skill 前先说明分工并等待确认，最终只生成一套结果。
 
@@ -27,7 +28,7 @@
 
 ### 推荐方式：Windows 安装按钮
 
-适合普通功能测试人员。Windows 10/11 自带的 Windows PowerShell 即可，**无需管理员权限**。安装 8 个 Skill 无需安装 Node.js、npm、npx 或 Git。前 7 个 Skill 可以用下方通用安装器安装；其中前 5 个用例生成 Skill 实际生成 `.xlsx` 和 `.html` 文件时，仍需要可用的 Node.js 运行环境。
+适合普通功能测试人员。Windows 10/11 自带的 Windows PowerShell 即可，**无需管理员权限**。现有 Runtime 1.0.2 安装 8 个已发布 Skill 无需安装 Node.js、npm、npx 或 Git；包含第九个 Skill和 Compiler 1.0.0 的完整 Runtime 1.0.3 将作为新的不可变 Release 发布。前 7 个 Skill 可以用下方通用安装器安装；其中前 5 个用例生成 Skill 实际生成 `.xlsx` 和 `.html` 文件时，仍需要可用的 Node.js 运行环境。
 
 第 8 个 `web-api-test-execution-evidence` 的最终用户必须使用 GitHub Release 完整安装器。完整安装不提供轻量版、API-only 或可选浏览器模式，安装时已交付 portable Node 22.23.1、Runner 1.1.2、Playwright 1.61.1、Chromium 1228、headless shell 1228 和 FFmpeg 1011；无需系统安装 Node.js、npm、Git、Chrome、Excel 或 Python。安装器完成下载、SHA-256 校验、解压、bundle 清单校验和本地完整 smoke test 后才显示“安装完成，可以执行 Web/API 自动化测试”。
 
@@ -41,7 +42,7 @@
 
 1. 下载并双击 [install-web-api-test-execution-evidence.cmd](https://github.com/Saitamasans/testing-skills/releases/download/web-api-test-execution-evidence-v1.0.2/install-web-api-test-execution-evidence.cmd)。安装阶段会下载一次完整 Runtime，并校验 SHA-256、清单和本地 smoke；无需管理员权限或系统 Node、npm、Git、Chrome。
 2. 安装完成后重启 Codex。
-3. 上传十列 Excel 测试用例并输入：`调用第八个 Skill 执行`。
+3. 先调用第九个 Skill，把人工测试用例编译成 `*.execution-package.zip`；再把该 ZIP 交给第八个 Skill 执行。
 
 正常执行阶段不会下载 Node、Runner、Playwright 或 Chromium，也不会访问 GitHub Release、npm 或浏览器下载源获取运行依赖。完整离线/审计包可下载 [web-api-test-execution-evidence-1.0.2-windows-x64.zip](https://github.com/Saitamasans/testing-skills/releases/download/web-api-test-execution-evidence-v1.0.2/web-api-test-execution-evidence-1.0.2-windows-x64.zip)，公开校验值见 [SHA256SUMS.txt](https://github.com/Saitamasans/testing-skills/releases/download/web-api-test-execution-evidence-v1.0.2/SHA256SUMS.txt)。
 
@@ -104,7 +105,7 @@ npx skills add Saitamasans/testing-skills@web-api-test-execution-evidence -g -y
 
 - Codex：在 Skills 管理界面或 `$CODEX_HOME/skills` 下查看。
 - Claude Code：在 Skills 目录或技能列表中查看。
-- CC Switch：打开 Skills 管理页，读取各包的 `SKILL.md` 名称和 description，并分别管理 8 个 Skill。
+- CC Switch：打开 Skills 管理页，读取各包的 `SKILL.md` 名称和 description，并分别管理 9 个 Skill。
 
 <a id="usage-guides"></a>
 
@@ -208,6 +209,28 @@ npx skills add Saitamasans/testing-skills@web-api-test-execution-evidence -g -y
 调用 `requirement-clarification-test`：先不要写测试点或用例，请从测试视角评审这份 PRD，列出 P0/P1/P2 问题并判断能否开测。
 ```
 
+<a id="compiler-guide"></a>
+
+## 9. 测试用例可执行化编译 即 第 9 个 Skill 专项指南
+
+对应 Package：`test-case-execution-compiler`。
+
+第九个 Skill 把已有标准十列、十一列或已确认字段映射的 Web UI 人工用例编译成一个 `*.execution-package.zip`。人工测试用例是业务事实来源；编译过程不新增正式业务用例、不修改原始 Excel、不访问目标网页，也不启动 Playwright 或 Chromium。
+
+公开工作流固定为：
+
+```text
+人工测试用例.xlsx -> test-case-execution-compiler -> *.execution-package.zip -> web-api-test-execution-evidence
+```
+
+ZIP 内包含原始用例、Execution Contract 1.0.0、映射、readiness、待确认项和 package manifest。用户工作目录只产生这一个 ZIP；若存在必须确认的问题，包状态为 `NOT_READY`，补齐后重新编译，不能直接修改旧 ZIP。原用例变化后旧包会因 SHA-256 不一致而失效。
+
+调用示例：
+
+```text
+调用 `test-case-execution-compiler`：请把附件中的已有 Web UI 人工测试用例编译成 Execution Package；不要修改原始用例，不要打开网页，未知状态写入待确认项。
+```
+
 <a id="execution-guide"></a>
 
 ## 8. 自动执行web用例skill 即 第 8 个 Skill 专项指南
@@ -216,7 +239,7 @@ npx skills add Saitamasans/testing-skills@web-api-test-execution-evidence -g -y
 
 ### 什么时候使用
 
-已有正式 Web/API 测试用例，需要自动执行、收集证据、回填 Excel/HTML，或在本地和 CI 中校验执行产物时使用。
+已有 READY `*.execution-package.zip`，需要绑定真实页面、审批、自动执行、收集证据、回填 Excel/HTML，或在本地和 CI 中校验执行产物时使用。
 
 ### 什么时候不应使用
 
@@ -224,7 +247,7 @@ npx skills add Saitamasans/testing-skills@web-api-test-execution-evidence -g -y
 
 ### 每次执行都要准备
 
-- **正式测试用例：** 标准十列 `.xlsx`、原生 `report.json`，或已确认字段映射的非标准 Excel；用例必须有可执行步骤和预期结果。
+- **正式执行包：** 第九个 Skill 输出的 READY `*.execution-package.zip`；第八个 Skill 直接收到普通 Excel 或 JSON 时默认返回 `code=execution_contract_required`，请先调用 `test-case-execution-compiler`。
 - **目标 Web/API 地址：** 当前执行环境必须能够访问。
 - **环境性质和执行授权：** 明确测试、预发或正式环境，并取得对应授权，不能根据域名猜测。
 - **执行前确认：** 先核对执行预览、目标、风险、动作数量和将读取的环境变量名。
@@ -256,7 +279,7 @@ npx skills add Saitamasans/testing-skills@web-api-test-execution-evidence -g -y
 - 先安装 GitHub Release 完整安装器交付的 Node 22.23.1、Runner 1.1.2、Playwright 1.61.1、Chromium 1228、headless shell 1228 和 FFmpeg 1011。正式执行只快速验证安装回执、回执绑定的 bundle 清单、固定组件身份和关键可执行/证据标记，不会下载、安装或修改运行时。
 - Windows 只通过 `<ABSOLUTE_SKILL_ROOT>\scripts\testing-runner.ps1` 调用内置 runtime；若报告 `installation_incomplete` 或 `installation_corrupt`，重新运行完整安装器并带 `-Repair`。无需 npm 账号，也无需手工安装 Runner。
 - 凭据只放环境变量或 CI Secrets，不写入用例、命令、日志、报告或截图。
-- 非标准 Excel 字段映射需要用户确认，不能静默转换。
+- 包的 ZIP 路径、内部 SHA、源文件 SHA、用例数量与 ID、READY 状态和契约 Schema 必须全部通过校验。
 - CI 只执行低风险 R0/R1 动作；需要人工登录、MFA、SSO 或扫码时应阻塞。
 - 数据库只允许 `SELECT`；无法证明只读能力时阻塞执行。
 - 正式服写操作必须叠加生产门禁，并逐项确认授权、账号、时间窗和风险联系人。
@@ -264,7 +287,7 @@ npx skills add Saitamasans/testing-skills@web-api-test-execution-evidence -g -y
 ### 调用示例
 
 ```text
-调用 `web-api-test-execution-evidence`：请执行附件中的十列 Excel 正式测试用例；目标是测试环境 `https://example.test`，凭据从环境变量读取。先展示执行预览，等待确认；确认后再运行并回填报告和证据。
+调用 `web-api-test-execution-evidence`：请执行附件中的 READY Execution Package；目标是测试环境 `https://example.test`，凭据从环境变量读取。先做真实页面探测和语义绑定，展示最终 manifest 预览并等待确认；确认后再运行并回填报告和证据。
 ```
 
 <a id="outputs"></a>
@@ -307,7 +330,7 @@ npm test --workspace @saitamasans/testing-runner
 node --test tests/test-case-renderer.test.mjs tests/html_behavior.test.mjs
 ```
 
-请不要直接编辑自动生成的 `skills/*/SKILL.md`；应修改对应源文件后运行 builder。原 7 个源文件在根目录，第 8 个源文件在 `skill-sources/web-api-test-execution-evidence/`。
+请不要直接编辑自动生成的 `skills/*/SKILL.md`；应修改对应源文件后运行 builder。原 7 个源文件在根目录，第 8、9 个源文件分别在 `skill-sources/web-api-test-execution-evidence/` 和 `skill-sources/test-case-execution-compiler/`。
 
 ## 许可协议
 

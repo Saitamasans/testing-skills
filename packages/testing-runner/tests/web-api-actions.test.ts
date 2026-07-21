@@ -542,6 +542,7 @@ test("Web assertions cover URL, input value, visible text, counts, hidden and ab
       `url=${app.baseUrl}/login`,
       "url-contains=/login",
       "value(label=Username)=数码宝贝",
+      "attribute(label=Password,type)=password",
       "text-contains=数码宝贝结果",
       "visible:label=Username",
       "count(css=.result-item)>=2",
