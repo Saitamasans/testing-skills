@@ -87,7 +87,7 @@ class ExecutionSkillContractsTest(unittest.TestCase):
 
     def test_runner_commands_statuses_and_report_gate(self):
         for phrase in [
-            'scripts\\testing-runner.ps1" plan',
+            'scripts\\testing-runner.ps1" discover-plan',
             'scripts\\testing-runner.ps1" run',
             "run-result.json 是唯一判定来源",
             "Excel/HTML/JSON 一致性",

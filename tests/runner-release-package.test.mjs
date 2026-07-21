@@ -7,6 +7,7 @@ import { fileURLToPath } from "node:url";
 
 import {
   buildReleaseTarball,
+  hashBundledWorkspace,
   listTarEntries,
   normalizeReleaseTextTree,
   resolveReleaseOutputDir,
@@ -180,4 +181,29 @@ test("release tarball verification rejects workspace execution and succeeds outs
     "run",
     "verify-report",
   ]);
+});
+
+test("bundled workspace hashes normalize owned text line endings", async (t) => {
+  const lfRoot = await mkdtemp(path.join(os.tmpdir(), "runner-workspace-lf-"));
+  const crlfRoot = await mkdtemp(path.join(os.tmpdir(), "runner-workspace-crlf-"));
+  t.after(async () => {
+    await Promise.all([
+      rm(lfRoot, { recursive: true, force: true }),
+      rm(crlfRoot, { recursive: true, force: true }),
+    ]);
+  });
+  for (const root of [lfRoot, crlfRoot]) {
+    await mkdir(path.join(root, "dist"), { recursive: true });
+    await mkdir(path.join(root, "schemas"), { recursive: true });
+  }
+  await writeFile(path.join(lfRoot, "package.json"), "{\n  \"name\": \"fixture\"\n}\n");
+  await writeFile(path.join(lfRoot, "dist", "index.js"), "export const ok = true;\n");
+  await writeFile(path.join(lfRoot, "dist", "index.js.map"), "{\n  \"version\": 3\n}\n");
+  await writeFile(path.join(lfRoot, "schemas", "schema.json"), "{\n  \"type\": \"object\"\n}\n");
+  await writeFile(path.join(crlfRoot, "package.json"), "{\r\n  \"name\": \"fixture\"\r\n}\r\n");
+  await writeFile(path.join(crlfRoot, "dist", "index.js"), "export const ok = true;\r\n");
+  await writeFile(path.join(crlfRoot, "dist", "index.js.map"), "{\r\n  \"version\": 3\r\n}\r\n");
+  await writeFile(path.join(crlfRoot, "schemas", "schema.json"), "{\r\n  \"type\": \"object\"\r\n}\r\n");
+
+  assert.equal(await hashBundledWorkspace(lfRoot), await hashBundledWorkspace(crlfRoot));
 });

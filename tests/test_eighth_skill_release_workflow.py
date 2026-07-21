@@ -572,7 +572,8 @@ class EighthSkillReleaseWorkflowContractTest(unittest.TestCase):
             "build/release-a",
             "build/release-b",
             "Get-FileHash",
-            "windows-runtime-lock.json",
+            "runner-1.1.3-release-lock.json",
+            "saitamasans-testing-runner-1.1.3.tgz",
             "verify-release-tarball.mjs",
             "CompleteInstallerTest.test_clean_install_is_path_independent_and_writes_receipt_after_smoke",
             "CompleteInstallerTest.test_smoke_failure_retains_diagnostics_but_not_receipt",
@@ -582,6 +583,8 @@ class EighthSkillReleaseWorkflowContractTest(unittest.TestCase):
             with self.subTest(phrase=phrase):
                 self.assertIn(phrase, workflow)
         self.assertNotIn("contents: write", workflow)
+        self.assertNotIn("Runner build differs from windows-runtime-lock.json", workflow)
+        self.assertNotIn("release-a/saitamasans-testing-runner-1.1.2.tgz", workflow)
 
     def test_windows_x64_pr_ci_executes_the_real_runtime_long_path_installer_fixture(self):
         workflow = (ROOT / ".github/workflows/validate-runner-windows-release.yml").read_text(

@@ -43,9 +43,11 @@ const OWNED_TEXT_EXTENSIONS = new Set([
   ".html",
   ".js",
   ".json",
+  ".map",
   ".md",
   ".mjs",
   ".txt",
+  ".ts",
   ".yaml",
   ".yml",
 ]);
@@ -57,6 +59,14 @@ const RELEASE_DEPENDENCY_LOCK_PATH = fileURLToPath(
 const BUNDLED_WORKSPACES_PATH = fileURLToPath(
   new URL("../release/bundled-workspaces.json", import.meta.url),
 );
+
+async function readNormalizedHashBytes(file) {
+  const bytes = await readFile(file);
+  if (!OWNED_TEXT_EXTENSIONS.has(path.extname(file))) {
+    return bytes;
+  }
+  return Buffer.from(bytes.toString("utf8").replace(/\r\n?/g, "\n"), "utf8");
+}
 export function resolveReleaseOutputDir(outputDir = path.join(REPO_ROOT, "build", "releases")) {
   return path.resolve(REPO_ROOT, outputDir);
 }
@@ -120,14 +130,16 @@ export async function sha256File(file) {
 async function addTreeToHash(hash, root, relative = "") {
   const directory = path.join(root, relative);
   const entries = await readdir(directory, { withFileTypes: true });
-  entries.sort((left, right) => left.name.localeCompare(right.name));
+  entries.sort((left, right) => (
+    left.name < right.name ? -1 : left.name > right.name ? 1 : 0
+  ));
   for (const entry of entries) {
     const child = path.join(relative, entry.name);
     if (entry.isDirectory()) {
       await addTreeToHash(hash, root, child);
     } else if (entry.isFile()) {
       hash.update(child.replaceAll(path.sep, "/") + "\0");
-      hash.update(await readFile(path.join(root, child)));
+      hash.update(await readNormalizedHashBytes(path.join(root, child)));
       hash.update("\0");
     }
   }
@@ -142,7 +154,7 @@ export async function hashBundledWorkspace(root) {
       await addTreeToHash(hash, root, relative);
     } else {
       hash.update(relative + "\0");
-      hash.update(await readFile(absolute));
+      hash.update(await readNormalizedHashBytes(absolute));
       hash.update("\0");
     }
   }

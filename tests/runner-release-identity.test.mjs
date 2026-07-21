@@ -29,6 +29,10 @@ test("changed Runner bytes use the new 1.1.3 package, CLI, receipt, and release 
   const source = await readFile(path.join(RUNNER_ROOT, "src", "version.ts"), "utf8");
   const releaseScript = await readFile(path.join(RUNNER_ROOT, "scripts", "package-release.mjs"), "utf8");
   const workflow = await readFile(path.join(REPO_ROOT, ".github", "workflows", "publish-testing-runner.yml"), "utf8");
+  const validationWorkflow = await readFile(
+    path.join(REPO_ROOT, ".github", "workflows", "validate-runner-windows-release.yml"),
+    "utf8",
+  );
 
   assert.equal(runnerPackage.version, "1.1.3");
   assert.equal(rootLock.packages["packages/testing-runner"].version, "1.1.3");
@@ -45,6 +49,10 @@ test("changed Runner bytes use the new 1.1.3 package, CLI, receipt, and release 
   assert.match(workflow, /EXPECTED_VERSION: 1\.1\.2/);
   assert.match(workflow, /EXPECTED_TAG: testing-runner-v1\.1\.2/);
   assert.doesNotMatch(workflow, /EXPECTED_VERSION: 1\.1\.3/);
+  assert.match(validationWorkflow, /saitamasans-testing-runner-1\.1\.3\.tgz/);
+  assert.match(validationWorkflow, /runner-1\.1\.3-release-lock\.json/);
+  assert.doesNotMatch(validationWorkflow, /release-a\/saitamasans-testing-runner-1\.1\.2\.tgz/);
+  assert.doesNotMatch(validationWorkflow, /Runner build differs from windows-runtime-lock\.json/);
 
   const changed = execFileSync(
     "git",
