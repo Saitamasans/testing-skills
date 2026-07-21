@@ -225,18 +225,29 @@ async function createExclusiveContainedFile(input: {
     handle = await open(input.file, "wx", 0o600);
     await handle.writeFile(input.bytes);
     const handleStat = await handle.stat();
-    await handle.close();
-    handle = undefined;
     createdIdentity = await lstat(input.file);
     if (!createdIdentity.isFile() || createdIdentity.isSymbolicLink() || createdIdentity.dev !== handleStat.dev || createdIdentity.ino !== handleStat.ino) {
       invalid(`${input.kind}_identity_changed`);
     }
-    await input.afterCreate?.(input.kind, input.file);
+    try {
+      await input.afterCreate?.(input.kind, input.file);
+    } catch {
+      invalid(`${input.kind}_identity_changed`);
+    }
     const current = await lstat(input.file).catch(() => invalid(`${input.kind}_missing_after_create`));
-    if (!current.isFile() || current.isSymbolicLink() || !sameFileIdentity(current, createdIdentity)) invalid(`${input.kind}_identity_changed`);
+    const liveHandleStat = await handle.stat();
+    if (
+      !current.isFile()
+      || current.isSymbolicLink()
+      || !sameFileIdentity(current, createdIdentity)
+      || current.dev !== liveHandleStat.dev
+      || current.ino !== liveHandleStat.ino
+    ) invalid(`${input.kind}_identity_changed`);
     const resolved = await realpath(input.file).catch(() => invalid(`${input.kind}_missing_after_create`));
     assertResolvedInside(input.session.runRoot, resolved, input.kind);
     await requireWriteDirectoryInside(input.session, input.directory, input.clock());
+    await handle.close();
+    handle = undefined;
     return current;
   } catch (error) {
     await handle?.close().catch(() => undefined);

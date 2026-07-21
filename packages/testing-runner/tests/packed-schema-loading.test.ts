@@ -11,6 +11,14 @@ import { compilePackage, loadExecutionPackage } from "../../testing-contract-com
 import { sha256Canonical } from "../src/compiler/canonical-json.js";
 
 const packageRoot = fileURLToPath(new URL("..", import.meta.url));
+const compilerPackageRoot = fileURLToPath(new URL("../../testing-contract-compiler", import.meta.url));
+
+function packedFilename(output: string): string {
+  const packed = JSON.parse(output) as { filename: string } | Array<{ filename: string }>;
+  const filename = Array.isArray(packed) ? packed[0]?.filename : packed.filename;
+  assert.ok(filename, "package manager did not return a packed archive filename");
+  return filename;
+}
 
 function resolvePackageManager(): { kind: "npm" | "pnpm"; cli: string } {
   if (process.env.npm_execpath) {
@@ -55,7 +63,7 @@ function runPackageManager(
   return result.stdout;
 }
 
-test("packed Runner loads its bundled schemas and rules outside the monorepo", async () => {
+test("packed Runner and independent Compiler load schemas and rules outside the monorepo", async () => {
   const temporaryRoot = await mkdtemp(path.join(tmpdir(), "testing-runner-pack-"));
   const consumerRoot = path.join(temporaryRoot, "consumer");
   const originalCwd = process.cwd();
@@ -67,20 +75,30 @@ test("packed Runner loads its bundled schemas and rules outside the monorepo", a
     const packArgs = manager.kind === "npm"
       ? ["pack", packageRoot, "--pack-destination", temporaryRoot, "--json"]
       : ["pack", "--config.node-linker=hoisted", "--pack-destination", temporaryRoot, "--json"];
+    const compilerPackArgs = manager.kind === "npm"
+      ? ["pack", compilerPackageRoot, "--pack-destination", temporaryRoot, "--json"]
+      : ["pack", "--config.node-linker=hoisted", "--pack-destination", temporaryRoot, "--json"];
+    const compilerPackOutput = runPackageManager(
+      manager,
+      compilerPackArgs,
+      compilerPackageRoot,
+    );
     const packOutput = runPackageManager(
       manager,
       packArgs,
       packageRoot,
     );
-    const packed = JSON.parse(packOutput) as { filename: string } | Array<{ filename: string }>;
-    const filename = Array.isArray(packed) ? packed[0]?.filename : packed.filename;
-    assert.ok(filename, "package manager did not return a packed archive filename");
+    const compilerFilename = packedFilename(compilerPackOutput);
+    const filename = packedFilename(packOutput);
+    const compilerArchivePath = path.isAbsolute(compilerFilename)
+      ? compilerFilename
+      : path.join(temporaryRoot, compilerFilename);
     const archivePath = path.isAbsolute(filename) ? filename : path.join(temporaryRoot, filename);
     runPackageManager(
       manager,
       manager.kind === "npm"
-        ? ["install", "--ignore-scripts", archivePath]
-        : ["add", "--ignore-scripts", archivePath],
+        ? ["install", "--ignore-scripts", compilerArchivePath, archivePath]
+        : ["add", "--ignore-scripts", compilerArchivePath, archivePath],
       consumerRoot,
     );
 
