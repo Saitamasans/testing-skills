@@ -15,6 +15,7 @@ import {
 import { reportVerificationErrorExitCode, runVerifyReportCommand } from "./commands/verify-report.js";
 import type { BrowserVisibility } from "./runtime/browser-session.js";
 import type { ProgressVisibility } from "./runtime/visual-progress.js";
+import { TESTING_RUNNER_VERSION } from "./version.js";
 
 interface RunCliOptions {
   manifest: string;
@@ -69,7 +70,7 @@ export async function runCli(argv = process.argv): Promise<void> {
   program
     .name("testing-runner")
     .description("Plan and approve locked Web/API test execution manifests")
-    .version("1.1.2");
+    .version(TESTING_RUNNER_VERSION);
 
   program.command("plan")
     .requiredOption("--input <file>")

@@ -14,11 +14,10 @@ The eighth Skill validates package safety, integrity, source identity, readiness
 
 ## Build And Delivery
 
-The manifest becomes the source of truth for any positive number of uniquely named Skills. Generated packages copy compiler resources using the existing execution-Skill resource pattern. Runtime 1.0.3 contains portable Node 22.23.1, compiler 1.0.0, Contract 1.0.0, unchanged Runner 1.1.2, Playwright 1.61.1, and Chromium 1228. Runtime 1.0.2 assets and tags remain immutable.
+The manifest becomes the source of truth for any positive number of uniquely named Skills. Generated packages copy compiler resources using the existing execution-Skill resource pattern. Runtime 1.0.3 targets portable Node 22.23.1, Runner 1.1.3, compiler 1.0.0, backward-compatible Contract 1.0.0, Playwright 1.61.1, and Chromium 1228. Runner 1.1.3 is required because package-first execution, discovery binding, action handling, context isolation, and result behavior differ from immutable Runner 1.1.2. Runtime 1.0.2 and Runner 1.1.2 assets and tags remain immutable.
 
 Delivery is gated in order: compiler and runner tests, complete repository regression, generated-Skill validation, secret scan, the three-case live workstation flow through both Skills, core PR CI and merge, a separate installer-progress PR and merge, then reproducible Runtime 1.0.3 A/B build and immutable release. Any failed gate blocks merge or release.
 
 ## Error And Evidence Contract
 
 NOT_READY packages remain single ZIP outputs and carry unresolved items. The eighth Skill refuses NOT_READY, unsafe, stale, inconsistent, or schema-invalid packages before browser work. All required phase durations are measured, not fabricated. Live evidence must prove three source and execution cases, three distinct successfully closed contexts, LOGIN-MINI-002 success, LOGIN-MINI-003 anonymous start, no logout action, consistent Excel/HTML/JSON, and PNG/Trace/JSONL presence.
-

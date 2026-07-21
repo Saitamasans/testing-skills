@@ -17,9 +17,13 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { gunzipSync } from "node:zlib";
 
 const PACKAGE_NAME = "@saitamasans/testing-runner";
-const VERSION = "1.1.2";
-const FILE_NAME = "saitamasans-testing-runner-1.1.2.tgz";
-const RELEASE_TAG = "testing-runner-v1.1.2";
+const RELEASE_PREPARATION_PATH = fileURLToPath(
+  new URL("../release/runner-1.1.3-release-lock.json", import.meta.url),
+);
+const RELEASE_PREPARATION = JSON.parse(await readFile(RELEASE_PREPARATION_PATH, "utf8"));
+const VERSION = RELEASE_PREPARATION.runner.version;
+const FILE_NAME = RELEASE_PREPARATION.runner.file_name;
+const RELEASE_TAG = RELEASE_PREPARATION.runner.release_tag;
 const RELEASE_URL = "https://github.com/Saitamasans/testing-skills/releases/download/"
   + RELEASE_TAG + "/" + FILE_NAME;
 const CHROMIUM_ESTIMATED_SIZE_BYTES = 180_000_000;
@@ -47,13 +51,6 @@ const REPO_ROOT = fileURLToPath(new URL("../../..", import.meta.url));
 const PACKAGE_ROOT = fileURLToPath(new URL("..", import.meta.url));
 const RELEASE_DEPENDENCY_LOCK_PATH = fileURLToPath(
   new URL("../release/package-lock.json", import.meta.url),
-);
-const DEFAULT_MANIFEST_PATH = path.join(
-  REPO_ROOT,
-  "skill-sources",
-  "web-api-test-execution-evidence",
-  "assets",
-  "runner-release.json",
 );
 
 export function resolveReleaseOutputDir(outputDir = path.join(REPO_ROOT, "build", "releases")) {
@@ -162,9 +159,10 @@ export async function listTarEntries(archivePath) {
 
 export async function buildReleaseTarball(
   outputDir = path.join(REPO_ROOT, "build", "releases"),
-  manifestPath = DEFAULT_MANIFEST_PATH,
+  manifestPath,
 ) {
   outputDir = resolveReleaseOutputDir(outputDir);
+  manifestPath ??= path.join(outputDir, "runner-release.json");
   await mkdir(outputDir, { recursive: true });
   const archivePath = path.join(outputDir, FILE_NAME);
   const checksumPath = archivePath + ".sha256";

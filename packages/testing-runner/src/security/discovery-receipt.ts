@@ -9,11 +9,13 @@ import { canonicalize, sha256Canonical } from "../compiler/canonical-json.js";
 import { discoverCurrentPage } from "../locator/page-discovery.js";
 import { validateDocument } from "../schema-registry.js";
 import type { DiscoveryReceiptReference, ExecutionProfile, ManifestAction } from "../types.js";
+import { TESTING_RUNNER_VERSION } from "../version.js";
+
+export { TESTING_RUNNER_VERSION } from "../version.js";
 
 export const DISCOVERY_RECEIPT_SCHEMA_VERSION = "1.0.0";
 export const DISCOVERY_SESSION_SCHEMA_VERSION = "1.0.0";
-export const TESTING_RUNTIME_VERSION = "1.0.2-dev";
-export const TESTING_RUNNER_VERSION = "1.1.2";
+export const TESTING_RUNTIME_VERSION = "1.0.3-dev";
 export const DISCOVERY_SESSION_MAX_AGE_MS = 15 * 60_000;
 
 interface RuntimeSessionState {
