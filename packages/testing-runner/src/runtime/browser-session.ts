@@ -53,7 +53,9 @@ export interface CaseIsolationPolicy {
 }
 
 export interface BrowserContextRecord {
+  phase: "discovery" | "execution";
   case_id: string;
+  discovery_task_id?: string;
   browser_id: string;
   context_id: string;
   context_created_at: string;
@@ -62,6 +64,19 @@ export interface BrowserContextRecord {
   context_reused: boolean;
   isolation_scope: NonNullable<CaseIsolationPolicy["isolationScope"]>;
   flow_group: string | null;
+}
+
+export function combineBrowserContextRecords(
+  discoveryRecords: readonly BrowserContextRecord[],
+  executionRecords: readonly BrowserContextRecord[],
+): BrowserContextRecord[] {
+  if (discoveryRecords.some(({ phase }) => phase !== "discovery")) throw new Error("browser_context_phase_invalid:discovery");
+  if (executionRecords.some(({ phase }) => phase !== "execution")) throw new Error("browser_context_phase_invalid:execution");
+  const discoveryContextIds = new Set(discoveryRecords.map(({ context_id }) => context_id));
+  if (discoveryContextIds.size !== discoveryRecords.length) throw new Error("discovery_context_reused");
+  const reused = executionRecords.find(({ context_id }) => discoveryContextIds.has(context_id));
+  if (reused) throw new Error(`browser_context_phase_reuse_detected:${reused.context_id}`);
+  return [...discoveryRecords, ...executionRecords].map((record) => ({ ...record }));
 }
 
 export function applyBrowserContextCleanupFailures(
@@ -276,7 +291,7 @@ export async function openBrowserSession(
         currentCaseId = caseId;
         currentIsolationScope = isolationScope;
         currentFlowGroup = flowGroup;
-        contextRecords.push({ case_id: caseId, browser_id: browserId, context_id: activeContextId, context_created_at: activeContextCreatedAt, context_closed_at: null, context_close_status: "open", context_reused: false, isolation_scope: isolationScope, flow_group: flowGroup });
+        contextRecords.push({ phase: "execution", case_id: caseId, browser_id: browserId, context_id: activeContextId, context_created_at: activeContextCreatedAt, context_closed_at: null, context_close_status: "open", context_reused: false, isolation_scope: isolationScope, flow_group: flowGroup });
         return page;
       }
       if (currentCaseId === caseId) return page;
@@ -286,7 +301,7 @@ export async function openBrowserSession(
         && policy.sharedContextApproved === true;
       if (reusesFlowGroup || reusesApprovedSharedContext) {
         currentCaseId = caseId;
-        contextRecords.push({ case_id: caseId, browser_id: browserId, context_id: activeContextId, context_created_at: activeContextCreatedAt, context_closed_at: null, context_close_status: "open", context_reused: true, isolation_scope: isolationScope, flow_group: flowGroup });
+        contextRecords.push({ phase: "execution", case_id: caseId, browser_id: browserId, context_id: activeContextId, context_created_at: activeContextCreatedAt, context_closed_at: null, context_close_status: "open", context_reused: true, isolation_scope: isolationScope, flow_group: flowGroup });
         return page;
       }
       await finalizeTrace();
@@ -314,7 +329,7 @@ export async function openBrowserSession(
       tracePromise = undefined;
       session.page = page;
       progressController?.setPage(page);
-      contextRecords.push({ case_id: caseId, browser_id: browserId, context_id: activeContextId, context_created_at: activeContextCreatedAt, context_closed_at: null, context_close_status: "open", context_reused: false, isolation_scope: isolationScope, flow_group: flowGroup });
+      contextRecords.push({ phase: "execution", case_id: caseId, browser_id: browserId, context_id: activeContextId, context_created_at: activeContextCreatedAt, context_closed_at: null, context_close_status: "open", context_reused: false, isolation_scope: isolationScope, flow_group: flowGroup });
       return page;
     },
     contextRecords: () => contextRecords.map((record) => ({ ...record })),

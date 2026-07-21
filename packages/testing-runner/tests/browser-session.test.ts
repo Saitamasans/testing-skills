@@ -10,6 +10,7 @@ import {
   openBrowserSession,
   resolveBrowserSettings,
 } from "../src/runtime/browser-session.js";
+import * as browserSessionRuntime from "../src/runtime/browser-session.js";
 import { runApprovedManifest } from "../src/runtime/run-orchestrator.js";
 import type { RunManifest, RunResult } from "../src/types.js";
 
@@ -177,6 +178,7 @@ test("prepares every Web case in a fresh browser context", async () => {
   await session?.close();
   assert.equal(contexts[1]?.closed, true);
   const records = session?.contextRecords() ?? [];
+  assert.equal(records.every(({ phase }) => phase === "execution"), true);
   assert.deepEqual(records.map(({ case_id }) => case_id), ["LOGIN-001", "LOGIN-002"]);
   assert.equal(new Set(records.map(({ context_id }) => context_id)).size, 2);
   assert.equal(records.every(({ context_close_status }) => context_close_status === "closed"), true);
@@ -190,6 +192,28 @@ test("prepares every Web case in a fresh browser context", async () => {
     path.join(outputDir, "evidence", "LOGIN-001", "playwright-trace.zip"),
     path.join(outputDir, "evidence", "LOGIN-002", "playwright-trace.zip"),
   ]);
+});
+
+test("browser context evidence separates discovery from execution and rejects cross-phase reuse", () => {
+  const combine = (browserSessionRuntime as any).combineBrowserContextRecords;
+  assert.equal(typeof combine, "function");
+  const discovery = [{
+    phase: "discovery", discovery_task_id: "task-a", case_id: "LOGIN-002", browser_id: "discovery-browser",
+    context_id: "discovery-context", context_created_at: "2026-07-21T00:00:00.000Z",
+    context_closed_at: "2026-07-21T00:00:01.000Z", context_close_status: "closed", context_reused: false,
+    isolation_scope: "case", flow_group: null,
+  }];
+  const execution = [{
+    phase: "execution", case_id: "LOGIN-002", browser_id: "execution-browser", context_id: "execution-context",
+    context_created_at: "2026-07-21T00:00:02.000Z", context_closed_at: "2026-07-21T00:00:03.000Z",
+    context_close_status: "closed", context_reused: false, isolation_scope: "case", flow_group: null,
+  }];
+  assert.deepEqual(combine(discovery, execution).map(({ phase }: { phase: string }) => phase), ["discovery", "execution"]);
+  assert.throws(() => combine([
+    ...discovery,
+    { ...discovery[0], discovery_task_id: "task-b", case_id: "LOGIN-003" },
+  ], execution), /discovery_context_reused/);
+  assert.throws(() => combine(discovery, [{ ...execution[0], context_id: "discovery-context" }]), /browser_context_phase_reuse_detected/);
 });
 
 test("explicit flow group shares one context only inside the group", async () => {
@@ -294,9 +318,9 @@ test("context close failures affect their owning cases without erasing business 
     ],
   };
   applyBrowserContextCleanupFailures(result, [
-    { case_id: "CASE-1", browser_id: "browser", context_id: "one", context_created_at: "created", context_closed_at: "closed", context_close_status: "failed", context_reused: false, isolation_scope: "case", flow_group: null },
-    { case_id: "CASE-2", browser_id: "browser", context_id: "two", context_created_at: "created", context_closed_at: "closed", context_close_status: "failed", context_reused: false, isolation_scope: "case", flow_group: null },
-    { case_id: "CASE-3", browser_id: "browser", context_id: "three", context_created_at: "created", context_closed_at: "closed", context_close_status: "closed", context_reused: false, isolation_scope: "case", flow_group: null },
+    { phase: "execution", case_id: "CASE-1", browser_id: "browser", context_id: "one", context_created_at: "created", context_closed_at: "closed", context_close_status: "failed", context_reused: false, isolation_scope: "case", flow_group: null },
+    { phase: "execution", case_id: "CASE-2", browser_id: "browser", context_id: "two", context_created_at: "created", context_closed_at: "closed", context_close_status: "failed", context_reused: false, isolation_scope: "case", flow_group: null },
+    { phase: "execution", case_id: "CASE-3", browser_id: "browser", context_id: "three", context_created_at: "created", context_closed_at: "closed", context_close_status: "closed", context_reused: false, isolation_scope: "case", flow_group: null },
   ]);
   assert.equal(result.run_status, "executor_error");
   assert.deepEqual(result.cases.map(({ case_status, run_status }) => ({ case_status, run_status })), [

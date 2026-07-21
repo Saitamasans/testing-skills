@@ -14,7 +14,10 @@ export interface DiscoveryTask {
   origin: string;
   requested_url: string;
   isolation_scope: ContractCase["isolation_scope"];
+  flow_group: string | null;
   required_auth_profile: string | null;
+  start_state_sha256: string;
+  auth_profile_sha256: string;
 }
 
 export function transitionActions(actions: ManifestAction[]): ManifestAction[] {
@@ -54,7 +57,10 @@ export function discoveryTaskId(input: {
   transitionActionsSha256: string;
   origin: string;
   isolationScope: ContractCase["isolation_scope"];
+  flowGroup: string | null;
   requiredAuthProfile: string | null;
+  startStateSha256: string;
+  authProfileSha256: string;
 }): string {
   return `discovery-task-${sha256Canonical(input).slice(0, 32)}`;
 }
@@ -72,12 +78,17 @@ export function planDiscoveryTasks(input: {
     const binding = webBinding(input.profile, actions);
     const transitionActionsSha256 = sha256Canonical(actions);
     const requiredAuthProfile = authProfileId(item);
+    const startStateSha256 = sha256Canonical(item.start_state);
+    const authProfileSha256 = sha256Canonical(item.auth_profile);
     const dedupKey = sha256Canonical({
       target_state: targetState,
       transition_actions_sha256: transitionActionsSha256,
       origin: binding.origin,
       isolation_scope: item.isolation_scope,
+      flow_group: item.flow_group,
       required_auth_profile: requiredAuthProfile,
+      start_state_sha256: startStateSha256,
+      auth_profile_sha256: authProfileSha256,
     });
     const existing = tasks.get(dedupKey);
     if (existing) {
@@ -91,7 +102,10 @@ export function planDiscoveryTasks(input: {
         transitionActionsSha256,
         origin: binding.origin,
         isolationScope: item.isolation_scope,
+        flowGroup: item.flow_group,
         requiredAuthProfile,
+        startStateSha256,
+        authProfileSha256,
       }),
       source_case_id: item.source_case_id,
       source_case_ids: [item.source_case_id],
@@ -102,7 +116,10 @@ export function planDiscoveryTasks(input: {
       origin: binding.origin,
       requested_url: binding.requestedUrl,
       isolation_scope: item.isolation_scope,
+      flow_group: item.flow_group,
       required_auth_profile: requiredAuthProfile,
+      start_state_sha256: startStateSha256,
+      auth_profile_sha256: authProfileSha256,
     });
   }
   return [...tasks.values()];

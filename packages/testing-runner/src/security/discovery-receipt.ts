@@ -109,7 +109,10 @@ export interface DiscoverAndIssueReceiptInput {
   requestedUrl: string;
   pageStateId: string;
   isolationScope?: ContractCase["isolation_scope"];
+  flowGroup?: string | null;
   requiredAuthProfile?: string | null;
+  startState?: Record<string, unknown>;
+  authProfile?: Record<string, unknown>;
   approvalPath: string;
   now?: Date;
   clock?: () => Date;
@@ -133,6 +136,24 @@ export interface VerifyDiscoveryReceiptsInput {
 
 function invalid(reason: string): never {
   throw new Error(`discovery_receipt_invalid: ${reason}`);
+}
+
+export function validateReceiptTaskQuorum<T extends { discovery_task_id: string }>(
+  requiredTaskIds: readonly string[],
+  receipts: readonly T[],
+): T[] {
+  const required = new Set(requiredTaskIds);
+  if (required.size !== requiredTaskIds.length) invalid("duplicate_required_task_id");
+  const byTask = new Map<string, T>();
+  for (const receipt of receipts) {
+    if (!required.has(receipt.discovery_task_id)) invalid(`unknown_task_receipt:${receipt.discovery_task_id}`);
+    if (byTask.has(receipt.discovery_task_id)) invalid(`duplicate_task_receipt:${receipt.discovery_task_id}`);
+    byTask.set(receipt.discovery_task_id, receipt);
+  }
+  for (const taskId of requiredTaskIds) {
+    if (!byTask.has(taskId)) invalid(`missing_task_receipt:${taskId}`);
+  }
+  return requiredTaskIds.map((taskId) => byTask.get(taskId)!);
 }
 
 function requireString(value: unknown, field: string): string {
@@ -412,7 +433,10 @@ export async function discoverAndIssueReceipt(input: DiscoverAndIssueReceiptInpu
     transitionActionsSha256: sha256Canonical(input.transitionActions),
     origin,
     isolationScope: input.isolationScope ?? "case",
+    flowGroup: input.flowGroup ?? null,
     requiredAuthProfile: input.requiredAuthProfile ?? null,
+    startStateSha256: sha256Canonical(input.startState ?? {}),
+    authProfileSha256: sha256Canonical(input.authProfile ?? {}),
   });
 
   const discovery = await discoverCurrentPage(input.page, { now });
@@ -541,10 +565,21 @@ export async function verifyDiscoveryReceipts(input: VerifyDiscoveryReceiptsInpu
   if (!input.session) throw new Error("runtime_session_required");
   const clock = clockFor(input);
   stateFor(input.session, clock());
-  if (input.receiptPaths.length !== required.length) invalid("receipt_count_mismatch");
   const approvals = input.approvalPaths ?? (input.approvalPath ? [input.approvalPath] : []);
   if (approvals.length !== required.length) invalid("approval_count_mismatch");
   const livePages = input.livePages ?? (input.livePage ? [input.livePage] : []);
   if (livePages.length !== 0 && livePages.length !== required.length) invalid("live_page_count_mismatch");
-  return Promise.all(required.map((task, index) => verifyOneReceipt(input, input.receiptPaths[index]!, task, approvals[index]!, livePages[index], clock)));
+  const receiptIdentities = await Promise.all(input.receiptPaths.map(async (receiptPath) => {
+    const located = await requirePathInside(input.session!, receiptPath, "receipt_path", clock());
+    const receipt = validateDocument<DiscoveryReceipt>("discovery-receipt", parseObject(await readFile(located.absolute), "receipt"));
+    if (receipt.source_package_sha256 !== input.packageSha256) invalid("package_mismatch");
+    const transitionTask = required.find(({ transition_case_id }) => transition_case_id === receipt.transition_case_id);
+    if (transitionTask) {
+      const actions = transitionActions(input.profile.case_plans?.[transitionTask.transition_case_id] ?? []);
+      if (receipt.transition_actions_sha256 !== sha256Canonical(actions)) invalid("actions_mismatch");
+    }
+    return { discovery_task_id: receipt.discovery_task_id, receiptPath };
+  }));
+  const orderedReceipts = validateReceiptTaskQuorum(required.map(({ discovery_task_id }) => discovery_task_id), receiptIdentities);
+  return Promise.all(required.map((task, index) => verifyOneReceipt(input, orderedReceipts[index]!.receiptPath, task, approvals[index]!, livePages[index], clock)));
 }

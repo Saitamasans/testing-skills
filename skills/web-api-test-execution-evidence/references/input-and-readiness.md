@@ -14,7 +14,7 @@ ZIP 必须无目录穿越、绝对路径和大小写重复路径；内部文件 
 
 ## BrowserContext 隔离
 
-一个 Browser 下，`isolation_scope=case` 的每条用例使用全新 BrowserContext，并在 finally 关闭。每条记录 `browser_id`、`context_id`、`context_created_at`、`context_closed_at`、`context_close_status`。只有显式 `flow_group` 可组内共享 Context；新 Page、点击退出登录、Excel 顺序或前例终态都不能替代隔离。单条失败后保存证据、关闭当前 Context，下一条创建全新 Context；Context 关闭失败时标记失败且绝不复用，只按显式 resource lock 决定局部阻塞。
+discovery 阶段每个任务使用独立 BrowserContext 并关闭；正式 execution 阶段重新创建全新 BrowserContext，不能继承 discovery 登录状态。`browser-contexts.json` 对每条记录标记 `phase=discovery|execution`，并记录 `browser_id`、`context_id`、`context_created_at`、`context_closed_at`、`context_close_status`；跨 phase 的 `context_id` 复用必须拒绝。一个正式执行 Browser 下，`isolation_scope=case` 的每条用例使用全新 BrowserContext，并在 finally 关闭。只有显式 `flow_group` 可组内共享 Context；新 Page、点击退出登录、Excel 顺序或前例终态都不能替代隔离。单条失败后保存证据、关闭当前 Context，下一条创建全新 Context；Context 关闭失败时标记失败且绝不复用，只按显式 resource lock 决定局部阻塞。
 
 ## 准备度 E0-E4
 

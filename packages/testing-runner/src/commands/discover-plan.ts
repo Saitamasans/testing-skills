@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { writeFile } from "node:fs/promises";
 import path from "node:path";
 
@@ -7,6 +8,7 @@ import type { Browser, BrowserContext, Page } from "playwright";
 import { executeAction } from "../actions/action-registry.js";
 import { readExecutionPackage } from "../input/execution-package.js";
 import { createExecutionContext } from "../runtime/execution-context.js";
+import type { BrowserContextRecord } from "../runtime/browser-session.js";
 import { resolveCredentials } from "../security/credential-resolver.js";
 import { planDiscoveryTasks, transitionActions, type DiscoveryTask } from "../discovery/discovery-task.js";
 import {
@@ -53,7 +55,8 @@ export async function runDiscoverPlanCommand(options: DiscoverPlanCommandOptions
   await writeFile(path.join(session.runRoot, "discovery-tasks.json"), `${JSON.stringify({ discovery_tasks: tasks }, null, 2)}\n`, "utf8");
   const launchBrowser = options.launchBrowser ?? ((launchOptions: { headless: boolean }) => chromium.launch(launchOptions));
   const browser = await launchBrowser({ headless: options.browser !== "visible" });
-  const contexts: BrowserContext[] = [];
+  const browserId = randomUUID();
+  const contexts: Array<{ context: BrowserContext; record: BrowserContextRecord }> = [];
   const pages: Page[] = [];
   const receiptPaths: string[] = [];
   try {
@@ -82,7 +85,20 @@ export async function runDiscoverPlanCommand(options: DiscoverPlanCommandOptions
       try {
         await validateDiscoveryApprovalForTransition({ ...approvalInput, now: clock() });
         const browserContext = await browser.newContext({ viewport: { width: 1920, height: 1080 } });
-        contexts.push(browserContext);
+        const contextRecord: BrowserContextRecord = {
+          phase: "discovery",
+          discovery_task_id: task.discovery_task_id,
+          case_id: task.source_case_id,
+          browser_id: browserId,
+          context_id: randomUUID(),
+          context_created_at: clock().toISOString(),
+          context_closed_at: null,
+          context_close_status: "open",
+          context_reused: false,
+          isolation_scope: task.isolation_scope,
+          flow_group: task.flow_group,
+        };
+        contexts.push({ context: browserContext, record: contextRecord });
         const page = await browserContext.newPage();
         pages.push(page);
         const context = createExecutionContext({
@@ -119,7 +135,22 @@ export async function runDiscoverPlanCommand(options: DiscoverPlanCommandOptions
     });
     return { ...result, discovery_tasks: tasks };
   } finally {
-    await Promise.allSettled(contexts.map((context) => context.close()));
-    await browser.close();
+    for (const { context, record } of contexts) {
+      try {
+        await context.close();
+        record.context_close_status = "closed";
+      } catch {
+        record.context_close_status = "failed";
+      }
+      record.context_closed_at = clock().toISOString();
+    }
+    let browserCloseError: unknown;
+    try {
+      await browser.close();
+    } catch (error) {
+      browserCloseError = error;
+    }
+    await writeFile(path.join(session.runRoot, "browser-contexts.json"), `${JSON.stringify(contexts.map(({ record }) => record), null, 2)}\n`, "utf8");
+    if (browserCloseError) throw browserCloseError;
   }
 }

@@ -17,6 +17,7 @@ import { runApprovedManifest } from "../runtime/run-orchestrator.js";
 import { createExecutionContext, type CreateExecutionContextInput } from "../runtime/execution-context.js";
 import {
   applyBrowserContextCleanupFailures,
+  combineBrowserContextRecords,
   openBrowserSession,
   type BrowserContextRecord,
   type BrowserSessionOptions,
@@ -328,6 +329,34 @@ async function readPriorTimings(outputDir: string): Promise<{ timings?: Executio
   } catch { return {}; }
 }
 
+async function readDiscoveryContextRecords(manifestPath: string, manifest: RunManifest): Promise<BrowserContextRecord[]> {
+  const requiredTaskIds = (manifest.discovery_receipts ?? []).map(({ discovery_task_id }) => discovery_task_id);
+  if (requiredTaskIds.length === 0) return [];
+  let value: unknown;
+  try {
+    value = await readJson<unknown>(path.join(path.dirname(manifestPath), "browser-contexts.json"));
+  } catch {
+    throw new Error("discovery_context_evidence_missing");
+  }
+  if (!Array.isArray(value)) throw new Error("discovery_context_evidence_invalid");
+  const records = value as BrowserContextRecord[];
+  const byTask = new Map<string, BrowserContextRecord>();
+  const required = new Set(requiredTaskIds);
+  for (const record of records) {
+    if (record.phase !== "discovery" || !record.discovery_task_id) throw new Error("discovery_context_evidence_invalid");
+    if (!required.has(record.discovery_task_id)) throw new Error(`discovery_context_unknown_task:${record.discovery_task_id}`);
+    if (byTask.has(record.discovery_task_id)) throw new Error(`discovery_context_duplicate_task:${record.discovery_task_id}`);
+    if (record.context_close_status !== "closed" || typeof record.context_closed_at !== "string" || record.context_reused) {
+      throw new Error(`discovery_context_not_closed:${record.discovery_task_id}`);
+    }
+    byTask.set(record.discovery_task_id, record);
+  }
+  for (const taskId of requiredTaskIds) {
+    if (!byTask.has(taskId)) throw new Error(`discovery_context_missing_task:${taskId}`);
+  }
+  return requiredTaskIds.map((taskId) => ({ ...byTask.get(taskId)! }));
+}
+
 export async function persistManualRequiredResult(input: {
   outputDir: string;
   manifest: RunManifest;
@@ -374,6 +403,7 @@ export async function runRunCommand(options: RunCommandOptions): Promise<number>
   await mkdir(options.outputDir, { recursive: true });
 
   const manifest = validateDocument<RunManifest>("run-manifest", await readJson<unknown>(options.manifest));
+  const discoveryContextRecords = await readDiscoveryContextRecords(options.manifest, manifest);
   const approval = validateDocument<Approval>("approval", await readJson<unknown>(options.approval));
   const verification = verifyApproval(manifest, approval, mode);
   if (verification.status === "approved" && manifest.package_sha256) {
@@ -412,6 +442,7 @@ export async function runRunCommand(options: RunCommandOptions): Promise<number>
   if (options.slowMo !== undefined) browserOptions.slowMo = options.slowMo;
   if (options.progress !== undefined) browserOptions.progress = options.progress;
   const browserSession = await openBrowserSession(browserOptions);
+  const allContextRecords = () => combineBrowserContextRecords(discoveryContextRecords, browserSession?.contextRecords() ?? []);
   let authoritativeResult: RunResult | undefined;
   try {
     const contextInput: CreateExecutionContextInput = {
@@ -435,6 +466,7 @@ export async function runRunCommand(options: RunCommandOptions): Promise<number>
           flowGroup: item.flow_group ?? null,
           sharedContextApproved: item.isolation_scope === "suite" || item.isolation_scope === "external_existing",
         });
+        allContextRecords();
         context = createExecutionContext({ ...contextInput, page });
       },
       executeAction: (action) => executeRegisteredAction(action, context),
@@ -496,7 +528,7 @@ export async function runRunCommand(options: RunCommandOptions): Promise<number>
         reason: error.message,
         ...(browserSession ? {
           finalizeTraces: browserSession.finalizeTraces,
-          contextRecords: browserSession.contextRecords,
+          contextRecords: allContextRecords,
         } : {}),
       });
       authoritativeResult = result;
@@ -530,9 +562,9 @@ export async function runRunCommand(options: RunCommandOptions): Promise<number>
         applyBrowserContextCleanupFailures(authoritativeResult, browserSession.contextRecords());
       }
       if (finalBrowserCloseError && authoritativeResult) authoritativeResult.run_status = "infrastructure_error";
-      if (browserSession) {
+      if (browserSession || discoveryContextRecords.length > 0) {
         try {
-          await writeJson(path.join(options.outputDir, "browser-contexts.json"), browserSession.contextRecords());
+          await writeJson(path.join(options.outputDir, "browser-contexts.json"), allContextRecords());
         } catch {
           // Best effort continues with the authoritative result below.
         }

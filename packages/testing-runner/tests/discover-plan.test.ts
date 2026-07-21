@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { access, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -10,7 +11,8 @@ import { compilePackage, loadExecutionPackage } from "../../testing-contract-com
 
 import { sha256Canonical } from "../src/compiler/canonical-json.js";
 import { runDiscoverPlanCommand } from "../src/commands/discover-plan.js";
-import { planDiscoveryTasks } from "../src/discovery/discovery-task.js";
+import { discoveryTaskId, planDiscoveryTasks } from "../src/discovery/discovery-task.js";
+import * as discoveryReceiptRuntime from "../src/security/discovery-receipt.js";
 import { discoveryCaseDirectoryName } from "../src/security/discovery-receipt.js";
 import type { ManifestAction } from "../src/types.js";
 import { startDemoApp } from "./fixtures/demo-app.js";
@@ -156,15 +158,21 @@ test("one READY package with success and error target states returns two discove
     assert.ok(task.required_auth_profile);
   }
   for (const reference of result.manifest.discovery_receipts ?? []) {
-    const receipt = JSON.parse(await readFile(path.join(f.output, reference.receipt_path), "utf8"));
+    const receiptBytes = await readFile(path.join(f.output, reference.receipt_path));
+    const receipt = JSON.parse(receiptBytes.toString("utf8"));
     assert.equal(receipt.discovery_task_id, reference.discovery_task_id);
     assert.equal(receipt.source_case_id, reference.source_case_id);
+    assert.equal(reference.receipt_sha256, createHash("sha256").update(receiptBytes).digest("hex"));
     assert.match(receipt.run_nonce, /^[a-f0-9]{64}$/);
     assert.equal(receipt.source_package_sha256, result.discovery_tasks[0]?.package_sha256);
     assert.equal(receipt.runner_version, "1.1.3");
     assert.equal(receipt.runtime_version, "1.0.3-dev");
     assert.match(receipt.page_fingerprint_sha256, /^[a-f0-9]{64}$/);
   }
+  assert.deepEqual(
+    result.manifest.discovery_receipts?.map(({ discovery_task_id }) => discovery_task_id),
+    result.discovery_tasks.map(({ discovery_task_id }) => discovery_task_id),
+  );
 });
 
 test("success and error target states never deduplicate", async (t) => {
@@ -200,6 +208,99 @@ test("identical transition and target state bindings deduplicate deterministical
   assert.deepEqual(first[0]?.source_case_ids, ["LOGIN-002", "LOGIN-003"]);
 });
 
+test("discovery task identity separates start state and the full auth profile", async (t) => {
+  const app = await startDemoApp();
+  const f = await multiTargetFixture(app.baseUrl);
+  t.after(() => app.close());
+  t.after(() => rm(f.root, { recursive: true, force: true }));
+  const loaded = await loadExecutionPackage(f.packagePath);
+  const profile = JSON.parse(await readFile(f.profile, "utf8"));
+  const firstCase = loaded.contract.cases[0]!;
+  const secondCase = loaded.contract.cases[1]!;
+  secondCase.effects = structuredClone(firstCase.effects);
+  secondCase.start_state = structuredClone(firstCase.start_state);
+  secondCase.auth_profile = structuredClone(firstCase.auth_profile);
+  secondCase.isolation_scope = firstCase.isolation_scope;
+  profile.case_plans[secondCase.case_id] = structuredClone(profile.case_plans[firstCase.case_id]);
+
+  const baseline = planDiscoveryTasks({ contractCases: loaded.contract.cases, profile, packageSha256: loaded.package_sha256 });
+  assert.equal(baseline.length, 1);
+
+  secondCase.start_state = { ...firstCase.start_state, state_id: "different-anonymous-entry" };
+  const differentStart = planDiscoveryTasks({ contractCases: loaded.contract.cases, profile, packageSha256: loaded.package_sha256 });
+  assert.equal(differentStart.length, 2);
+
+  secondCase.start_state = structuredClone(firstCase.start_state);
+  secondCase.auth_profile = { ...firstCase.auth_profile, credential_refs: { username_env: "OTHER_USERNAME_ENV" } };
+  const differentAccount = planDiscoveryTasks({ contractCases: loaded.contract.cases, profile, packageSha256: loaded.package_sha256 });
+  assert.equal(differentAccount.length, 2);
+  for (const task of differentAccount) {
+    assert.match((task as any).start_state_sha256, /^[a-f0-9]{64}$/);
+    assert.match((task as any).auth_profile_sha256, /^[a-f0-9]{64}$/);
+  }
+
+  secondCase.auth_profile = structuredClone(firstCase.auth_profile);
+  firstCase.isolation_scope = "flow_group";
+  secondCase.isolation_scope = "flow_group";
+  firstCase.flow_group = "login-success-discovery";
+  secondCase.flow_group = "login-error-discovery";
+  const differentFlowGroups = planDiscoveryTasks({ contractCases: loaded.contract.cases, profile, packageSha256: loaded.package_sha256 });
+  assert.equal(differentFlowGroups.length, 2);
+});
+
+test("discovery task ID binds every deterministic deduplication dimension", () => {
+  const base = {
+    packageSha256: "1".repeat(64),
+    targetState: "workspace",
+    transitionActionsSha256: "2".repeat(64),
+    origin: "https://example.test",
+    isolationScope: "case" as const,
+    flowGroup: null,
+    requiredAuthProfile: "valid-user",
+    startStateSha256: "3".repeat(64),
+    authProfileSha256: "4".repeat(64),
+  };
+  const baseline = discoveryTaskId(base);
+  for (const changed of [
+    { ...base, targetState: "login-error" },
+    { ...base, transitionActionsSha256: "5".repeat(64) },
+    { ...base, origin: "https://other.example.test" },
+    { ...base, isolationScope: "flow_group" as const },
+    { ...base, isolationScope: "flow_group" as const, flowGroup: "other-flow" },
+    { ...base, requiredAuthProfile: "wrong-password-user", authProfileSha256: "6".repeat(64) },
+    { ...base, startStateSha256: "7".repeat(64) },
+  ]) assert.notEqual(discoveryTaskId(changed), baseline);
+});
+
+test("receipt quorum rejects duplicate, unknown, missing and extra task identities", () => {
+  const validate = (discoveryReceiptRuntime as any).validateReceiptTaskQuorum;
+  assert.equal(typeof validate, "function");
+  const required = ["task-a", "task-b"];
+  assert.deepEqual(validate(required, [
+    { discovery_task_id: "task-b", receipt_path: "b.json" },
+    { discovery_task_id: "task-a", receipt_path: "a.json" },
+  ]).map((item: { receipt_path: string }) => item.receipt_path), ["a.json", "b.json"]);
+  assert.throws(() => validate(required, [
+    { discovery_task_id: "task-a", receipt_path: "a.json" },
+    { discovery_task_id: "task-a", receipt_path: "a-copy.json" },
+  ]), /duplicate_task_receipt:task-a/);
+  assert.throws(() => validate(required, [
+    { discovery_task_id: "task-a", receipt_path: "a.json" },
+    { discovery_task_id: "task-unknown", receipt_path: "unknown.json" },
+  ]), /unknown_task_receipt:task-unknown/);
+  assert.throws(() => validate(required, [
+    { discovery_task_id: "task-a", receipt_path: "a.json" },
+  ]), /missing_task_receipt:task-b/);
+  assert.throws(() => validate(required, [
+    { discovery_task_id: "task-a", receipt_path: "a.json" },
+    { discovery_task_id: "task-b", receipt_path: "b.json" },
+    { discovery_task_id: "task-c", receipt_path: "c.json" },
+  ]), /unknown_task_receipt:task-c/);
+  assert.throws(() => validate(["task-a", "task-a"], [
+    { discovery_task_id: "task-a", receipt_path: "a.json" },
+  ]), /duplicate_required_task_id/);
+});
+
 test("each discovery task creates and closes a distinct BrowserContext", async (t) => {
   const app = await startDemoApp();
   const f = await multiTargetFixture(app.baseUrl);
@@ -230,6 +331,13 @@ test("each discovery task creates and closes a distinct BrowserContext", async (
 
   assert.equal(observed.size, 2);
   assert.equal(closeCount, 2);
+  const records = JSON.parse(await readFile(path.join(f.output, "browser-contexts.json"), "utf8"));
+  assert.equal(records.length, 2);
+  assert.equal(new Set(records.map(({ context_id }: { context_id: string }) => context_id)).size, 2);
+  assert.equal(records.every(({ phase, context_close_status, context_closed_at }: { phase: string; context_close_status: string; context_closed_at: string | null }) =>
+    phase === "discovery" && context_close_status === "closed" && typeof context_closed_at === "string"), true);
+  assert.deepEqual(records.map(({ discovery_task_id }: { discovery_task_id: string }) => discovery_task_id).sort(),
+    (JSON.parse(await readFile(path.join(f.output, "discovery-tasks.json"), "utf8")).discovery_tasks as Array<{ discovery_task_id: string }>).map(({ discovery_task_id }) => discovery_task_id).sort());
 });
 
 test("missing any required task receipt rejects final manifest assembly", async (t) => {
@@ -249,6 +357,51 @@ test("missing any required task receipt rejects final manifest assembly", async 
       await rm(path.join(f.output, "discovery", discoveryCaseDirectoryName(task.transition_case_id), "discovery-receipt.json"));
     },
   }), /receipt_path_missing/);
+  await assert.rejects(() => access(path.join(f.output, "run-manifest.json")), /ENOENT/);
+});
+
+test("a duplicate task receipt cannot replace another required task", async (t) => {
+  const app = await startDemoApp();
+  const f = await multiTargetFixture(app.baseUrl);
+  t.after(() => app.close());
+  t.after(() => rm(f.root, { recursive: true, force: true }));
+
+  await assert.rejects(() => runDiscoverPlanCommand({
+    input: f.packagePath,
+    profile: f.profile,
+    outputDir: f.output,
+    discoveryApproval: f.approvals,
+    browser: "headless",
+    afterReceiptIssued: async (_page, task) => {
+      if (task?.source_case_id !== "LOGIN-003") return;
+      const first = path.join(f.output, "discovery", discoveryCaseDirectoryName("LOGIN-002"), "discovery-receipt.json");
+      const second = path.join(f.output, "discovery", discoveryCaseDirectoryName("LOGIN-003"), "discovery-receipt.json");
+      await writeFile(second, await readFile(first));
+    },
+  }), /duplicate_task_receipt/);
+  await assert.rejects(() => access(path.join(f.output, "run-manifest.json")), /ENOENT/);
+});
+
+test("an unknown receipt task ID is rejected before final manifest assembly", async (t) => {
+  const app = await startDemoApp();
+  const f = await multiTargetFixture(app.baseUrl);
+  t.after(() => app.close());
+  t.after(() => rm(f.root, { recursive: true, force: true }));
+
+  await assert.rejects(() => runDiscoverPlanCommand({
+    input: f.packagePath,
+    profile: f.profile,
+    outputDir: f.output,
+    discoveryApproval: f.approvals,
+    browser: "headless",
+    afterReceiptIssued: async (_page, task) => {
+      if (task?.source_case_id !== "LOGIN-003") return;
+      const receiptPath = path.join(f.output, "discovery", discoveryCaseDirectoryName("LOGIN-003"), "discovery-receipt.json");
+      const receipt = JSON.parse(await readFile(receiptPath, "utf8"));
+      receipt.discovery_task_id = "discovery-task-ffffffffffffffffffffffffffffffff";
+      await writeFile(receiptPath, `${JSON.stringify(receipt, null, 2)}\n`);
+    },
+  }), /unknown_task_receipt/);
   await assert.rejects(() => access(path.join(f.output, "run-manifest.json")), /ENOENT/);
 });
 
