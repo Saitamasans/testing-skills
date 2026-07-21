@@ -424,7 +424,7 @@ function New-TemporaryStatePathAlias {
             if ($aliasPhysical -cne $physicalStateRoot) {
                 throw "临时短路径映射未指向请求的状态目录。"
             }
-            Write-Host "当前阶段=启用临时短路径；映射=$aliasRoot；物理=$stateRoot"
+            Write-InstallerMessage "当前阶段=启用临时短路径；映射=$aliasRoot；物理=$stateRoot"
             return [pscustomobject]@{
                 Drive = $drive
                 Root = $aliasRoot
@@ -446,7 +446,7 @@ function Remove-TemporaryStatePathAlias {
     if (Test-Path -LiteralPath ([string]$Alias.Root)) {
         throw "无法清理临时短路径映射：$([string]$Alias.Root)"
     }
-    Write-Host "当前阶段=清理临时短路径；映射=$([string]$Alias.Root)"
+    Write-InstallerMessage "当前阶段=清理临时短路径；映射=$([string]$Alias.Root)"
 }
 
 function New-HttpRequest {
@@ -570,7 +570,7 @@ function Get-TrustedManifestBytes {
             if ($attempt -ge $Retries) {
                 throw
             }
-            Write-Host "清单下载重试：重试=$($attempt + 1)，原因=$($_.Exception.Message)"
+            Write-InstallerMessage "清单下载重试：重试=$($attempt + 1)，原因=$($_.Exception.Message)"
             Start-Sleep -Milliseconds $RetryDelay
         }
         finally {
@@ -620,6 +620,55 @@ function Read-PartialMetadata {
     }
 }
 
+function Test-InteractiveConsole {
+    try {
+        return [Environment]::UserInteractive -and -not [Console]::IsOutputRedirected
+    }
+    catch {
+        return $false
+    }
+}
+
+function Stop-DownloadProgress {
+    if ($script:DownloadProgressState -and $script:DownloadProgressState.ActiveLine) {
+        Write-Host ""
+        $script:DownloadProgressState.ActiveLine = $false
+    }
+}
+
+function Write-InstallerMessage {
+    param([Parameter(Mandatory = $true)][string]$Message)
+
+    Stop-DownloadProgress
+    Write-Host $Message
+}
+
+function Write-InstallerError {
+    param([Parameter(Mandatory = $true)][string]$Message)
+
+    Stop-DownloadProgress
+    [Console]::Error.WriteLine($Message)
+}
+
+function Start-DownloadProgress {
+    param(
+        [Parameter(Mandatory = $true)][string]$Artifact,
+        [Parameter(Mandatory = $true)][string]$DiagnosticsPath
+    )
+
+    Stop-DownloadProgress
+    New-Item -ItemType Directory -Path (Split-Path -Parent $DiagnosticsPath) -Force | Out-Null
+    $script:DownloadProgressState = @{
+        Artifact = $Artifact
+        DiagnosticsPath = $DiagnosticsPath
+        LastOutputAt = $null
+        LastPercent = $null
+        ActiveLine = $false
+        Width = 0
+    }
+    Write-InstallerMessage "开始下载：$Artifact"
+}
+
 function Write-DownloadProgress {
     param(
         [string]$Artifact,
@@ -630,34 +679,50 @@ function Write-DownloadProgress {
         [long]$ResumeOffset
     )
 
-    if (-not $script:DownloadProgressState) {
-        $script:DownloadProgressState = @{}
+    if (-not $script:DownloadProgressState -or $script:DownloadProgressState.Artifact -cne $Artifact) {
+        throw "下载进度状态未初始化或当前文件已变化：$Artifact"
     }
 
-    $elapsed = [Math]::Max(0.001, ([DateTime]::UtcNow - [DateTime]::FromFileTimeUtc([long]$StartedAt)).TotalSeconds)
+    $now = [DateTime]::UtcNow
+    $elapsed = [Math]::Max(0.001, ($now - [DateTime]::FromFileTimeUtc([long]$StartedAt)).TotalSeconds)
     $transferred = [Math]::Max(0, $Downloaded - $ResumeOffset)
     $speed = [long]($transferred / $elapsed)
-    $percent = if ($Total -gt 0) { [Math]::Min(100, [Math]::Round(($Downloaded * 100.0) / $Total, 1)) } else { 0 }
+    $percent = if ($Total -gt 0) { [Math]::Min(100.0, [Math]::Round(($Downloaded * 100.0) / $Total, 1)) } else { 0.0 }
     $eta = if ($speed -gt 0) { [Math]::Ceiling(($Total - $Downloaded) / $speed) } else { "?" }
-    $now = [DateTime]::UtcNow
-    $key = $Artifact
-    $previous = $script:DownloadProgressState[$key]
-    $percentChanged = $null -eq $previous -or [Math]::Abs($percent - [double]$previous.Percent) -ge 0.1
-    $due = $null -eq $previous -or ($now - $previous.At).TotalMilliseconds -ge 200
-    $complete = $percent -ge 100
     $line = "当前文件=$Artifact；总字节=$Total；已下载=$Downloaded；百分比=$percent%；字节/秒=$speed；ETA=$eta 秒；重试=$RetryCount；续传偏移=$ResumeOffset"
-    $interactive = $false
-    try { $interactive = [Environment]::UserInteractive -and -not [Console]::IsOutputRedirected } catch { $interactive = $false }
-    $nonInteractiveDue = $null -eq $previous -or [Math]::Abs($percent - [double]$previous.Percent) -ge 5 -or ($null -ne $previous -and ($now - $previous.At).TotalSeconds -ge 30)
-    if ($complete -or ($percentChanged -and $due -and ($interactive -or $nonInteractiveDue))) {
-        if ($interactive -and -not $complete) {
-            Write-Host ("`r" + $line.PadRight(180)) -NoNewline
-        }
-        else {
-            Write-Host $line
-        }
-        $script:DownloadProgressState[$key] = @{ Percent = $percent; At = $now }
+    [IO.File]::AppendAllText(
+        [string]$script:DownloadProgressState.DiagnosticsPath,
+        ([DateTime]::UtcNow.ToString("o") + " " + $line + [Environment]::NewLine),
+        (New-Object System.Text.UTF8Encoding($false))
+    )
+
+    $lastOutputAt = $script:DownloadProgressState.LastOutputAt
+    $lastPercent = $script:DownloadProgressState.LastPercent
+    $percentChanged = $null -eq $lastPercent -or [Math]::Abs($percent - [double]$lastPercent) -ge 0.1
+    $throttleElapsed = $null -eq $lastOutputAt -or ($now - [DateTime]$lastOutputAt).TotalMilliseconds -ge 200
+    $complete = $percent -ge 100
+    $interactive = Test-InteractiveConsole
+    $sparseDue = $null -eq $lastPercent -or [Math]::Abs($percent - [double]$lastPercent) -ge 5 -or `
+        ($null -ne $lastOutputAt -and ($now - [DateTime]$lastOutputAt).TotalSeconds -ge 30)
+    if (-not $complete -and (-not $percentChanged -or -not $throttleElapsed -or (-not $interactive -and -not $sparseDue))) {
+        return
     }
+
+    $width = [Math]::Max([int]$script:DownloadProgressState.Width, $line.Length)
+    $rendered = "`r" + $line.PadRight($width)
+    if ($interactive) {
+        Write-Host $rendered -NoNewline
+        $script:DownloadProgressState.ActiveLine = $true
+        if ($complete) {
+            Stop-DownloadProgress
+        }
+    }
+    else {
+        Write-Host $line
+    }
+    $script:DownloadProgressState.Width = $width
+    $script:DownloadProgressState.LastOutputAt = $now
+    $script:DownloadProgressState.LastPercent = $percent
 }
 
 function Test-FileIntegrity {
@@ -697,10 +762,16 @@ function Receive-VerifiedArtifact {
         [Parameter(Mandatory = $true)][long]$ExpectedSize,
         [Parameter(Mandatory = $true)][string]$ExpectedSha256,
         [Parameter(Mandatory = $true)][string]$ArtifactName,
+        [string]$DiagnosticsPath,
         [int]$Retries,
         [int]$RetryDelay,
         [switch]$AllowLocal
     )
+
+    if (-not $DiagnosticsPath) {
+        $DiagnosticsPath = "$Destination.progress.log"
+    }
+    Start-DownloadProgress -Artifact $ArtifactName -DiagnosticsPath $DiagnosticsPath
 
     $metadataPath = "$Destination.meta.json"
     New-Item -ItemType Directory -Path (Split-Path -Parent $Destination) -Force | Out-Null
@@ -723,7 +794,7 @@ function Receive-VerifiedArtifact {
         if ((Test-Path -LiteralPath $Destination) -and
             (Get-Item -LiteralPath $Destination).Length -eq $ExpectedSize -and
             -not (Test-FileIntegrity -Path $Destination -ExpectedSize $ExpectedSize -ExpectedSha256 $ExpectedSha256)) {
-            Write-Host "完整长度缓存未通过 SHA-256，已重置当前 .part 以便重新下载。"
+            Write-InstallerMessage "完整长度缓存未通过 SHA-256，已重置当前 .part 以便重新下载。"
             [IO.File]::WriteAllBytes($Destination, (New-Object byte[] 0))
             Remove-Item -LiteralPath $metadataPath -Force -ErrorAction SilentlyContinue
             $metadata = $null
@@ -733,6 +804,7 @@ function Receive-VerifiedArtifact {
         $ifRange = $null
         if ($offset -gt 0 -and $metadata) {
             $ifRange = if ($metadata.etag) { [string]$metadata.etag } else { [string]$metadata.last_modified }
+            Write-InstallerMessage "断点续传：文件=$ArtifactName；偏移=$offset"
         }
         try {
             $opened = Open-HttpResponse -Uri $Uri -Offset $(if ($offset -gt 0) { $offset } else { -1 }) -IfRange $ifRange -AllowLocal:$AllowLocal
@@ -742,6 +814,7 @@ function Receive-VerifiedArtifact {
             if ($status -eq 416) {
                 if ($offset -eq $ExpectedSize -and (Test-FileIntegrity -Path $Destination -ExpectedSize $ExpectedSize -ExpectedSha256 $ExpectedSha256)) {
                     Write-DownloadProgress -Artifact $ArtifactName -Total $ExpectedSize -Downloaded $offset -StartedAt $started -RetryCount $attempt -ResumeOffset $requestOffset
+                    Write-InstallerMessage "下载完成并通过大小与 SHA-256 校验：$ArtifactName"
                     return $Destination
                 }
                 throw "HTTP 416 仅允许用于已完整且通过 SHA-256 校验的缓存文件。"
@@ -765,14 +838,14 @@ function Receive-VerifiedArtifact {
                 $responseETag = [string]$response.Headers["ETag"]
                 $responseLastModified = [string]$response.Headers["Last-Modified"]
                 if ($metadata.etag -and $responseETag -and [string]$metadata.etag -cne $responseETag) {
-                    Write-Host "续传验证器已变化，已清理当前 .part 和 metadata 并从 0 重新下载。"
+                    Write-InstallerMessage "续传验证器已变化，已清理当前 .part 和 metadata 并从 0 重新下载。"
                     [IO.File]::WriteAllBytes($Destination, (New-Object byte[] 0))
                     Remove-Item -LiteralPath $metadataPath -Force -ErrorAction SilentlyContinue
                     $metadata = $null
                     throw "续传 ETag 验证器已变化。"
                 }
                 if (-not $metadata.etag -and $metadata.last_modified -and $responseLastModified -and [string]$metadata.last_modified -cne $responseLastModified) {
-                    Write-Host "续传验证器已变化，已清理当前 .part 和 metadata 并从 0 重新下载。"
+                    Write-InstallerMessage "续传验证器已变化，已清理当前 .part 和 metadata 并从 0 重新下载。"
                     [IO.File]::WriteAllBytes($Destination, (New-Object byte[] 0))
                     Remove-Item -LiteralPath $metadataPath -Force -ErrorAction SilentlyContinue
                     $metadata = $null
@@ -781,7 +854,7 @@ function Receive-VerifiedArtifact {
                 $append = $true
             }
             elseif ($offset -gt 0 -and $status -eq 200) {
-                Write-Host "服务器未接受 Range，已从 0 重新下载当前文件。"
+                Write-InstallerMessage "服务器未接受 Range，已从 0 重新下载当前文件。"
                 [IO.File]::WriteAllBytes($Destination, (New-Object byte[] 0))
                 $offset = 0
                 $requestOffset = 0
@@ -805,7 +878,9 @@ function Receive-VerifiedArtifact {
                         throw "下载字节超过可信清单声明大小。"
                     }
                     $output.Write($buffer, 0, $read)
-                    Write-DownloadProgress -Artifact $ArtifactName -Total $ExpectedSize -Downloaded $output.Length -StartedAt $started -RetryCount $attempt -ResumeOffset $requestOffset
+                    if ($output.Length -lt $ExpectedSize) {
+                        Write-DownloadProgress -Artifact $ArtifactName -Total $ExpectedSize -Downloaded $output.Length -StartedAt $started -RetryCount $attempt -ResumeOffset $requestOffset
+                    }
                 }
             }
             finally {
@@ -814,6 +889,7 @@ function Receive-VerifiedArtifact {
             }
 
             $length = (Get-Item -LiteralPath $Destination).Length
+            Write-InstallerMessage "校验下载文件大小与 SHA-256：$ArtifactName"
             if ($length -ne $ExpectedSize) {
                 throw "下载提前结束：收到 $length 字节，预期 $ExpectedSize 字节。"
             }
@@ -821,13 +897,15 @@ function Receive-VerifiedArtifact {
                 throw "bundle SHA-256 校验失败；已保留不可信 .part 供后续修复。"
             }
             Write-DownloadProgress -Artifact $ArtifactName -Total $ExpectedSize -Downloaded $length -StartedAt $started -RetryCount $attempt -ResumeOffset $requestOffset
+            Write-InstallerMessage "下载完成并通过大小与 SHA-256 校验：$ArtifactName"
             return $Destination
         }
         catch {
             if ($attempt -ge $Retries) {
+                Stop-DownloadProgress
                 throw
             }
-            Write-Host "下载重试：重试=$($attempt + 1)，续传偏移=$(if (Test-Path -LiteralPath $Destination) { (Get-Item -LiteralPath $Destination).Length } else { 0 })，原因=$($_.Exception.Message)"
+            Write-InstallerMessage "下载重试：重试=$($attempt + 1)，续传偏移=$(if (Test-Path -LiteralPath $Destination) { (Get-Item -LiteralPath $Destination).Length } else { 0 })，原因=$($_.Exception.Message)"
             Start-Sleep -Milliseconds $RetryDelay
         }
         finally {
@@ -1075,14 +1153,19 @@ function Invoke-InstallationSmoke {
     )
 
     New-Item -ItemType Directory -Path $DiagnosticsRoot -Force | Out-Null
-    Write-Host "当前阶段=本地完整 smoke test；诊断目录=$DiagnosticsRoot"
+    Write-InstallerMessage "当前阶段=本地完整 smoke test；诊断目录=$DiagnosticsRoot"
     if ($FixtureScript) {
         if (-not $AllowLocal) {
             throw "LocalSmokeScript 仅允许与 -AllowLocalFixture 一起用于测试。"
         }
         $fixturePath = (Resolve-Path -LiteralPath $FixtureScript -ErrorAction Stop).Path
         $powerShellExe = Join-Path $PSHOME "powershell.exe"
-        & $powerShellExe -NoProfile -ExecutionPolicy Bypass -File $fixturePath -BundleRoot $BundleRoot -DiagnosticsRoot $DiagnosticsRoot
+        $escapedFixture = $fixturePath.Replace("'", "''")
+        $escapedBundle = $BundleRoot.Replace("'", "''")
+        $escapedDiagnostics = $DiagnosticsRoot.Replace("'", "''")
+        $utilityModule = (Join-Path $PSHOME "Modules\Microsoft.PowerShell.Utility\Microsoft.PowerShell.Utility.psd1").Replace("'", "''")
+        $fixtureCommand = "Import-Module '$utilityModule' -Global -ErrorAction Stop; & '$escapedFixture' -BundleRoot '$escapedBundle' -DiagnosticsRoot '$escapedDiagnostics'"
+        & $powerShellExe -NoProfile -ExecutionPolicy Bypass -Command $fixtureCommand
     }
     else {
         $node = Join-Path $BundleRoot "node\node.exe"
@@ -1337,7 +1420,7 @@ function Invoke-ActivationFailure {
 }
 
 function Write-InstallerSuccess {
-    Write-Output "安装完成，可以执行 Web/API 自动化测试"
+    Write-InstallerMessage "安装完成，可以执行 Web/API 自动化测试"
 }
 
 function Install-VerifiedBundleAtomically {
@@ -1502,9 +1585,12 @@ function Invoke-CompleteExecutionInstaller {
 
         $cacheRoot = Join-Path $stateRootIo "downloads\$script:SkillName\$script:BundleVersion\$SelectedArchitecture"
         $partialPath = Join-Path $cacheRoot ($manifest.archive.file_name + ".part")
+        $downloadDiagnosticsLeaf = "download-$script:BundleVersion-$SelectedArchitecture-" + [DateTime]::UtcNow.ToString("yyyyMMddTHHmmssfffZ") + ".log"
+        $downloadDiagnosticsPath = Join-Path $stateRootIo ("diagnostics\$script:SkillName\" + $downloadDiagnosticsLeaf)
         Receive-VerifiedArtifact -Uri $manifest.archive.download_url -Destination $partialPath `
             -ExpectedSize ([long]$manifest.archive.size_bytes) -ExpectedSha256 ([string]$manifest.archive.sha256) `
-            -ArtifactName ([string]$manifest.archive.file_name) -Retries $Retries -RetryDelay $RetryDelay -AllowLocal:$AllowLocal | Out-Null
+            -ArtifactName ([string]$manifest.archive.file_name) -DiagnosticsPath $downloadDiagnosticsPath `
+            -Retries $Retries -RetryDelay $RetryDelay -AllowLocal:$AllowLocal | Out-Null
 
         $runtimeParent = Join-Path $stateRootIo "runtime\$script:SkillName"
         $recordedRuntimeParent = Join-Path $stateRootFull "runtime\$script:SkillName"
@@ -1513,7 +1599,7 @@ function Invoke-CompleteExecutionInstaller {
         if ([IO.Path]::GetPathRoot($stagedRuntime) -cne [IO.Path]::GetPathRoot($runtimeParent)) {
             throw "运行时 staging 必须与目标目录位于同一卷。"
         }
-        Write-Host "当前阶段=验证 ZIP 并解压；staging=$stagedRuntime"
+        Write-InstallerMessage "当前阶段=验证 ZIP 并解压；staging=$stagedRuntime"
         Expand-ValidatedZip -ArchivePath $partialPath -DestinationRoot $stagedRuntime -ExpectedExpandedBytes ([long]$manifest.installed_size_bytes)
         Assert-PayloadManifest -BundleRoot $stagedRuntime -Companion $manifest -SelectedArchitecture $SelectedArchitecture | Out-Null
 
@@ -1574,7 +1660,7 @@ if ($MyInvocation.InvocationName -ne ".") {
         exit 0
     }
     catch {
-        Write-Error ("安装失败：" + $_.Exception.Message)
+        Write-InstallerError ("安装失败：" + $_.Exception.Message)
         exit 1
     }
 }
