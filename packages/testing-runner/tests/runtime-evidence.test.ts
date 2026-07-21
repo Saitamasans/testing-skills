@@ -92,6 +92,42 @@ function manifestWithCases(caseIds: string[]): RunManifest {
   };
 }
 
+function executionContract(caseId: string, options: {
+  resource?: string;
+  contamination?: "resource" | "global";
+  cleanup?: boolean;
+} = {}): NonNullable<RunManifest["cases"][number]["execution_contract"]> {
+  return {
+    case_id: caseId,
+    source_case_id: caseId,
+    source_sheet: "Cases",
+    title: caseId,
+    module: "runtime",
+    priority: "P0",
+    execution_type: "web_ui",
+    automation_status: "auto_ready",
+    isolation_scope: "case",
+    flow_group: null,
+    start_state: { description: "isolated" },
+    auth_profile: { id: "anonymous" },
+    setup: [],
+    actions: [],
+    assertions: [{ assertion_id: `${caseId}-assert`, description: "passes" }],
+    effects: {
+      account_data: options.contamination === "resource" ? { target_state: "modified" } : null,
+      global_environment: options.contamination === "global" ? { target_state: "modified" } : null,
+    },
+    cleanup: {
+      technical_cleanup: [],
+      business_cleanup: options.cleanup ? [{ cleanup_id: `${caseId}-cleanup`, description: "restore state" }] : [],
+    },
+    dependencies: [],
+    resource_locks: options.resource ? [{ resource: options.resource, mode: "shared" }] : [],
+    evidence_policy: {},
+    unresolved: [],
+  };
+}
+
 test("event writer appends monotonic redacted JSONL without mutating prior events", async () => {
   const directory = await tempDir("runner-events-");
   const file = path.join(directory, "run-events.jsonl");
@@ -457,4 +493,71 @@ test("contract cleanup status keeps an earlier failure when a later cleanup pass
   });
 
   assert.equal(result.cases[0]?.contract_field_status?.cleanup, "failed");
+});
+
+test("resource contamination blocks only later cases sharing the explicit resource lock", async () => {
+  const directory = await tempDir("runner-resource-contamination-");
+  const subject = manifestWithCases(["CASE-001", "CASE-002", "CASE-003"]);
+  subject.cases[0]!.execution_contract = executionContract("CASE-001", { resource: "account:shared", contamination: "resource", cleanup: true });
+  subject.cases[1]!.execution_contract = executionContract("CASE-002", { resource: "account:shared" });
+  subject.cases[2]!.execution_contract = executionContract("CASE-003", { resource: "account:unrelated" });
+  subject.cases[0]!.steps.push({ type: "cleanup.api", action_id: "CASE-001-cleanup", source_step: "CASE-001-cleanup", target_alias: "api", method: "DELETE", path: "/state", risk: "R0" });
+  const executed: string[] = [];
+
+  const result = await runApprovedManifest({
+    manifest: subject,
+    outputDir: directory,
+    executeAction: async (action) => {
+      executed.push(action.action_id);
+      return {
+        action_id: action.action_id,
+        started_at: new Date().toISOString(),
+        finished_at: new Date().toISOString(),
+        status: action.type === "cleanup.api" ? "failed" : "passed",
+        attachments: [],
+        ...(action.type === "cleanup.api" ? { error: { type: "cleanup_failed", message: "account state was not restored" } } : { actual: { ok: true } }),
+      };
+    },
+  });
+
+  assert.deepEqual(result.cases.map(({ case_id, case_status, run_status }) => ({ case_id, case_status, run_status })), [
+    { case_id: "CASE-001", case_status: "未执行", run_status: "manual_required" },
+    { case_id: "CASE-002", case_status: "未执行", run_status: "blocked" },
+    { case_id: "CASE-003", case_status: "通过", run_status: "completed" },
+  ]);
+  assert.equal(executed.some((actionId) => actionId.startsWith("CASE-002")), false);
+  assert.equal(executed.some((actionId) => actionId.startsWith("CASE-003")), true);
+});
+
+test("global contamination stops later cases without losing their blocked results", async () => {
+  const directory = await tempDir("runner-global-contamination-");
+  const subject = manifestWithCases(["CASE-001", "CASE-002", "CASE-003"]);
+  subject.cases[0]!.execution_contract = executionContract("CASE-001", { contamination: "global", cleanup: true });
+  subject.cases[1]!.execution_contract = executionContract("CASE-002");
+  subject.cases[2]!.execution_contract = executionContract("CASE-003");
+  subject.cases[0]!.steps.push({ type: "cleanup.api", action_id: "CASE-001-cleanup", source_step: "CASE-001-cleanup", target_alias: "api", method: "DELETE", path: "/global", risk: "R0" });
+  const executed: string[] = [];
+
+  const result = await runApprovedManifest({
+    manifest: subject,
+    outputDir: directory,
+    executeAction: async (action) => {
+      executed.push(action.action_id);
+      return {
+        action_id: action.action_id,
+        started_at: new Date().toISOString(),
+        finished_at: new Date().toISOString(),
+        status: action.type === "cleanup.api" ? "failed" : "passed",
+        attachments: [],
+        ...(action.type === "cleanup.api" ? { error: { type: "cleanup_failed", message: "global state was not restored" } } : { actual: { ok: true } }),
+      };
+    },
+  });
+
+  assert.deepEqual(result.cases.map(({ case_id, case_status, run_status }) => ({ case_id, case_status, run_status })), [
+    { case_id: "CASE-001", case_status: "未执行", run_status: "manual_required" },
+    { case_id: "CASE-002", case_status: "未执行", run_status: "blocked" },
+    { case_id: "CASE-003", case_status: "未执行", run_status: "blocked" },
+  ]);
+  assert.deepEqual(executed.filter((actionId) => actionId.endsWith("-request")), ["CASE-001-request"]);
 });

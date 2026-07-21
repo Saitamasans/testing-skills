@@ -6,10 +6,11 @@ import test from "node:test";
 import type { Browser, Page } from "playwright";
 
 import {
+  applyBrowserContextCleanupFailures,
   openBrowserSession,
   resolveBrowserSettings,
 } from "../src/runtime/browser-session.js";
-import type { RunManifest } from "../src/types.js";
+import type { RunManifest, RunResult } from "../src/types.js";
 
 function manifestWith(actionType: string): RunManifest {
   return {
@@ -174,12 +175,163 @@ test("prepares every Web case in a fresh browser context", async () => {
   assert.equal(contexts[0]?.closed, true);
   await session?.close();
   assert.equal(contexts[1]?.closed, true);
+  const records = session?.contextRecords() ?? [];
+  assert.deepEqual(records.map(({ case_id }) => case_id), ["LOGIN-001", "LOGIN-002"]);
+  assert.equal(new Set(records.map(({ context_id }) => context_id)).size, 2);
+  assert.equal(records.every(({ context_close_status }) => context_close_status === "closed"), true);
+  assert.deepEqual(records.map(({ context_reused, isolation_scope, flow_group }) => ({ context_reused, isolation_scope, flow_group })), [
+    { context_reused: false, isolation_scope: "case", flow_group: null },
+    { context_reused: false, isolation_scope: "case", flow_group: null },
+  ]);
   assert.equal(await readFile(path.join(outputDir, "evidence", "LOGIN-001", "playwright-trace.zip"), "utf8"), "trace-1");
   assert.equal(await readFile(path.join(outputDir, "evidence", "LOGIN-002", "playwright-trace.zip"), "utf8"), "trace-2");
   assert.deepEqual(await session?.finalizeTraces(), [
     path.join(outputDir, "evidence", "LOGIN-001", "playwright-trace.zip"),
     path.join(outputDir, "evidence", "LOGIN-002", "playwright-trace.zip"),
   ]);
+});
+
+test("explicit flow group shares one context only inside the group", async () => {
+  const outputDir = await mkdtemp(path.join(os.tmpdir(), "flow-group-browser-"));
+  let contexts = 0;
+  const browser = {
+    newContext: async () => {
+      contexts += 1;
+      return { tracing: { start: async () => undefined, stop: async () => undefined }, newPage: async () => ({ context: contexts } as unknown as Page), close: async () => undefined };
+    },
+    close: async () => undefined,
+  };
+  const session = await openBrowserSession({ manifest: manifestWith("web.goto"), mode: "ci", outputDir, launchBrowser: async () => browser as unknown as Browser });
+  const first = await session?.prepareCase("FLOW-1", { isolationScope: "flow_group", flowGroup: "login-flow" });
+  const second = await session?.prepareCase("FLOW-2", { isolationScope: "flow_group", flowGroup: "login-flow" });
+  const third = await session?.prepareCase("CASE-3", { isolationScope: "case", flowGroup: null });
+  assert.equal(first, second);
+  assert.notEqual(second, third);
+  assert.equal(contexts, 2);
+  await session?.close();
+  const records = session?.contextRecords() ?? [];
+  assert.equal(records[0]?.context_id, records[1]?.context_id);
+  assert.notEqual(records[1]?.context_id, records[2]?.context_id);
+  assert.deepEqual(records.map(({ context_reused, isolation_scope, flow_group }) => ({ context_reused, isolation_scope, flow_group })), [
+    { context_reused: false, isolation_scope: "flow_group", flow_group: "login-flow" },
+    { context_reused: true, isolation_scope: "flow_group", flow_group: "login-flow" },
+    { context_reused: false, isolation_scope: "case", flow_group: null },
+  ]);
+});
+
+test("a context close failure is recorded while the next independent case continues in a fresh context", async () => {
+  const outputDir = await mkdtemp(path.join(os.tmpdir(), "close-failure-browser-"));
+  let contexts = 0;
+  const browser = {
+    newContext: async () => {
+      contexts += 1;
+      const id = contexts;
+      return {
+        tracing: { start: async () => undefined, stop: async () => undefined },
+        newPage: async () => ({ context: id } as unknown as Page),
+        close: async () => { if (id === 1 || id === 3) throw new Error(`close failed: ${id}`); },
+      };
+    },
+    close: async () => undefined,
+  };
+  const session = await openBrowserSession({ manifest: manifestWith("web.goto"), mode: "ci", outputDir, launchBrowser: async () => browser as unknown as Browser });
+  await session?.prepareCase("CASE-1");
+  const second = await session?.prepareCase("CASE-2");
+  assert.equal((second as unknown as { context: number }).context, 2);
+  const third = await session?.prepareCase("CASE-3");
+  assert.equal((third as unknown as { context: number }).context, 3);
+  assert.equal(contexts, 3);
+  await session?.close();
+  const records = session?.contextRecords() ?? [];
+  assert.equal(records.find(({ case_id }) => case_id === "CASE-1")?.context_close_status, "failed");
+  assert.equal(records.find(({ case_id }) => case_id === "CASE-3")?.context_close_status, "failed");
+  assert.notEqual(records.find(({ case_id }) => case_id === "CASE-2")?.context_id, records.find(({ case_id }) => case_id === "CASE-3")?.context_id);
+});
+
+test("context close failures affect their owning cases without erasing business failures", () => {
+  const result: RunResult = {
+    protocol_version: "1.0.0",
+    run_id: "run-context-cleanup",
+    manifest_hash: "a".repeat(64),
+    run_status: "completed",
+    started_at: new Date().toISOString(),
+    cases: [
+      { case_id: "CASE-1", case_status: "通过", run_status: "completed", assertions: [], evidence: [] },
+      { case_id: "CASE-2", case_status: "不通过", run_status: "completed", assertions: [], evidence: [] },
+      { case_id: "CASE-3", case_status: "通过", run_status: "completed", assertions: [], evidence: [] },
+    ],
+  };
+  applyBrowserContextCleanupFailures(result, [
+    { case_id: "CASE-1", browser_id: "browser", context_id: "one", context_created_at: "created", context_closed_at: "closed", context_close_status: "failed", context_reused: false, isolation_scope: "case", flow_group: null },
+    { case_id: "CASE-2", browser_id: "browser", context_id: "two", context_created_at: "created", context_closed_at: "closed", context_close_status: "failed", context_reused: false, isolation_scope: "case", flow_group: null },
+    { case_id: "CASE-3", browser_id: "browser", context_id: "three", context_created_at: "created", context_closed_at: "closed", context_close_status: "closed", context_reused: false, isolation_scope: "case", flow_group: null },
+  ]);
+  assert.equal(result.run_status, "executor_error");
+  assert.deepEqual(result.cases.map(({ case_status, run_status }) => ({ case_status, run_status })), [
+    { case_status: "未执行", run_status: "executor_error" },
+    { case_status: "不通过", run_status: "executor_error" },
+    { case_status: "通过", run_status: "completed" },
+  ]);
+});
+
+for (const [name, outcomes] of [
+  ["failure/success/failure", ["failed", "passed", "failed"]],
+  ["success/failure/success", ["passed", "failed", "passed"]],
+] as const) {
+  test(`${name} ordering keeps case state isolated`, async () => {
+    const outputDir = await mkdtemp(path.join(os.tmpdir(), "case-state-ordering-"));
+    const contextStates: Array<Record<string, string>> = [];
+    const browser = {
+      newContext: async () => {
+        const state: Record<string, string> = {};
+        contextStates.push(state);
+        const id = contextStates.length;
+        return {
+          tracing: { start: async () => undefined, stop: async () => undefined },
+          newPage: async () => ({ context: id, state } as unknown as Page),
+          close: async () => undefined,
+        };
+      },
+      close: async () => undefined,
+    };
+    const session = await openBrowserSession({ manifest: manifestWith("web.goto"), mode: "ci", outputDir, launchBrowser: async () => browser as unknown as Browser });
+    for (const [index, outcome] of outcomes.entries()) {
+      const current = await session?.prepareCase(`CASE-${index + 1}`) as unknown as { context: number; state: Record<string, string> };
+      assert.deepEqual(current.state, {});
+      current.state.outcome = outcome;
+    }
+    await session?.close();
+    assert.deepEqual(contextStates.map((state) => state.outcome), outcomes);
+    assert.equal(new Set((session?.contextRecords() ?? []).map(({ context_id }) => context_id)).size, 3);
+  });
+}
+
+test("suite and external-existing context reuse require explicit approval", async () => {
+  const outputDir = await mkdtemp(path.join(os.tmpdir(), "shared-browser-approval-"));
+  const browser = {
+    newContext: async () => ({ tracing: { start: async () => undefined, stop: async () => undefined }, newPage: async () => ({} as Page), close: async () => undefined }),
+    close: async () => undefined,
+  };
+  const session = await openBrowserSession({ manifest: manifestWith("web.goto"), mode: "ci", outputDir, launchBrowser: async () => browser as unknown as Browser });
+  await assert.rejects(() => session!.prepareCase("SUITE-1", { isolationScope: "suite" }), /shared_context_approval_required/);
+  await assert.rejects(() => session!.prepareCase("EXTERNAL-1", { isolationScope: "external_existing" }), /shared_context_approval_required/);
+  await session?.prepareCase("SUITE-1", { isolationScope: "suite", sharedContextApproved: true });
+  const reused = await session?.prepareCase("SUITE-2", { isolationScope: "suite", sharedContextApproved: true });
+  assert.ok(reused);
+  await session?.close();
+});
+
+test("live smoke third case keeps fixed order without a business dependency or logout", async () => {
+  const fixtureRoot = new URL("../../../tests/fixtures/live-smoke/", import.meta.url);
+  const overrides = JSON.parse(await readFile(new URL("contract-overrides.json", fixtureRoot), "utf8")) as Record<string, { dependencies?: string[]; isolation_scope?: string; flow_group?: string | null }>;
+  const profile = JSON.parse(await readFile(new URL("execution-profile.json", fixtureRoot), "utf8")) as { case_plans: Record<string, Array<{ type: string; locator?: string }>> };
+  const generator = await readFile(new URL("generate-fixture.mjs", fixtureRoot), "utf8");
+
+  assert.deepEqual(overrides["LOGIN-MINI-003"]?.dependencies ?? [], []);
+  assert.deepEqual({ isolation_scope: overrides["LOGIN-MINI-003"]?.isolation_scope, flow_group: overrides["LOGIN-MINI-003"]?.flow_group }, { isolation_scope: "case", flow_group: null });
+  assert.ok(generator.indexOf('"LOGIN-MINI-002"') < generator.indexOf('"LOGIN-MINI-003"'));
+  assert.match(generator, /固定执行顺序/);
+  assert.equal(profile.case_plans["LOGIN-MINI-003"]?.some(({ type, locator }) => type === "cleanup.web" || /logout|退出/i.test(locator ?? "")), false);
 });
 
 test("visible session finalizes Trace before showing delivery results and closes idempotently", async () => {

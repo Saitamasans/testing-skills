@@ -16,6 +16,7 @@ import { verifyReportConsistency } from "../reporting/consistency-gate.js";
 import { runApprovedManifest } from "../runtime/run-orchestrator.js";
 import { createExecutionContext, type CreateExecutionContextInput } from "../runtime/execution-context.js";
 import {
+  applyBrowserContextCleanupFailures,
   openBrowserSession,
   type BrowserSessionOptions,
   type BrowserVisibility,
@@ -358,6 +359,7 @@ export async function runRunCommand(options: RunCommandOptions): Promise<number>
   if (options.slowMo !== undefined) browserOptions.slowMo = options.slowMo;
   if (options.progress !== undefined) browserOptions.progress = options.progress;
   const browserSession = await openBrowserSession(browserOptions);
+  let authoritativeResult: RunResult | undefined;
   try {
     const contextInput: CreateExecutionContextInput = {
       targets: profile.targets,
@@ -374,12 +376,18 @@ export async function runRunCommand(options: RunCommandOptions): Promise<number>
       ...(browserSession?.observer ? { observer: browserSession.observer } : {}),
       beforeCase: async (item) => {
         if (!browserSession || !item.steps.some((action) => action.type.startsWith("web.") || action.type === "cleanup.web")) return;
-        const page = await browserSession.prepareCase(item.case_id);
+        const page = await browserSession.prepareCase(item.case_id, {
+          isolationScope: item.isolation_scope ?? "case",
+          flowGroup: item.flow_group ?? null,
+          sharedContextApproved: item.isolation_scope === "suite" || item.isolation_scope === "external_existing",
+        });
         context = createExecutionContext({ ...contextInput, page });
       },
       executeAction: (action) => executeRegisteredAction(action, context),
     }));
+    authoritativeResult = result;
 
+    if (browserSession) applyBrowserContextCleanupFailures(result, browserSession.contextRecords());
     result = validateDocument<RunResult>("run-result", await finalizeResultForReporting({
       result,
       manifest,
@@ -401,6 +409,23 @@ export async function runRunCommand(options: RunCommandOptions): Promise<number>
     }
     await browserSession?.showDeliveryResult({ result, artifacts });
     await browserSession?.completionPause();
+    let browserCloseError: unknown;
+    try {
+      await browserSession?.close();
+    } catch (error) {
+      browserCloseError = error;
+    }
+    const statusBeforeFinalClose = JSON.stringify(result.cases.map(({ case_id, case_status, run_status }) => ({ case_id, case_status, run_status })));
+    if (browserSession) applyBrowserContextCleanupFailures(result, browserSession.contextRecords());
+    if (browserCloseError) result.run_status = "infrastructure_error";
+    if (browserCloseError || statusBeforeFinalClose !== JSON.stringify(result.cases.map(({ case_id, case_status, run_status }) => ({ case_id, case_status, run_status })))) {
+      result.completed_at = new Date().toISOString();
+      result = validateDocument<RunResult>("run-result", result);
+      authoritativeResult = result;
+      await writeJson(path.join(options.outputDir, "run-result.json"), result);
+      await writeReports(options.outputDir, manifest, result);
+    }
+    authoritativeResult = result;
     return exitCodeForRunResult(result);
   } catch (error) {
     if (error instanceof Error && error.name === "ManualCredentialRequiredError") {
@@ -411,11 +436,52 @@ export async function runRunCommand(options: RunCommandOptions): Promise<number>
         error.message,
         browserSession?.finalizeTraces,
       );
+      authoritativeResult = result;
       return exitCodeForRunResult(result);
     }
-    throw error;
+    if (authoritativeResult) {
+      authoritativeResult.run_status = "infrastructure_error";
+      try {
+        await writeJson(path.join(options.outputDir, "run-result.json"), authoritativeResult);
+      } catch {
+        // The independent finally writes below still attempt both final artifacts.
+      }
+      return exitCodeForRunResult(authoritativeResult);
+    }
+    const result = await persistBlockedResult(
+      options.outputDir,
+      manifest,
+      "executor_error",
+      error instanceof Error ? error.message : String(error),
+    );
+    authoritativeResult = result;
+    return exitCodeForRunResult(result);
   } finally {
-    await browserSession?.close();
+    let finalBrowserCloseError: unknown;
+    try {
+      await browserSession?.close();
+    } catch (error) {
+      finalBrowserCloseError = error;
+    } finally {
+      if (browserSession && authoritativeResult) {
+        applyBrowserContextCleanupFailures(authoritativeResult, browserSession.contextRecords());
+      }
+      if (finalBrowserCloseError && authoritativeResult) authoritativeResult.run_status = "infrastructure_error";
+      if (browserSession) {
+        try {
+          await writeJson(path.join(options.outputDir, "browser-contexts.json"), browserSession.contextRecords());
+        } catch {
+          // Best effort continues with the authoritative result below.
+        }
+      }
+      if (authoritativeResult) {
+        try {
+          await writeJson(path.join(options.outputDir, "run-result.json"), authoritativeResult);
+        } catch {
+          // Do not let a nested finalization failure erase the other artifact.
+        }
+      }
+    }
   }
 }
 

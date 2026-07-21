@@ -147,6 +147,19 @@ function mergeContractFieldStatus(current: ContractFieldStatus | undefined, next
   return "skipped";
 }
 
+function resourceLockNames(item: ManifestCase): string[] {
+  return (item.execution_contract?.resource_locks ?? []).flatMap((lock) => {
+    if (!lock || typeof lock !== "object") return [];
+    const resource = (lock as { resource?: unknown }).resource;
+    return typeof resource === "string" && resource.length > 0 ? [resource] : [];
+  });
+}
+
+function hasDeclaredGlobalEffect(item: ManifestCase): boolean {
+  const value = item.execution_contract?.effects.global_environment;
+  return value !== undefined && value !== null;
+}
+
 function recordContractActionOutcome(
   contract: ContractCase,
   action: ManifestAction,
@@ -204,6 +217,8 @@ export async function runApprovedManifest(input: RunInput): Promise<RunResult> {
   const cases: RunResult["cases"] = [];
   const defects = new Map<string, { case_ids: string[]; evidence: EvidenceReference[] }>();
   let runStatus: RunResult["run_status"] = "completed";
+  let globalContaminationReason: string | undefined;
+  const contaminatedResources = new Map<string, string>();
 
   await input.observer?.runStarted?.({
     run_id,
@@ -224,6 +239,28 @@ export async function runApprovedManifest(input: RunInput): Promise<RunResult> {
       item,
       action_total: item.steps.length,
     };
+    const contaminatedResource = resourceLockNames(item).find((resource) => contaminatedResources.has(resource));
+    const contaminationBlockReason = globalContaminationReason
+      ?? (contaminatedResource ? `Resource is contaminated by an earlier cleanup failure: ${contaminatedResource} (${contaminatedResources.get(contaminatedResource)}).` : undefined);
+    if (contaminationBlockReason) {
+      if (fieldStatus) {
+        if (globalContaminationReason) fieldStatus.effects = "blocked";
+        else fieldStatus.resource_locks = "blocked";
+      }
+      const caseResult: CaseResult = {
+        case_id: item.case_id,
+        case_status: NOT_EXECUTED,
+        run_status: "blocked",
+        assertions: [{ assertion_id: `${item.case_id}-contamination-gate`, passed: false, actual: contaminationBlockReason }],
+        evidence: [],
+        ...contractProjection(item, fieldStatus),
+      };
+      cases.push(caseResult);
+      if (runStatus === "completed") runStatus = "blocked";
+      await input.observer?.caseStarted?.(caseEvent);
+      await input.observer?.caseCompleted?.({ ...caseEvent, result: caseResult });
+      continue;
+    }
     await input.beforeCase?.(item);
     try {
     await input.observer?.caseStarted?.(caseEvent);
@@ -414,6 +451,11 @@ export async function runApprovedManifest(input: RunInput): Promise<RunResult> {
       caseRunStatus = "manual_required";
       runStatus = "manual_required";
       if (caseStatus === PASSED) caseStatus = NOT_EXECUTED;
+      if (hasDeclaredGlobalEffect(item)) {
+        globalContaminationReason = `Global environment is contaminated by cleanup failure in ${item.case_id}.`;
+      } else {
+        for (const resource of resourceLockNames(item)) contaminatedResources.set(resource, item.case_id);
+      }
     }
 
     const caseResult: CaseResult = {
