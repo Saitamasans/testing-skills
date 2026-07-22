@@ -17,16 +17,22 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { gunzipSync } from "node:zlib";
 
 const PACKAGE_NAME = "@saitamasans/testing-runner";
-const VERSION = "1.1.2";
-const FILE_NAME = "saitamasans-testing-runner-1.1.2.tgz";
-const RELEASE_TAG = "testing-runner-v1.1.2";
+const RELEASE_PREPARATION_PATH = fileURLToPath(
+  new URL("../release/runner-1.1.3-release-lock.json", import.meta.url),
+);
+const RELEASE_PREPARATION = JSON.parse(await readFile(RELEASE_PREPARATION_PATH, "utf8"));
+const VERSION = RELEASE_PREPARATION.runner.version;
+const FILE_NAME = RELEASE_PREPARATION.runner.file_name;
+const RELEASE_TAG = RELEASE_PREPARATION.runner.release_tag;
 const RELEASE_URL = "https://github.com/Saitamasans/testing-skills/releases/download/"
   + RELEASE_TAG + "/" + FILE_NAME;
 const CHROMIUM_ESTIMATED_SIZE_BYTES = 180_000_000;
 const BUNDLED_DEPENDENCIES = [
+  "@saitamasans/testing-contract-compiler",
   "ajv",
   "commander",
   "exceljs",
+  "jszip",
   "mysql2",
   "node-sql-parser",
   "pg",
@@ -37,9 +43,11 @@ const OWNED_TEXT_EXTENSIONS = new Set([
   ".html",
   ".js",
   ".json",
+  ".map",
   ".md",
   ".mjs",
   ".txt",
+  ".ts",
   ".yaml",
   ".yml",
 ]);
@@ -48,14 +56,17 @@ const PACKAGE_ROOT = fileURLToPath(new URL("..", import.meta.url));
 const RELEASE_DEPENDENCY_LOCK_PATH = fileURLToPath(
   new URL("../release/package-lock.json", import.meta.url),
 );
-const DEFAULT_MANIFEST_PATH = path.join(
-  REPO_ROOT,
-  "skill-sources",
-  "web-api-test-execution-evidence",
-  "assets",
-  "runner-release.json",
+const BUNDLED_WORKSPACES_PATH = fileURLToPath(
+  new URL("../release/bundled-workspaces.json", import.meta.url),
 );
 
+async function readNormalizedHashBytes(file) {
+  const bytes = await readFile(file);
+  if (!OWNED_TEXT_EXTENSIONS.has(path.extname(file))) {
+    return bytes;
+  }
+  return Buffer.from(bytes.toString("utf8").replace(/\r\n?/g, "\n"), "utf8");
+}
 export function resolveReleaseOutputDir(outputDir = path.join(REPO_ROOT, "build", "releases")) {
   return path.resolve(REPO_ROOT, outputDir);
 }
@@ -116,6 +127,68 @@ export async function sha256File(file) {
   return createHash("sha256").update(bytes).digest("hex");
 }
 
+async function addTreeToHash(hash, root, relative = "") {
+  const directory = path.join(root, relative);
+  const entries = await readdir(directory, { withFileTypes: true });
+  entries.sort((left, right) => (
+    left.name < right.name ? -1 : left.name > right.name ? 1 : 0
+  ));
+  for (const entry of entries) {
+    const child = path.join(relative, entry.name);
+    if (entry.isDirectory()) {
+      await addTreeToHash(hash, root, child);
+    } else if (entry.isFile()) {
+      hash.update(child.replaceAll(path.sep, "/") + "\0");
+      hash.update(await readNormalizedHashBytes(path.join(root, child)));
+      hash.update("\0");
+    }
+  }
+}
+
+export async function hashBundledWorkspace(root) {
+  const hash = createHash("sha256");
+  for (const relative of ["package.json", "dist", "schemas"]) {
+    const absolute = path.join(root, relative);
+    const info = await stat(absolute);
+    if (info.isDirectory()) {
+      await addTreeToHash(hash, root, relative);
+    } else {
+      hash.update(relative + "\0");
+      hash.update(await readNormalizedHashBytes(absolute));
+      hash.update("\0");
+    }
+  }
+  return hash.digest("hex");
+}
+
+async function installBundledWorkspaces(manager, stageDir) {
+  const contract = JSON.parse(await readFile(BUNDLED_WORKSPACES_PATH, "utf8"));
+  if (contract.schema_version !== 1 || !Array.isArray(contract.packages)) {
+    throw new Error("invalid bundled workspace contract");
+  }
+  for (const bundled of contract.packages) {
+    const source = path.resolve(path.dirname(BUNDLED_WORKSPACES_PATH), bundled.source);
+    await runPackageManager(manager, ["run", "build"], source);
+    const sourcePackage = JSON.parse(await readFile(path.join(source, "package.json"), "utf8"));
+    if (sourcePackage.name !== bundled.name || sourcePackage.version !== bundled.version) {
+      throw new Error("bundled workspace identity does not match contract: " + bundled.name);
+    }
+    const actualHash = await hashBundledWorkspace(source);
+    if (actualHash !== bundled.content_sha256) {
+      throw new Error(
+        "bundled workspace content hash does not match contract: " + bundled.name
+        + " (expected " + bundled.content_sha256 + ", got " + actualHash + ")",
+      );
+    }
+    const destination = path.join(stageDir, "node_modules", ...bundled.name.split("/"));
+    await mkdir(destination, { recursive: true });
+    await copyFile(path.join(source, "package.json"), path.join(destination, "package.json"));
+    for (const directory of ["dist", "schemas"]) {
+      await cp(path.join(source, directory), path.join(destination, directory), { recursive: true });
+    }
+  }
+}
+
 export async function normalizeReleaseTextTree(root) {
   for (const entry of await readdir(root, { withFileTypes: true })) {
     const absolute = path.join(root, entry.name);
@@ -162,9 +235,10 @@ export async function listTarEntries(archivePath) {
 
 export async function buildReleaseTarball(
   outputDir = path.join(REPO_ROOT, "build", "releases"),
-  manifestPath = DEFAULT_MANIFEST_PATH,
+  manifestPath,
 ) {
   outputDir = resolveReleaseOutputDir(outputDir);
+  manifestPath ??= path.join(outputDir, "runner-release.json");
   await mkdir(outputDir, { recursive: true });
   const archivePath = path.join(outputDir, FILE_NAME);
   const checksumPath = archivePath + ".sha256";
@@ -183,6 +257,34 @@ export async function buildReleaseTarball(
     }
     await normalizeReleaseTextTree(stageDir);
     const packageJson = JSON.parse(await readFile(path.join(PACKAGE_ROOT, "package.json"), "utf8"));
+    if (packageJson.name !== PACKAGE_NAME || packageJson.version !== VERSION) {
+      throw new Error("Runner package identity does not match the prepared release lock");
+    }
+    const publicPackageJson = structuredClone(packageJson);
+    delete publicPackageJson.dependencies["@saitamasans/testing-contract-compiler"];
+    publicPackageJson.scripts = {};
+    publicPackageJson.bundledDependencies = BUNDLED_DEPENDENCIES.filter(
+      (name) => name !== "@saitamasans/testing-contract-compiler",
+    );
+    delete publicPackageJson.devDependencies;
+    await writeFile(
+      path.join(stageDir, "package.json"),
+      JSON.stringify(publicPackageJson, null, 2) + "\n",
+      "utf8",
+    );
+    const releaseLock = JSON.parse(await readFile(RELEASE_DEPENDENCY_LOCK_PATH, "utf8"));
+    const lockedRoot = releaseLock.packages?.[""];
+    if (releaseLock.lockfileVersion !== 3
+        || lockedRoot?.name !== publicPackageJson.name
+        || lockedRoot?.version !== publicPackageJson.version
+        || JSON.stringify(lockedRoot?.dependencies) !== JSON.stringify(publicPackageJson.dependencies)) {
+      throw new Error("committed Runner release dependency lock does not match package.json");
+    }
+    await copyFile(RELEASE_DEPENDENCY_LOCK_PATH, path.join(stageDir, "package-lock.json"));
+    await runPackageManager(manager, [
+      "ci", "--omit=dev", "--ignore-scripts", "--no-audit", "--no-fund",
+    ], stageDir);
+    await installBundledWorkspaces(manager, stageDir);
     packageJson.scripts = {};
     packageJson.bundledDependencies = BUNDLED_DEPENDENCIES;
     delete packageJson.devDependencies;
@@ -191,18 +293,6 @@ export async function buildReleaseTarball(
       JSON.stringify(packageJson, null, 2) + "\n",
       "utf8",
     );
-    const releaseLock = JSON.parse(await readFile(RELEASE_DEPENDENCY_LOCK_PATH, "utf8"));
-    const lockedRoot = releaseLock.packages?.[""];
-    if (releaseLock.lockfileVersion !== 3
-        || lockedRoot?.name !== packageJson.name
-        || lockedRoot?.version !== packageJson.version
-        || JSON.stringify(lockedRoot?.dependencies) !== JSON.stringify(packageJson.dependencies)) {
-      throw new Error("committed Runner release dependency lock does not match package.json");
-    }
-    await copyFile(RELEASE_DEPENDENCY_LOCK_PATH, path.join(stageDir, "package-lock.json"));
-    await runPackageManager(manager, [
-      "ci", "--omit=dev", "--ignore-scripts", "--no-audit", "--no-fund",
-    ], stageDir);
     const packArgs = ["pack", "--pack-destination", outputDir, "--json", "--ignore-scripts"];
     const packed = await runPackageManager(manager, packArgs, stageDir);
     const parsed = JSON.parse(packed.stdout.trim());

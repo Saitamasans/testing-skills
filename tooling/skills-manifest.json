@@ -64,6 +64,15 @@
       "default_prompt": "请执行这批 Web/API 测试用例，先检查准备材料并展示执行预览。",
       "case_output": false,
       "execution_skill": true
+    },
+    {
+      "source": "skill-sources/test-case-execution-compiler/测试用例可执行化编译_Skill.md",
+      "slug": "test-case-execution-compiler",
+      "display_name": "把人工测试用例编译成机器可执行契约",
+      "short_description": "将 Web UI 人工用例编译为可审核的 Execution Package",
+      "default_prompt": "请把这份已有 Web UI 人工测试用例编译为 Execution Package。",
+      "case_output": false,
+      "compiler_skill": true
     }
   ]
 }

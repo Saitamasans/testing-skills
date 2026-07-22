@@ -1,0 +1,25 @@
+{
+  "name": "@saitamasans/testing-contract-compiler",
+  "version": "1.0.0",
+  "type": "module",
+  "bin": { "testing-contract-compiler": "dist/cli.js" },
+  "exports": { ".": "./dist/index.js" },
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "tsx --test tests/*.test.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "ajv": "8.17.1",
+    "commander": "14.0.0",
+    "exceljs": "4.4.0",
+    "jszip": "3.10.1"
+  },
+  "devDependencies": {
+    "@types/node": "22.15.3",
+    "tsx": "4.19.4",
+    "typescript": "5.8.3"
+  },
+  "files": ["dist", "schemas"]
+}

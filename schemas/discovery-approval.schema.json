@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://saitamasans.dev/schemas/discovery-approval.schema.json",
+  "title": "Target-state discovery approval 1.0.0",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["approval_schema_version", "approval_id", "source_package_sha256", "source_case_ids", "transition_case_id", "transition_actions_sha256", "target_origin", "requested_url", "page_state_id", "approved_risks", "approved_r3_action_ids", "issued_by", "issued_at", "expires_at"],
+  "properties": {
+    "approval_schema_version": { "const": "1.0.0" },
+    "approval_id": { "$ref": "#/$defs/text" },
+    "source_package_sha256": { "$ref": "#/$defs/sha256" },
+    "source_case_ids": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "$ref": "#/$defs/text" } },
+    "transition_case_id": { "$ref": "#/$defs/text" },
+    "transition_actions_sha256": { "$ref": "#/$defs/sha256" },
+    "target_origin": { "$ref": "#/$defs/httpUrl" },
+    "requested_url": { "$ref": "#/$defs/httpUrl" },
+    "page_state_id": { "$ref": "#/$defs/text" },
+    "approved_risks": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "enum": ["R0", "R1", "R2", "R3"] } },
+    "approved_r3_action_ids": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/text" } },
+    "issued_by": { "$ref": "#/$defs/text" },
+    "issued_at": { "$ref": "#/$defs/text" },
+    "expires_at": { "$ref": "#/$defs/text" }
+  },
+  "$defs": {
+    "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "text": { "allOf": [{ "$ref": "https://saitamasans.dev/schemas/persisted-value.schema.json#/$defs/persistedString" }, { "type": "string", "minLength": 1 }] },
+    "httpUrl": { "allOf": [{ "$ref": "https://saitamasans.dev/schemas/persisted-value.schema.json#/$defs/persistedString" }, { "type": "string", "pattern": "^[Hh][Tt][Tt][Pp][Ss]?://[^\\s]+$" }] }
+  }
+}

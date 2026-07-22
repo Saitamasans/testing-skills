@@ -19,6 +19,10 @@
 
 目标状态 discovery 完成后，把迁移动作、候选目标定位器和终态断言写入待确认的正式 `case_plans`，重新生成 discovery/proposal hash、manifest hash、目标 origin、动作数和断言预览。目标状态 discovery 结果必须与正式 manifest 预览在第二次确认门禁一并确认，并重新经过第二次确认门禁；第二次确认前不能进入 E4 或正式执行，不再增加第三次确认。
 
+状态迁移探测、receipt 签发与 planning 必须由 `discover-plan` 在同一进程、同一个 active RuntimeSession capability 中完成，并使用会话规范化后的 `.testing-run` 根目录。Runner 从 package/profile 输出确定性 `discovery_tasks` 数组；每个任务至少记录 task ID、来源用例、目标状态、迁移动作 SHA、package SHA、origin、isolation scope、flow group、auth profile SHA 和 start state SHA，并使用全新 BrowserContext。相同 transition、target state、origin、auth profile、start state、isolation scope 与 flow group 才可去重。每个任务独立 receipt 至少记录 schema 版本、随机 `run_nonce`、discovery/task ID、生成器、Runtime/Runner 版本、精确 origin/请求 URL/最终 URL、来源用例 ID、目标 `page_state_id`、DOM 与无障碍指纹、artifact 路径与 SHA-256、生成与过期时间、当前 package SHA-256、迁移用例 ID、实际迁移动作 SHA-256、已校验 approval artifact SHA 和 session MAC。`runtime-session.json` 不保存 secret 或授权 ledger；重复、未知、多余或缺少任一 required task receipt 时不得生成 final manifest。
+
+`target_state_discovered=true`、`rule_versions` 中的手写 target-state 标记、用户上传布尔值、Execution Package 内预置 receipt、运行目录外 receipt、旧 session/nonce、旧页面 fingerprint、伪造 approval 或缺失 artifact 一律无效。没有 receipt 时返回 `target_state_not_discovered`；只有路径而没有 live capability 时返回 `runtime_session_required`。discovery receipt 的 `purpose` 固定为 `target_state_discovery_only`，schema 禁止写入业务通过状态；发现结果只证明本会话探测过页面，不能作为正式用例的通过证据。
+
 ## 核心链路覆盖审查
 
 第一次确认门禁前统计测试用例总数、完整可执行用例数、blocked/manual 数、核心业务路径数、完整可执行核心路径数和终态断言覆盖。搜索场景至少包含“输入关键词 → 触发搜索 → 到达结果状态 → 观察结果业务断言”；只验证首页或输入不算覆盖搜索目标。

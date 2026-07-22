@@ -50,21 +50,27 @@ jobs:
           npm run pack:runner-release -- build/release-b
           if ($LASTEXITCODE -ne 0) { throw "second Runner build failed" }
 
-      - name: Compare size and SHA-256 with each other and the runtime lock
+      - name: Compare reproducible Runner 1.1.3 preparation artifacts
         shell: powershell
         run: |
           $ErrorActionPreference = "Stop"
-          $name = "saitamasans-testing-runner-1.1.2.tgz"
+          $preparation = Get-Content -LiteralPath packages/testing-runner/release/runner-1.1.3-release-lock.json -Raw | ConvertFrom-Json
+          if ([string]$preparation.status -cne "prepared-not-published") {
+            throw "Runner 1.1.3 preparation must remain unpublished"
+          }
+          $name = [string]$preparation.runner.file_name
+          if ($name -cne "saitamasans-testing-runner-1.1.3.tgz") {
+            throw "Runner preparation filename mismatch"
+          }
           $first = Get-Item -LiteralPath (Join-Path "build/release-a" $name)
           $second = Get-Item -LiteralPath (Join-Path "build/release-b" $name)
           $firstSha = (Get-FileHash -LiteralPath $first.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
           $secondSha = (Get-FileHash -LiteralPath $second.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
-          $lock = Get-Content -LiteralPath packages/testing-runner/release/windows-runtime-lock.json -Raw | ConvertFrom-Json
           if ($first.Length -ne $second.Length -or $firstSha -cne $secondSha) {
             throw "independent Runner builds differ"
           }
-          if ($first.Length -ne [long]$lock.runner.size_bytes -or $firstSha -cne [string]$lock.runner.sha256) {
-            throw "Runner build differs from windows-runtime-lock.json"
+          if ($firstSha -ceq [string]$preparation.previous_release.sha256) {
+            throw "Runner 1.1.3 artifact must not reuse the Runner 1.1.2 bytes"
           }
           New-Item -ItemType Directory -Path build/windows-x64-release-evidence -Force | Out-Null
           [ordered]@{
@@ -74,7 +80,8 @@ jobs:
             architecture = (node -p process.arch)
             first = @{ path = $first.FullName; size_bytes = $first.Length; sha256 = $firstSha }
             second = @{ path = $second.FullName; size_bytes = $second.Length; sha256 = $secondSha }
-            runtime_lock_match = $true
+            preparation_status = [string]$preparation.status
+            previous_release_preserved = $true
           } | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath build/windows-x64-release-evidence/builds.json -Encoding UTF8
           Write-Output "RUNNER_BUILD_A size=$($first.Length) sha256=$firstSha"
           Write-Output "RUNNER_BUILD_B size=$($second.Length) sha256=$secondSha"
@@ -83,7 +90,7 @@ jobs:
         shell: powershell
         run: |
           $ErrorActionPreference = "Stop"
-          $archive = (Resolve-Path -LiteralPath build/release-a/saitamasans-testing-runner-1.1.2.tgz).Path
+          $archive = (Resolve-Path -LiteralPath build/release-a/saitamasans-testing-runner-1.1.3.tgz).Path
           $evidenceRoot = Join-Path $PWD "build/windows-x64-release-evidence"
           $smokeRoot = Join-Path $env:RUNNER_TEMP ("runner-tar-smoke-" + [Guid]::NewGuid().ToString("N"))
           try {
@@ -133,5 +140,5 @@ jobs:
           retention-days: 14
           path: |
             build/windows-x64-release-evidence/**
-            build/release-a/saitamasans-testing-runner-1.1.2.tgz
-            build/release-b/saitamasans-testing-runner-1.1.2.tgz
+            build/release-a/saitamasans-testing-runner-1.1.3.tgz
+            build/release-b/saitamasans-testing-runner-1.1.3.tgz

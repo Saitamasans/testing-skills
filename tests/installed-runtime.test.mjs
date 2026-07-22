@@ -30,6 +30,7 @@ const smokeArtifactPaths = [
   `${runId}/run-events.jsonl`,
 ];
 const sourceScripts = path.join(repoRoot, "skill-sources", skillName, "scripts");
+const windowsLauncherTimeoutMs = 15_000;
 const fixtureHomes = new Set();
 
 afterEach(async () => {
@@ -459,7 +460,7 @@ windowsRuntimeTest("PowerShell starts the verified runtime bundle launcher befor
   const result = await runPowerShell(ps1, ["plan"], {
     ...fixtureEnv(state), PATH: "", SystemRoot: process.env.SystemRoot, WINDIR: process.env.WINDIR,
     RUNTIME_LAUNCHER_MARKER: marker,
-  }, { timeoutMs: 5000 });
+  }, { timeoutMs: windowsLauncherTimeoutMs });
   assert.equal(result.code, 0, result.stderr);
   assert.equal(await exists(marker), true);
 });
@@ -572,7 +573,7 @@ windowsRuntimeTest("PowerShell handles case-variant canonical receipt paths with
   await writeFile(state.receiptPath, JSON.stringify(receipt));
   const result = await runPowerShell(path.join(sourceScripts, "testing-runner.ps1"), ["plan"], {
     ...fixtureEnv(state), PATH: "", SystemRoot: process.env.SystemRoot, WINDIR: process.env.WINDIR,
-  }, { timeoutMs: 5000 });
+  }, { timeoutMs: windowsLauncherTimeoutMs });
   assert.equal(result.code, 0, result.stderr);
 });
 

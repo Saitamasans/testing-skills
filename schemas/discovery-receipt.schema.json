@@ -1,0 +1,63 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://saitamasans.dev/schemas/discovery-receipt.schema.json",
+  "title": "Target-state discovery receipt 1.0.0",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "receipt_schema_version", "run_nonce", "discovery_id", "generated_by", "runtime_version", "runner_version",
+    "target_origin", "requested_url", "final_url", "page_state_id", "dom_sha256", "accessibility_sha256",
+    "page_fingerprint_sha256", "discovery_artifact_path", "discovery_artifact_sha256", "generated_at", "expires_at",
+    "source_package_sha256", "source_case_ids", "discovery_task_id", "source_case_id", "transition_case_id", "transition_actions_sha256",
+    "approval_reference", "approval_sha256", "purpose", "session_mac"
+  ],
+  "properties": {
+    "receipt_schema_version": { "const": "1.0.0" },
+    "run_nonce": { "$ref": "#/$defs/sha256" },
+    "discovery_id": { "$ref": "#/$defs/nonEmpty" },
+    "generated_by": { "const": "@saitamasans/testing-runtime" },
+    "runtime_version": { "const": "1.0.3-dev" },
+    "runner_version": { "const": "1.1.3" },
+    "target_origin": { "$ref": "#/$defs/httpUrl" },
+    "requested_url": { "$ref": "#/$defs/httpUrl" },
+    "final_url": { "$ref": "#/$defs/httpUrl" },
+    "page_state_id": { "$ref": "#/$defs/nonEmpty" },
+    "dom_sha256": { "$ref": "#/$defs/sha256" },
+    "accessibility_sha256": { "$ref": "#/$defs/sha256" },
+    "page_fingerprint_sha256": { "$ref": "#/$defs/sha256" },
+    "discovery_artifact_path": {
+      "allOf": [
+        { "$ref": "https://saitamasans.dev/schemas/persisted-value.schema.json#/$defs/persistedString" },
+        { "type": "string", "pattern": "^(?![A-Za-z]:)(?![/\\\\])(?!.*(?:^|[/\\\\])\\.\\.(?:[/\\\\]|$)).+\\.json$" }
+      ]
+    },
+    "discovery_artifact_sha256": { "$ref": "#/$defs/sha256" },
+    "generated_at": { "type": "string", "minLength": 1 },
+    "expires_at": { "type": "string", "minLength": 1 },
+    "source_package_sha256": { "$ref": "#/$defs/sha256" },
+    "source_case_ids": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "$ref": "#/$defs/nonEmpty" } },
+    "discovery_task_id": { "$ref": "#/$defs/nonEmpty" },
+    "source_case_id": { "$ref": "#/$defs/nonEmpty" },
+    "transition_case_id": { "$ref": "#/$defs/nonEmpty" },
+    "transition_actions_sha256": { "$ref": "#/$defs/sha256" },
+    "approval_reference": { "$ref": "#/$defs/nonEmpty" },
+    "approval_sha256": { "$ref": "#/$defs/sha256" },
+    "purpose": { "const": "target_state_discovery_only" },
+    "session_mac": { "$ref": "#/$defs/sha256" }
+  },
+  "$defs": {
+    "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "nonEmpty": {
+      "allOf": [
+        { "$ref": "https://saitamasans.dev/schemas/persisted-value.schema.json#/$defs/persistedString" },
+        { "type": "string", "minLength": 1 }
+      ]
+    },
+    "httpUrl": {
+      "allOf": [
+        { "$ref": "https://saitamasans.dev/schemas/persisted-value.schema.json#/$defs/persistedString" },
+        { "type": "string", "pattern": "^[Hh][Tt][Tt][Pp][Ss]?://[^\\s]+$" }
+      ]
+    }
+  }
+}

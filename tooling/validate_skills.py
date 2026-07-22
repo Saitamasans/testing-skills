@@ -30,4 +30,5 @@ if __name__ == "__main__":
     if problems:
         print("\n".join(problems))
         raise SystemExit(1)
-    print("八个源 Skill 校验通过")
+    count = len(load_manifest(ROOT)["skills"])
+    print(f"{count} 个源 Skill 校验通过")

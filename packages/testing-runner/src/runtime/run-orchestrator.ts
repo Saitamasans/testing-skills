@@ -1,7 +1,10 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 
+import type { ContractFieldStatus } from "../types.js";
 import type { AssertionResult, EvidenceReference, JsonValue, RunManifest, RunResult } from "../types.js";
+import { PhaseTimer, type MonotonicClock } from "./execution-timings.js";
+import type { ExecutionTimingStates, ExecutionTimings } from "../types.js";
 import { sha256Canonical } from "../compiler/canonical-json.js";
 import type { ActionOutcome } from "./execution-context.js";
 import { EventWriter } from "./event-writer.js";
@@ -65,6 +68,9 @@ export interface RunInput {
   beforeCase?(item: ManifestCase): void | Promise<void>;
   afterCase?(item: ManifestCase): void | Promise<void>;
   executeAction(action: RunManifest["cases"][number]["steps"][number], attempt: number): Promise<ActionOutcome>;
+  clock?: MonotonicClock;
+  initialTimings?: ExecutionTimings;
+  initialTimingStates?: ExecutionTimingStates;
 }
 
 const PASSED = "通过" as const;
@@ -96,6 +102,95 @@ function isCleanupAction(action: ManifestAction): boolean {
   return action.type === "cleanup.api" || action.type === "cleanup.web";
 }
 
+type ContractCase = NonNullable<ManifestCase["execution_contract"]>;
+type ContractFieldStatusMap = Record<keyof ContractCase, ContractFieldStatus>;
+type ExecutableContractField = "setup" | "actions" | "assertions" | "cleanup";
+
+const CONTRACT_FIELDS = [
+  "case_id", "source_case_id", "source_sheet", "title", "module", "priority", "execution_type",
+  "automation_status", "isolation_scope", "flow_group", "start_state", "auth_profile", "setup", "actions",
+  "assertions", "effects", "cleanup", "dependencies", "resource_locks", "evidence_policy", "unresolved",
+] as const satisfies readonly (keyof ContractCase)[];
+
+function contractFieldStatus(contract: ContractCase): ContractFieldStatusMap {
+  const result = Object.fromEntries(CONTRACT_FIELDS.map((field) => [field, "skipped"])) as ContractFieldStatusMap;
+  for (const field of ["case_id", "source_case_id", "source_sheet", "title", "module", "priority", "execution_type", "isolation_scope", "flow_group"] as const) {
+    result[field] = "executed";
+  }
+  result.automation_status = contract.automation_status === "auto_ready" ? "executed" : "blocked";
+  result.unresolved = contract.unresolved.length === 0 ? "skipped" : "blocked";
+  result.dependencies = contract.dependencies.length === 0 ? "skipped" : "executed";
+  result.resource_locks = contract.resource_locks.length === 0 ? "skipped" : "blocked";
+  result.setup = contract.setup.length === 0 ? "skipped" : "blocked";
+  result.actions = contract.actions.length === 0 ? "skipped" : "blocked";
+  result.assertions = contract.assertions.length === 0 ? "skipped" : "blocked";
+  result.cleanup = contract.cleanup.technical_cleanup.length === 0 && contract.cleanup.business_cleanup.length === 0 ? "skipped" : "blocked";
+  return result;
+}
+
+function semanticId(entry: unknown): string | undefined {
+  if (!entry || typeof entry !== "object") return undefined;
+  const value = entry as { action_id?: unknown; assertion_id?: unknown; setup_id?: unknown; cleanup_id?: unknown };
+  return [value.action_id, value.assertion_id, value.setup_id, value.cleanup_id]
+    .find((candidate): candidate is string => typeof candidate === "string");
+}
+
+function contractFieldForAction(contract: ContractCase, action: ManifestAction): ExecutableContractField | undefined {
+  const sourceStep = action.source_step;
+  if (!sourceStep) return undefined;
+  if (contract.setup.some((entry) => semanticId(entry) === sourceStep)) return "setup";
+  if (contract.actions.some((entry) => semanticId(entry) === sourceStep)) return "actions";
+  if (contract.assertions.some((entry) => semanticId(entry) === sourceStep)) return "assertions";
+  if (contract.cleanup.business_cleanup.some((entry) => semanticId(entry) === sourceStep)) return "cleanup";
+  return undefined;
+}
+
+function mergeContractFieldStatus(current: ContractFieldStatus | undefined, next: ContractFieldStatus): ContractFieldStatus {
+  if (current === "failed" || next === "failed") return "failed";
+  if (current === "blocked" || next === "blocked") return "blocked";
+  if (current === "executed" || next === "executed") return "executed";
+  return "skipped";
+}
+
+function resourceLockNames(item: ManifestCase): string[] {
+  return (item.execution_contract?.resource_locks ?? []).flatMap((lock) => {
+    if (!lock || typeof lock !== "object") return [];
+    const resource = (lock as { resource?: unknown }).resource;
+    return typeof resource === "string" && resource.length > 0 ? [resource] : [];
+  });
+}
+
+function hasDeclaredGlobalEffect(item: ManifestCase): boolean {
+  const value = item.execution_contract?.effects.global_environment;
+  return value !== undefined && value !== null;
+}
+
+function recordContractActionOutcome(
+  contract: ContractCase,
+  action: ManifestAction,
+  outcome: ActionOutcome,
+  fieldStatus: ContractFieldStatusMap,
+  observedStatus: Map<ExecutableContractField, ContractFieldStatus>,
+): void {
+  const field = contractFieldForAction(contract, action);
+  if (!field) return;
+  const outcomeStatus: ContractFieldStatus = outcome.status === "passed"
+    ? "executed"
+    : outcome.status === "failed" || outcome.status === "executor_error"
+      ? "failed"
+      : "blocked";
+  const aggregate = mergeContractFieldStatus(observedStatus.get(field), outcomeStatus);
+  observedStatus.set(field, aggregate);
+  fieldStatus[field] = field === "cleanup" && contract.cleanup.technical_cleanup.length > 0 && aggregate !== "failed"
+    ? "blocked"
+    : aggregate;
+}
+
+function contractProjection(item: ManifestCase, status: ContractFieldStatusMap | undefined): Pick<CaseResult, "execution_contract" | "contract_field_status"> | Record<string, never> {
+  if (!item.execution_contract || !status) return {};
+  return { execution_contract: structuredClone(item.execution_contract), contract_field_status: { ...status } };
+}
+
 async function storeOutcomeAttachments(
   runDir: string,
   caseId: string,
@@ -122,11 +217,15 @@ export async function runApprovedManifest(input: RunInput): Promise<RunResult> {
   const manifest_hash = sha256Canonical(input.manifest);
   const case_total = input.manifest.cases.length;
   const startedAt = new Date().toISOString();
+  const phaseTimer = new PhaseTimer(input.clock, input.initialTimings, input.initialTimingStates);
+  phaseTimer.start("execution_ms");
   await mkdir(runDir, { recursive: true });
   const writer = new EventWriter(path.join(runDir, "run-events.jsonl"));
   const cases: RunResult["cases"] = [];
   const defects = new Map<string, { case_ids: string[]; evidence: EvidenceReference[] }>();
   let runStatus: RunResult["run_status"] = "completed";
+  let globalContaminationReason: string | undefined;
+  const contaminatedResources = new Map<string, string>();
 
   await input.observer?.runStarted?.({
     run_id,
@@ -137,6 +236,8 @@ export async function runApprovedManifest(input: RunInput): Promise<RunResult> {
   });
 
   for (const [caseOffset, item] of input.manifest.cases.entries()) {
+    const fieldStatus = item.execution_contract ? contractFieldStatus(item.execution_contract) : undefined;
+    const observedContractStatus = new Map<ExecutableContractField, ContractFieldStatus>();
     const caseEvent = {
       run_id,
       manifest_hash,
@@ -145,11 +246,64 @@ export async function runApprovedManifest(input: RunInput): Promise<RunResult> {
       item,
       action_total: item.steps.length,
     };
+    const contaminatedResource = resourceLockNames(item).find((resource) => contaminatedResources.has(resource));
+    const contaminationBlockReason = globalContaminationReason
+      ?? (contaminatedResource ? `Resource is contaminated by an earlier cleanup failure: ${contaminatedResource} (${contaminatedResources.get(contaminatedResource)}).` : undefined);
+    if (contaminationBlockReason) {
+      if (fieldStatus) {
+        if (globalContaminationReason) fieldStatus.effects = "blocked";
+        else fieldStatus.resource_locks = "blocked";
+      }
+      const caseResult: CaseResult = {
+        case_id: item.case_id,
+        case_status: NOT_EXECUTED,
+        run_status: "blocked",
+        assertions: [{ assertion_id: `${item.case_id}-contamination-gate`, passed: false, actual: contaminationBlockReason }],
+        evidence: [],
+        ...contractProjection(item, fieldStatus),
+      };
+      cases.push(caseResult);
+      if (runStatus === "completed") runStatus = "blocked";
+      await input.observer?.caseStarted?.(caseEvent);
+      await input.observer?.caseCompleted?.({ ...caseEvent, result: caseResult });
+      continue;
+    }
     await input.beforeCase?.(item);
     try {
     await input.observer?.caseStarted?.(caseEvent);
     const assertions: AssertionResult[] = [];
     const evidence: EvidenceReference[] = [];
+    let contractBlockReason: string | undefined;
+    if (item.execution_contract?.automation_status !== undefined && item.execution_contract.automation_status !== "auto_ready") {
+      contractBlockReason = `Execution Contract automation_status is ${item.execution_contract.automation_status}.`;
+    } else if ((item.execution_contract?.unresolved.length ?? 0) > 0) {
+      contractBlockReason = `Execution Contract has unresolved fields: ${item.execution_contract!.unresolved.map(({ field }) => field).join(", ")}.`;
+    } else {
+      const failedDependency = item.execution_contract?.dependencies.find((dependency) => {
+        const dependencyResult = cases.find(({ case_id }) => case_id === dependency);
+        return dependencyResult?.case_status !== PASSED;
+      });
+      if (failedDependency) contractBlockReason = `Execution Contract dependency did not pass: ${failedDependency}.`;
+    }
+    if (contractBlockReason) {
+      if (fieldStatus) {
+        if (item.execution_contract?.automation_status !== "auto_ready") fieldStatus.automation_status = "blocked";
+        else if ((item.execution_contract?.unresolved.length ?? 0) > 0) fieldStatus.unresolved = "blocked";
+        else fieldStatus.dependencies = "blocked";
+      }
+      const caseResult: CaseResult = {
+        case_id: item.case_id,
+        case_status: NOT_EXECUTED,
+        run_status: "blocked",
+        assertions: [{ assertion_id: `${item.case_id}-contract-preflight`, passed: false, actual: contractBlockReason }],
+        evidence: [],
+        ...contractProjection(item, fieldStatus),
+      };
+      cases.push(caseResult);
+      runStatus = "blocked";
+      await input.observer?.caseCompleted?.({ ...caseEvent, result: caseResult });
+      continue;
+    }
     if (!hasVerdictRoute(item)) {
       const reason = "Case has no explicit business assertion; execution is blocked to prevent a false passing verdict.";
       const entry = await storeEvidence({
@@ -165,6 +319,7 @@ export async function runApprovedManifest(input: RunInput): Promise<RunResult> {
         run_status: "blocked",
         assertions: [{ assertion_id: `${item.case_id}-business-assertion`, passed: false, actual: reason }],
         evidence: [evidenceReference(entry)],
+        ...contractProjection(item, fieldStatus),
       };
       cases.push(caseResult);
       runStatus = "blocked";
@@ -198,6 +353,10 @@ export async function runApprovedManifest(input: RunInput): Promise<RunResult> {
         await writer.appendEvent({ run_id, case_id: item.case_id, action_id: action.action_id, attempt, type: "action.started" });
         await input.observer?.actionStarted?.(actionEvent);
         const outcome = await input.executeAction(action, attempt);
+        if (phaseTimer.elapsed("execution_ms") > 30_000) {
+          await writer.appendEvent({ run_id, case_id: item.case_id, attempt, type: "phase.progress", data: phaseTimer.progress("execution_ms", cases.length / Math.max(1, case_total), "execute next action") });
+        }
+        if (fieldStatus && item.execution_contract) recordContractActionOutcome(item.execution_contract, action, outcome, fieldStatus, observedContractStatus);
         evidence.push(...await storeOutcomeAttachments(runDir, item.case_id, attempt, outcome));
         if (outcome.status === "passed") {
           await writer.appendEvent({ run_id, case_id: item.case_id, action_id: action.action_id, attempt, type: "action.passed", data: outcome.actual });
@@ -283,6 +442,7 @@ export async function runApprovedManifest(input: RunInput): Promise<RunResult> {
       await writer.appendEvent({ run_id, case_id: item.case_id, action_id: action.action_id, attempt, type: "cleanup.started" });
       await input.observer?.actionStarted?.(actionEvent);
       const outcome = await input.executeAction(action, attempt);
+      if (fieldStatus && item.execution_contract) recordContractActionOutcome(item.execution_contract, action, outcome, fieldStatus, observedContractStatus);
       evidence.push(...await storeOutcomeAttachments(runDir, item.case_id, attempt, outcome));
       await input.observer?.actionCompleted?.({ ...actionEvent, outcome });
       if (outcome.status === "passed") {
@@ -301,6 +461,11 @@ export async function runApprovedManifest(input: RunInput): Promise<RunResult> {
       caseRunStatus = "manual_required";
       runStatus = "manual_required";
       if (caseStatus === PASSED) caseStatus = NOT_EXECUTED;
+      if (hasDeclaredGlobalEffect(item)) {
+        globalContaminationReason = `Global environment is contaminated by cleanup failure in ${item.case_id}.`;
+      } else {
+        for (const resource of resourceLockNames(item)) contaminatedResources.set(resource, item.case_id);
+      }
     }
 
     const caseResult: CaseResult = {
@@ -309,6 +474,7 @@ export async function runApprovedManifest(input: RunInput): Promise<RunResult> {
       run_status: caseRunStatus,
       assertions,
       evidence,
+      ...contractProjection(item, fieldStatus),
     };
     cases.push(caseResult);
     await input.observer?.caseCompleted?.({ ...caseEvent, result: caseResult });
@@ -321,11 +487,19 @@ export async function runApprovedManifest(input: RunInput): Promise<RunResult> {
     protocol_version: "1.0.0",
     run_id,
     manifest_hash,
+    ...(input.manifest.contract_version ? { contract_version: input.manifest.contract_version } : {}),
+    ...(input.manifest.package_sha256 ? { package_sha256: input.manifest.package_sha256 } : {}),
     run_status: runStatus,
     started_at: startedAt,
     completed_at: new Date().toISOString(),
+    timings: phaseTimer.timings,
+    timing_states: phaseTimer.states,
     cases,
   };
+  phaseTimer.finish("execution_ms");
+  result.timings = phaseTimer.timings;
+  result.timing_states = phaseTimer.states;
+  await writer.appendEvent({ run_id, attempt: 0, type: "phase.completed", data: { phase: "execution", duration_ms: result.timings.execution_ms, state: result.timing_states.execution_ms } });
   if (defects.size > 0) {
     result.defects = [...defects.entries()].map(([root_cause_key, summary], index) => ({
       defect_id: `DEFECT-${String(index + 1).padStart(3, "0")}`,

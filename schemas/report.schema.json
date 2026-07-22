@@ -55,12 +55,42 @@
       ],
       "items": false
     },
+    "elevenColumns": {
+      "type": "array",
+      "minItems": 11,
+      "maxItems": 11,
+      "prefixItems": [
+        { "const": "用例 ID" },
+        { "const": "所属模块" },
+        { "const": "用例标题" },
+        { "const": "验证功能点" },
+        { "const": "前置条件" },
+        { "const": "测试步骤" },
+        { "const": "预期结果" },
+        { "const": "优先级" },
+        { "const": "实际结果" },
+        { "const": "执行结果" },
+        { "const": "备注" }
+      ],
+      "items": false
+    },
     "testCaseValues": {
       "type": "array",
       "minItems": 10,
       "maxItems": 10,
       "prefixItems": [
         {}, {}, {}, {}, {}, {}, {}, {},
+        { "enum": ["未执行", "通过", "不通过", "待定"] },
+        {}
+      ],
+      "items": false
+    },
+    "workbenchValues": {
+      "type": "array",
+      "minItems": 11,
+      "maxItems": 11,
+      "prefixItems": [
+        {}, {}, {}, {}, {}, {}, {}, {}, {},
         { "enum": ["未执行", "通过", "不通过", "待定"] },
         {}
       ],
@@ -75,6 +105,15 @@
       ],
       "items": false
     },
+    "workbenchDividerValues": {
+      "type": "array",
+      "minItems": 11,
+      "maxItems": 11,
+      "prefixItems": [
+        {}, {}, {}, {}, {}, {}, {}, {}, {}, { "const": "-" }, {}
+      ],
+      "items": false
+    },
     "testCaseRow": {
       "oneOf": [
         {
@@ -83,7 +122,7 @@
           "required": ["values"],
           "properties": {
             "divider": { "const": false },
-            "values": { "$ref": "#/$defs/testCaseValues" }
+            "values": { "oneOf": [{ "$ref": "#/$defs/testCaseValues" }, { "$ref": "#/$defs/workbenchValues" }] }
           }
         },
         {
@@ -92,7 +131,7 @@
           "required": ["divider", "values"],
           "properties": {
             "divider": { "const": true },
-            "values": { "$ref": "#/$defs/dividerValues" }
+            "values": { "oneOf": [{ "$ref": "#/$defs/dividerValues" }, { "$ref": "#/$defs/workbenchDividerValues" }] }
           }
         }
       ]
@@ -104,7 +143,7 @@
       "properties": {
         "name": { "type": "string" },
         "kind": { "const": "test_cases" },
-        "columns": { "$ref": "#/$defs/tenColumns" },
+        "columns": { "oneOf": [{ "$ref": "#/$defs/tenColumns" }, { "$ref": "#/$defs/elevenColumns" }] },
         "rows": {
           "type": "array",
           "items": { "$ref": "#/$defs/testCaseRow" }

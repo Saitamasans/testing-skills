@@ -3,6 +3,8 @@ import { copyFile, mkdir, rm } from "node:fs/promises";
 const schemaFiles = [
   "report.schema.json",
   "execution-profile.schema.json",
+  "discovery-approval.schema.json",
+  "discovery-receipt.schema.json",
   "run-manifest.schema.json",
   "approval.schema.json",
   "run-result.schema.json",

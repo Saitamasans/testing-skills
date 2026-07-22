@@ -4,6 +4,7 @@ import { pathToFileURL } from "node:url";
 import { Command } from "commander";
 
 import { runApproveCommand } from "./commands/approve.js";
+import { runDiscoverPlanCommand } from "./commands/discover-plan.js";
 import { runDiscoverWebCommand } from "./commands/discover-web.js";
 import { runPlanCommand } from "./commands/plan.js";
 import {
@@ -14,6 +15,7 @@ import {
 import { reportVerificationErrorExitCode, runVerifyReportCommand } from "./commands/verify-report.js";
 import type { BrowserVisibility } from "./runtime/browser-session.js";
 import type { ProgressVisibility } from "./runtime/visual-progress.js";
+import { TESTING_RUNNER_VERSION } from "./version.js";
 
 interface RunCliOptions {
   manifest: string;
@@ -68,20 +70,48 @@ export async function runCli(argv = process.argv): Promise<void> {
   program
     .name("testing-runner")
     .description("Plan and approve locked Web/API test execution manifests")
-    .version("1.1.2");
+    .version(TESTING_RUNNER_VERSION);
 
   program.command("plan")
     .requiredOption("--input <file>")
     .requiredOption("--profile <file>")
     .requiredOption("--output-dir <dir>")
     .option("--mapping-approval <file>")
+    .option("--discovery-receipt <file>", "current-session target-state discovery receipt", collect, [] as string[])
+    .option("--discovery-approval <file>", "validated target-state discovery approval artifact")
+    .option("--legacy-input", "deprecated: regression-only raw Excel/JSON planning")
     .action(async (options: {
       input: string;
       profile: string;
       outputDir: string;
       mappingApproval?: string;
+      discoveryReceipt: string[];
+      discoveryApproval?: string;
+      legacyInput?: boolean;
     }) => {
-      await runPlanCommand(options);
+      await runPlanCommand({ ...options, discoveryReceipts: options.discoveryReceipt });
+    });
+
+  program.command("discover-plan")
+    .description("Discover all required target states and plan with one live RuntimeSession capability")
+    .requiredOption("--input <file>")
+    .requiredOption("--profile <file>")
+    .requiredOption("--output-dir <dir>")
+    .requiredOption("--discovery-approval <file>", "validated target-state discovery approval artifact; repeat for multiple tasks", collect, [] as string[])
+    .option("--transition-case-id <case-id>", "legacy single-task compatibility selector")
+    .option("--browser <visibility>", "visible or headless", "headless")
+    .action(async (options: {
+      input: string;
+      profile: string;
+      outputDir: string;
+      discoveryApproval: string[];
+      transitionCaseId?: string;
+      browser: string;
+    }) => {
+      if (options.browser !== "visible" && options.browser !== "headless") {
+        throw browserConfigurationError("discover-plan browser must be visible or headless");
+      }
+      await runDiscoverPlanCommand({ ...options, browser: options.browser });
     });
 
   program.command("discover-web")

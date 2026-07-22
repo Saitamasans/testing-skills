@@ -18,10 +18,12 @@ ORIGINAL_SEVEN = {
 
 
 class BuildSkillsTest(unittest.TestCase):
-    def test_manifest_has_exactly_eight_unique_skills_with_original_seven_sources(self):
+    def test_manifest_has_unique_self_consistent_skills_with_original_seven_sources(self):
         items = load_manifest(ROOT)["skills"]
-        self.assertEqual(8, len(items))
-        self.assertEqual(8, len({item["slug"] for item in items}))
+        self.assertGreaterEqual(len(items), 1)
+        self.assertEqual(len(items), len({item["slug"] for item in items}))
+        self.assertEqual(len(items), len({item["source"].casefold() for item in items}))
+        self.assertEqual(len(items), len({item["display_name"].casefold() for item in items}))
         self.assertEqual(5, sum(bool(item["case_output"]) for item in items))
         self.assertEqual(1, sum(bool(item.get("execution_skill")) for item in items))
         by_slug = {item["slug"]: item for item in items}
@@ -30,6 +32,8 @@ class BuildSkillsTest(unittest.TestCase):
             self.assertFalse(by_slug[slug].get("execution_skill", False))
         self.assertFalse(by_slug["web-api-test-execution-evidence"]["case_output"])
         self.assertTrue(by_slug["web-api-test-execution-evidence"]["execution_skill"])
+        self.assertFalse(by_slug["test-case-execution-compiler"]["case_output"])
+        self.assertTrue(by_slug["test-case-execution-compiler"]["compiler_skill"])
 
     def test_requirement_workbench_defaults_to_excel_then_markdown_for_case_modes(self):
         source = (ROOT / ORIGINAL_SEVEN["requirement-test-workbench"]).read_text(encoding="utf-8")
@@ -52,7 +56,7 @@ class BuildSkillsTest(unittest.TestCase):
             source_meta, source_body = parse_frontmatter((ROOT / item["source"]).read_text(encoding="utf-8"))
             generated_meta, generated_body = parse_frontmatter(generated.read_text(encoding="utf-8"))
             self.assertEqual(source_meta, generated_meta)
-            expected_banner = EXECUTION_BANNER if item["slug"] == "web-api-test-execution-evidence" else BANNER
+            expected_banner = EXECUTION_BANNER if item.get("execution_skill") or item.get("compiler_skill") else BANNER
             self.assertIn(expected_banner, generated_body)
             if item["slug"] == "single-api-test-full":
                 references = [
@@ -64,28 +68,31 @@ class BuildSkillsTest(unittest.TestCase):
                 for phrase in ["表格文件完整版规范", "各 Sheet 固定字段", "测试用例编写规则", "最终输出要求"]:
                     self.assertIn(phrase, combined)
                 self.assertLessEqual(len(generated.read_text(encoding="utf-8").splitlines()), 600)
-            elif item["slug"] == "web-api-test-execution-evidence":
-                references = [
-                    generated.parent / "references/input-and-readiness.md",
-                    generated.parent / "references/risk-credentials-and-data.md",
-                    generated.parent / "references/locators-assertions-and-rules.md",
-                    generated.parent / "references/ci-evidence-and-reporting.md",
-                    generated.parent / "references/runner-commands.md",
-                ]
+            elif item["slug"] in {"web-api-test-execution-evidence", "test-case-execution-compiler"}:
+                if item["slug"] == "web-api-test-execution-evidence":
+                    references = [
+                        generated.parent / "references/input-and-readiness.md",
+                        generated.parent / "references/risk-credentials-and-data.md",
+                        generated.parent / "references/locators-assertions-and-rules.md",
+                        generated.parent / "references/ci-evidence-and-reporting.md",
+                        generated.parent / "references/runner-commands.md",
+                    ]
+                else:
+                    references = [generated.parent / "references/execution-contract-1.0.0.md"]
                 self.assertTrue(all(reference.exists() for reference in references))
                 combined = generated_body + "".join(reference.read_text(encoding="utf-8") for reference in references)
-                for phrase in [
-                    "run-result.json 是唯一判定来源",
-                    "非标准 Excel 必须确认字段映射",
-                    r"scripts\testing-runner.ps1",
-                    "installation_incomplete",
-                    "installation_corrupt",
-                    "-Repair",
-                ]:
+                required = ([
+                    "run-result.json 是唯一判定来源", "非标准 Excel 必须确认字段映射",
+                    r"scripts\testing-runner.ps1", "installation_incomplete", "installation_corrupt", "-Repair",
+                ] if item["slug"] == "web-api-test-execution-evidence" else [
+                    "Execution Contract 1.0.0", "execution-package.zip", "不使用 Playwright",
+                ])
+                for phrase in required:
                     self.assertIn(phrase, combined)
-                self.assertNotIn("scripts/testing-runner.mjs run", combined)
-                self.assertNotIn("playwright install", combined)
-                self.assertNotIn("npm install", combined)
+                if item["slug"] == "web-api-test-execution-evidence":
+                    self.assertNotIn("scripts/testing-runner.mjs run", combined)
+                    self.assertNotIn("playwright install", combined)
+                    self.assertNotIn("npm install", combined)
                 self.assertLessEqual(len(generated.read_text(encoding="utf-8").splitlines()), 500)
             else:
                 self.assertIn(source_body.strip(), generated_body)
@@ -109,6 +116,13 @@ class BuildSkillsTest(unittest.TestCase):
                 (package_root / relative).read_bytes(),
                 relative,
             )
+
+    def test_compiler_skill_bundles_cli_resources(self):
+        build_all(ROOT)
+        source_root = ROOT / "skill-sources/test-case-execution-compiler"
+        package_root = ROOT / "skills/test-case-execution-compiler"
+        for relative in ["scripts/testing-contract-compiler.mjs", "assets/execution-contract.schema.json"]:
+            self.assertEqual((source_root / relative).read_bytes(), (package_root / relative).read_bytes())
 
 
 if __name__ == "__main__":

@@ -5,6 +5,11 @@
   "type": "object",
   "additionalProperties": false,
   "required": ["protocol_version", "manifest_id", "runner", "source", "cases"],
+  "dependentRequired": {
+    "contract_version": ["package_id", "package_sha256"],
+    "package_id": ["contract_version", "package_sha256"],
+    "package_sha256": ["contract_version", "package_id"]
+  },
   "properties": {
     "protocol_version": { "const": "1.0.0" },
     "manifest_id": { "allOf": [{ "$ref": "https://saitamasans.dev/schemas/persisted-value.schema.json#/$defs/persistedString" }, { "type": "string", "minLength": 1 }] },
@@ -25,6 +30,14 @@
     },
     "targets": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/safeHttpUrl" } },
     "rule_versions": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+    "contract_version": { "const": "1.0.0" },
+    "package_id": { "allOf": [{ "$ref": "#/$defs/nonSecretText" }, { "type": "string", "minLength": 1 }] },
+    "package_sha256": { "$ref": "#/$defs/sha256" },
+    "discovery_receipts": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/discoveryReceiptReference" }
+    },
     "cases": {
       "type": "array",
       "minItems": 1,
@@ -243,11 +256,65 @@
       "required": ["locator"],
       "properties": { "type": { "const": "cleanup.web" }, "locator": { "$ref": "#/$defs/nonSecretText" } }
     },
+    "discoveryReceiptReference": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["discovery_task_id", "source_case_id", "case_id", "page_state_id", "discovery_id", "receipt_path", "receipt_sha256"],
+      "properties": {
+        "discovery_task_id": { "allOf": [{ "$ref": "#/$defs/nonSecretText" }, { "type": "string", "minLength": 1 }] },
+        "source_case_id": { "allOf": [{ "$ref": "#/$defs/nonSecretText" }, { "type": "string", "minLength": 1 }] },
+        "case_id": { "allOf": [{ "$ref": "#/$defs/nonSecretText" }, { "type": "string", "minLength": 1 }] },
+        "page_state_id": { "allOf": [{ "$ref": "#/$defs/nonSecretText" }, { "type": "string", "minLength": 1 }] },
+        "final_url": { "$ref": "#/$defs/safeHttpUrl" },
+        "discovery_id": { "allOf": [{ "$ref": "#/$defs/nonSecretText" }, { "type": "string", "minLength": 1 }] },
+        "receipt_path": {
+          "allOf": [
+            { "$ref": "#/$defs/nonSecretText" },
+            { "type": "string", "pattern": "^(?![A-Za-z]:)(?![/\\\\])(?!.*(?:^|[/\\\\])\\.\\.(?:[/\\\\]|$)).+\\.json$" }
+          ]
+        },
+        "receipt_sha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
     "manifestCase": {
       "type": "object",
       "additionalProperties": false,
       "required": ["case_id", "original", "steps"],
       "properties": {
+        "isolation_scope": { "enum": ["case", "flow_group", "suite", "external_existing"] },
+        "flow_group": { "type": ["string", "null"] },
+        "execution_contract": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["case_id", "source_case_id", "source_sheet", "title", "module", "priority", "execution_type", "automation_status", "isolation_scope", "flow_group", "start_state", "auth_profile", "setup", "actions", "assertions", "effects", "cleanup", "dependencies", "resource_locks", "evidence_policy", "unresolved"],
+          "properties": {
+            "case_id": { "$ref": "#/$defs/nonSecretText" },
+            "source_case_id": { "$ref": "#/$defs/nonSecretText" },
+            "source_sheet": { "$ref": "#/$defs/nonSecretText" },
+            "title": { "$ref": "#/$defs/nonSecretText" },
+            "module": { "$ref": "#/$defs/nonSecretText" },
+            "priority": { "$ref": "#/$defs/nonSecretText" },
+            "execution_type": { "const": "web_ui" },
+            "automation_status": { "enum": ["auto_ready", "needs_confirmation", "partial_manual", "manual_required", "not_suitable_for_automation"] },
+            "isolation_scope": { "enum": ["case", "flow_group", "suite", "external_existing"] },
+            "flow_group": { "type": ["string", "null"] },
+            "start_state": { "type": "object" },
+            "setup": { "type": "array" },
+            "actions": { "type": "array" },
+            "assertions": { "type": "array" },
+            "effects": { "type": "object" },
+            "cleanup": {
+              "type": "object",
+              "required": ["technical_cleanup", "business_cleanup"],
+              "properties": { "technical_cleanup": { "type": "array" }, "business_cleanup": { "type": "array" } }
+            },
+            "dependencies": { "type": "array", "items": { "$ref": "#/$defs/nonSecretText" } },
+            "resource_locks": { "type": "array" },
+            "auth_profile": { "type": "object" },
+            "evidence_policy": { "type": "object" },
+            "unresolved": { "type": "array" }
+          }
+        },
         "case_id": { "allOf": [{ "$ref": "#/$defs/nonSecretText" }, { "type": "string", "minLength": 1 }] },
         "original": { "$ref": "#/$defs/original" },
         "steps": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/action" } }

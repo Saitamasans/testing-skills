@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { formatSchemaErrors, validateDocument } from "../src/schema-registry.js";
+import { findPersistedSecretIssues } from "../src/security/persisted-secret-policy.js";
 
 const TEN_COLUMNS = [
   "用例 ID",
@@ -84,6 +85,7 @@ const validApproval = {
   protocol_version: "1.0.0",
   approval_id: "approval-001",
   manifest_hash: "b".repeat(64),
+  manifest_sha256: "b".repeat(64),
   source_hash: "a".repeat(64),
   runner: { version: "1.0.0" },
   rule_versions: ["1.0.0"],
@@ -383,6 +385,24 @@ test("manifest data inputs use structured references instead of literal strings"
     value.cases[0].steps[0] = action as never;
     assert.throws(() => validateDocument("run-manifest", value), /_ref|literal|password/);
   }
+});
+
+test("execution contract credential_refs accept environment names but reject literal secret values", () => {
+  assert.deepEqual(findPersistedSecretIssues({
+    execution_contract: {
+      auth_profile: {
+        credential_refs: {
+          username_env: "SAITAMA_TEST_USERNAME",
+          password_env: "SAITAMA_TEST_PASSWORD",
+          token_env: "SAITAMA_TEST_TOKEN",
+        },
+      },
+    },
+  }), []);
+  assert.match(findPersistedSecretIssues({
+    execution_contract: { auth_profile: { credential_refs: { password_env: "literal-password" } } },
+  }).join("\n"), /password_env/);
+  assert.match(findPersistedSecretIssues({ password_env: "SAITAMA_TEST_PASSWORD" }).join("\n"), /password_env/);
 });
 
 test("API and cleanup paths reject every query string and fragment", () => {

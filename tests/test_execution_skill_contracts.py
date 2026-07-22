@@ -45,11 +45,22 @@ class ExecutionSkillContractsTest(unittest.TestCase):
             "缺失材料",
             "非标准 Excel 必须确认字段映射",
             "不要猜测正式服或测试服",
-            "优先使用用户提供的账号、密码、测试数据和数据库只读账号",
-            "可以继续执行；如果用例来自 Saitamasans/testing-skills，效果会更好",
-            "用户确认后才加载辅助 Skill",
+            "execution_contract_required",
+            "test-case-execution-compiler",
         ]:
             self.assertIn(phrase, self.body)
+
+    def test_execution_package_is_the_only_default_formal_input(self):
+        for document in [self.text, self.generated_text]:
+            for phrase in [
+                "*.execution-package.zip", "package_status=READY", "semantic_compilation=skipped",
+                "semantic_compiler=test-case-execution-compiler", "contract_version=1.0.0",
+                "contract_incomplete", "package_validation_ms", "manifest_assembly_ms",
+                "browser_id", "context_id", "context_close_status",
+            ]:
+                self.assertIn(phrase, document)
+            self.assertIn("raw Excel", document)
+            self.assertIn("deprecated", document)
 
     def test_black_box_inputs_are_classified_and_require_confirmation(self):
         input_reference = (
@@ -67,7 +78,7 @@ class ExecutionSkillContractsTest(unittest.TestCase):
         for phrase in [
             "正式输入",
             "非正式输入",
-            "标准十列测试用例（Test Cases）是正式测试意图输入",
+            "标准十列测试用例（Test Cases）是人工测试意图输入",
             "缺少已确认定位器",
             "显式业务断言",
             "非标准 Excel 每次都展示字段映射预览",
@@ -76,7 +87,7 @@ class ExecutionSkillContractsTest(unittest.TestCase):
 
     def test_runner_commands_statuses_and_report_gate(self):
         for phrase in [
-            'scripts\\testing-runner.ps1" plan',
+            'scripts\\testing-runner.ps1" discover-plan',
             'scripts\\testing-runner.ps1" run',
             "run-result.json 是唯一判定来源",
             "Excel/HTML/JSON 一致性",

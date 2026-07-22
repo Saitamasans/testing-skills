@@ -28,7 +28,7 @@ class GitHubInstallLauncherTest(unittest.TestCase):
         cls.slugs = [item["slug"] for item in load_manifest(ROOT)["skills"]]
         cls.installers = ROOT / "installers"
 
-    def test_exactly_one_all_and_eight_manifest_launchers_exist(self):
+    def test_exactly_one_all_and_manifest_launchers_exist(self):
         expected = {"install-all.cmd"} | {
             f"install-{slug}.cmd" for slug in self.slugs
         }
@@ -100,6 +100,9 @@ class GitHubInstallReadmeTest(unittest.TestCase):
         self.assertIn("Install All 8 Skills", self.readme)
         for slug in self.slugs:
             with self.subTest(slug=slug):
+                if slug == "test-case-execution-compiler":
+                    self.assertIn("Runtime 1.0.3 发布后提供完整安装器", self.readme)
+                    continue
                 base = (
                     RUNTIME_RELEASE_BASE
                     if slug == "web-api-test-execution-evidence"
@@ -209,6 +212,7 @@ class GitHubInstallReadmeTest(unittest.TestCase):
             "skills",
             "install",
             "usage-guides",
+            "compiler-guide",
             "execution-guide",
             "outputs",
         ]
@@ -262,6 +266,7 @@ class GitHubInstallReadmeTest(unittest.TestCase):
             ("用例质量审计", "test-case-quality-audit"),
             ("需求澄清", "requirement-clarification-test"),
             ("自动执行与证据回填", "web-api-test-execution-evidence"),
+            ("测试用例可执行化编译", "test-case-execution-compiler"),
         ]
         self.assertEqual(len(skill_specs), len(rows))
         release_urls = []
@@ -276,6 +281,9 @@ class GitHubInstallReadmeTest(unittest.TestCase):
                     re.fullmatch(r"[^。！？]+[。！？]", cells[1]),
                     cells[1],
                 )
+                if slug == "test-case-execution-compiler":
+                    self.assertEqual("Runtime 1.0.3 发布后提供完整安装器。", cells[2])
+                    continue
                 base = (
                     RUNTIME_RELEASE_BASE
                     if slug == "web-api-test-execution-evidence"
@@ -291,7 +299,7 @@ class GitHubInstallReadmeTest(unittest.TestCase):
                 )
                 release_urls.append(asset_url)
 
-        self.assertEqual(len(skill_specs), len(set(release_urls)))
+        self.assertEqual(len(skill_specs) - 1, len(set(release_urls)))
         self.assertNotIn(
             "| 中文名称 | Package | 类型 | 适用场景 | 安装 |",
             self.readme,

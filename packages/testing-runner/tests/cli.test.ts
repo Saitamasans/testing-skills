@@ -7,7 +7,7 @@ import test from "node:test";
 
 import { TEN_COLUMNS } from "../src/input/detect-input.js";
 import { normalizeRunCliOptions, runCli } from "../src/cli.js";
-import { resolveSmokeNetworkOrigin } from "../src/commands/run.js";
+import { persistManualRequiredResult, resolveSmokeNetworkOrigin } from "../src/commands/run.js";
 import { createApproval } from "../src/security/approval.js";
 import type { ExecutionProfile, ManifestAction, RunManifest, RunManifestCase, RunResult } from "../src/types.js";
 import { startDemoApp } from "./fixtures/demo-app.js";
@@ -80,6 +80,8 @@ async function fixture(input: {
   actions: ManifestAction[];
   data?: Record<string, unknown>;
   credentials?: ExecutionProfile["credentials"];
+  targetKind?: "api" | "web";
+  discoveryReceipts?: RunManifest["discovery_receipts"];
 }) {
   const sourcePath = path.join(input.directory, "report.json");
   const report = reportFor(input.caseId, input.title);
@@ -94,6 +96,7 @@ async function fixture(input: {
     title: input.title,
     actions: input.actions,
   });
+  if (input.discoveryReceipts) runManifest.discovery_receipts = input.discoveryReceipts;
   const approval = createApproval({
     manifest: runManifest,
     issued_by: "cli-test",
@@ -105,7 +108,9 @@ async function fixture(input: {
   const profile: ExecutionProfile & { data?: Record<string, unknown> } = {
     protocol_version: "1.0.0",
     profile_id: "cli-test",
-    targets: { api: { kind: "api", origin: input.origin as `http://${string}` } },
+    targets: input.targetKind === "web"
+      ? { web: { kind: "web", origin: input.origin as `http://${string}` } }
+      : { api: { kind: "api", origin: input.origin as `http://${string}` } },
     credentials: input.credentials ?? {},
     data: input.data ?? {},
   };
@@ -324,4 +329,96 @@ test("run command returns blocked exit code and writes an audit result when CI s
   } finally {
     await app.close();
   }
+});
+
+test("formal execution combines closed discovery contexts with fresh execution contexts", async () => {
+  const app = await startDemoApp();
+  const directory = await mkdtemp(path.join(os.tmpdir(), "runner-context-phases-"));
+  const outputDir = path.join(directory, "out");
+  try {
+    const discoveryTaskId = "discovery-task-11111111111111111111111111111111";
+    const { manifestPath, approvalPath } = await fixture({
+      directory,
+      origin: app.baseUrl,
+      caseId: "WEB-001",
+      title: "phase isolation",
+      targetKind: "web",
+      discoveryReceipts: [{
+        discovery_task_id: discoveryTaskId,
+        source_case_id: "WEB-001",
+        case_id: "WEB-001",
+        page_state_id: "items",
+        final_url: `${app.baseUrl}/items`,
+        discovery_id: "discovery-one",
+        receipt_path: "discovery/case-one/discovery-receipt.json",
+        receipt_sha256: "1".repeat(64),
+      }],
+      actions: [
+        { type: "web.goto", action_id: "WEB-001-open", target_alias: "web", url: `${app.baseUrl}/items`, risk: "R0" },
+        { type: "web.assert", action_id: "WEB-001-assert", target_alias: "web", assertion: "url-contains=/items", risk: "R0" },
+      ],
+    });
+    await writeJson(path.join(directory, "browser-contexts.json"), [{
+      phase: "discovery",
+      discovery_task_id: discoveryTaskId,
+      case_id: "WEB-001",
+      browser_id: "discovery-browser",
+      context_id: "discovery-context",
+      context_created_at: "2026-07-21T00:00:00.000Z",
+      context_closed_at: "2026-07-21T00:00:01.000Z",
+      context_close_status: "closed",
+      context_reused: false,
+      isolation_scope: "case",
+      flow_group: null,
+    }]);
+
+    const exitCode = await runTestingRunner(["run", "--manifest", manifestPath, "--approval", approvalPath, "--output-dir", outputDir, "--mode", "ci", "--browser", "headless"]);
+
+    assert.equal(exitCode, 0);
+    const records = await readJson<Array<{ phase: string; context_id: string; context_close_status: string }>>(path.join(outputDir, "browser-contexts.json"));
+    assert.deepEqual(records.map(({ phase }) => phase), ["discovery", "execution"]);
+    assert.equal(new Set(records.map(({ context_id }) => context_id)).size, 2);
+    assert.equal(records.every(({ context_close_status }) => context_close_status === "closed"), true);
+  } finally {
+    await app.close();
+  }
+});
+
+test("manual-required persistence keeps authoritative JSON artifacts when Trace finalization fails", async () => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), "runner-manual-trace-failure-"));
+  const sourcePath = path.join(directory, "report.json");
+  const sourceJson = `${JSON.stringify(reportFor("MANUAL-001", "manual handoff"), null, 2)}\n`;
+  await writeFile(sourcePath, sourceJson, "utf8");
+  const runManifest = manifest({
+    sourcePath,
+    sourceHash: sha256(sourceJson),
+    origin: "https://example.test",
+    caseId: "MANUAL-001",
+    title: "manual handoff",
+    actions: [{ type: "web.assert", action_id: "MANUAL-001-assert", target_alias: "web", assertion: "url=https://example.test/", risk: "R0" }],
+  });
+  const contextRecords = [{
+    phase: "execution" as const,
+    case_id: "MANUAL-001",
+    browser_id: "browser-1",
+    context_id: "context-1",
+    context_created_at: "2026-07-21T00:00:00.000Z",
+    context_closed_at: null,
+    context_close_status: "open" as const,
+    context_reused: false,
+    isolation_scope: "case" as const,
+    flow_group: null,
+  }];
+
+  const result = await persistManualRequiredResult({
+    outputDir: directory,
+    manifest: runManifest,
+    reason: "manual credential handoff required",
+    finalizeTraces: async () => { throw new Error("trace-finalize-failed"); },
+    contextRecords: () => contextRecords,
+  });
+
+  assert.equal(result.run_status, "manual_required");
+  assert.equal((await readJson<RunResult>(path.join(directory, "run-result.json"))).run_status, "manual_required");
+  assert.deepEqual(await readJson(path.join(directory, "browser-contexts.json")), contextRecords);
 });

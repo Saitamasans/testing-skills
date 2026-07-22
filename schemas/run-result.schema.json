@@ -9,15 +9,42 @@
     "protocol_version": { "const": "1.0.0" },
     "run_id": { "allOf": [{ "$ref": "https://saitamasans.dev/schemas/persisted-value.schema.json#/$defs/persistedString" }, { "type": "string", "minLength": 1 }] },
     "manifest_hash": { "$ref": "#/$defs/sha256" },
+    "contract_version": { "const": "1.0.0" },
+    "package_sha256": { "$ref": "#/$defs/sha256" },
     "run_status": { "$ref": "#/$defs/runStatus" },
     "started_at": { "allOf": [{ "$ref": "https://saitamasans.dev/schemas/persisted-value.schema.json#/$defs/persistedString" }, { "type": "string", "minLength": 1 }] },
     "completed_at": { "allOf": [{ "$ref": "https://saitamasans.dev/schemas/persisted-value.schema.json#/$defs/persistedString" }, { "type": "string", "minLength": 1 }] },
+    "timings": { "$ref": "#/$defs/timings" },
+    "timing_states": { "$ref": "#/$defs/timingStates" },
     "cases": { "type": "array", "items": { "$ref": "#/$defs/caseResult" } },
     "defects": { "type": "array", "items": { "$ref": "#/$defs/rootDefect" } }
   },
   "$defs": {
     "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "contractFieldStatus": { "enum": ["executed", "blocked", "skipped", "failed"] },
     "runStatus": { "enum": ["planned", "running", "completed", "blocked", "executor_error", "infrastructure_error", "manual_required"] },
+    "timing": { "type": ["number", "null"], "minimum": 0 },
+    "timingState": { "enum": ["not_executed", "running", "completed", "blocked"] },
+    "timings": {
+      "type": "object", "additionalProperties": false,
+      "properties": {
+        "package_validation_ms": { "$ref": "#/$defs/timing" }, "contract_loading_ms": { "$ref": "#/$defs/timing" },
+        "runtime_doctor_ms": { "$ref": "#/$defs/timing" }, "web_discovery_ms": { "$ref": "#/$defs/timing" },
+        "binding_ms": { "$ref": "#/$defs/timing" }, "transition_discovery_ms": { "$ref": "#/$defs/timing" },
+        "manifest_assembly_ms": { "$ref": "#/$defs/timing" }, "approval_wait_ms": { "$ref": "#/$defs/timing" },
+        "execution_ms": { "$ref": "#/$defs/timing" }, "report_ms": { "$ref": "#/$defs/timing" }
+      }
+    },
+    "timingStates": {
+      "type": "object", "additionalProperties": false,
+      "properties": {
+        "package_validation_ms": { "$ref": "#/$defs/timingState" }, "contract_loading_ms": { "$ref": "#/$defs/timingState" },
+        "runtime_doctor_ms": { "$ref": "#/$defs/timingState" }, "web_discovery_ms": { "$ref": "#/$defs/timingState" },
+        "binding_ms": { "$ref": "#/$defs/timingState" }, "transition_discovery_ms": { "$ref": "#/$defs/timingState" },
+        "manifest_assembly_ms": { "$ref": "#/$defs/timingState" }, "approval_wait_ms": { "$ref": "#/$defs/timingState" },
+        "execution_ms": { "$ref": "#/$defs/timingState" }, "report_ms": { "$ref": "#/$defs/timingState" }
+      }
+    },
     "caseStatus": { "enum": ["未执行", "通过", "不通过", "待定"] },
     "assertion": {
       "type": "object",
@@ -48,7 +75,36 @@
         "case_status": { "$ref": "#/$defs/caseStatus" },
         "run_status": { "$ref": "#/$defs/runStatus" },
         "assertions": { "type": "array", "items": { "$ref": "#/$defs/assertion" } },
-        "evidence": { "type": "array", "items": { "$ref": "#/$defs/evidence" } }
+        "evidence": { "type": "array", "items": { "$ref": "#/$defs/evidence" } },
+        "execution_contract": { "$ref": "https://saitamasans.dev/schemas/run-manifest.schema.json#/$defs/manifestCase/properties/execution_contract" },
+        "contract_field_status": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["case_id", "source_case_id", "source_sheet", "title", "module", "priority", "execution_type", "automation_status", "isolation_scope", "flow_group", "start_state", "auth_profile", "setup", "actions", "assertions", "effects", "cleanup", "dependencies", "resource_locks", "evidence_policy", "unresolved"],
+          "properties": {
+            "case_id": { "$ref": "#/$defs/contractFieldStatus" },
+            "source_case_id": { "$ref": "#/$defs/contractFieldStatus" },
+            "source_sheet": { "$ref": "#/$defs/contractFieldStatus" },
+            "title": { "$ref": "#/$defs/contractFieldStatus" },
+            "module": { "$ref": "#/$defs/contractFieldStatus" },
+            "priority": { "$ref": "#/$defs/contractFieldStatus" },
+            "execution_type": { "$ref": "#/$defs/contractFieldStatus" },
+            "automation_status": { "$ref": "#/$defs/contractFieldStatus" },
+            "isolation_scope": { "$ref": "#/$defs/contractFieldStatus" },
+            "flow_group": { "$ref": "#/$defs/contractFieldStatus" },
+            "start_state": { "$ref": "#/$defs/contractFieldStatus" },
+            "auth_profile": { "$ref": "#/$defs/contractFieldStatus" },
+            "setup": { "$ref": "#/$defs/contractFieldStatus" },
+            "actions": { "$ref": "#/$defs/contractFieldStatus" },
+            "assertions": { "$ref": "#/$defs/contractFieldStatus" },
+            "effects": { "$ref": "#/$defs/contractFieldStatus" },
+            "cleanup": { "$ref": "#/$defs/contractFieldStatus" },
+            "dependencies": { "$ref": "#/$defs/contractFieldStatus" },
+            "resource_locks": { "$ref": "#/$defs/contractFieldStatus" },
+            "evidence_policy": { "$ref": "#/$defs/contractFieldStatus" },
+            "unresolved": { "$ref": "#/$defs/contractFieldStatus" }
+          }
+        }
       }
     },
     "rootDefect": {

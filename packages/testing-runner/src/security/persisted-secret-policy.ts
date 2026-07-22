@@ -157,8 +157,19 @@ function stringIssue(value: string): string | undefined {
   return urlIssue(value) ?? credentialAssignmentIssue(value) ?? authSchemeIssue(value);
 }
 
-function isSafeCredentialValue(value: unknown): boolean {
-  return value === null || isStructuredReference(value) || (typeof value === "string" && isSafeMarker(value));
+function isExecutionContractEnvironmentReference(pointer: string, key: string, value: unknown): boolean {
+  const tokens = tokenizeKey(key);
+  return pointer.endsWith("/execution_contract/auth_profile/credential_refs")
+    && tokens.at(-1) === "env"
+    && typeof value === "string"
+    && /^[A-Z][A-Z0-9_]*$/.test(value);
+}
+
+function isSafeCredentialValue(pointer: string, key: string, value: unknown): boolean {
+  return value === null
+    || isStructuredReference(value)
+    || (typeof value === "string" && isSafeMarker(value))
+    || isExecutionContractEnvironmentReference(pointer, key, value);
 }
 
 export function findPersistedSecretIssues(value: unknown): string[] {
@@ -181,7 +192,7 @@ export function findPersistedSecretIssues(value: unknown): string[] {
     for (const [key, nestedValue] of Object.entries(current as Record<string, unknown>)) {
       const nestedPointer = childPointer(pointer, key);
       if (isCredentialKey(key)) {
-        if (!isSafeCredentialValue(nestedValue)) {
+        if (!isSafeCredentialValue(pointer, key, nestedValue)) {
           issues.push(
             `${nestedPointer}: credential-shaped key "${key}" must use a structured reference or explicit absence/masking marker`,
           );

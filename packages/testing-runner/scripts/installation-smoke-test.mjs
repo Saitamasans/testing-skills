@@ -155,6 +155,7 @@ export function createSmokeDocuments({ origin }) {
     protocol_version: "1.0.0",
     approval_id: "approval-bundle-smoke",
     manifest_hash: manifestHash,
+    manifest_sha256: manifestHash,
     source_hash: manifest.source.sha256,
     runner: { version: "1.0.0" },
     rule_versions: [...manifest.rule_versions],

@@ -1,6 +1,10 @@
+import type { ContractCase } from "@saitamasans/testing-contract-compiler";
+
 export type SchemaId =
   | "report"
   | "execution-profile"
+  | "discovery-approval"
+  | "discovery-receipt"
   | "run-manifest"
   | "approval"
   | "run-result";
@@ -22,7 +26,7 @@ export type ActionType =
   | "cleanup.web";
 
 export type CaseStatus = "未执行" | "通过" | "不通过" | "待定";
-export type InputKind = "native-report" | "standard-excel" | "nonstandard-excel";
+export type InputKind = "native-report" | "standard-excel" | "nonstandard-excel" | "execution-package";
 export type TenColumnName =
   | "用例 ID"
   | "所属模块"
@@ -101,6 +105,21 @@ export type RunStatus =
   | "executor_error"
   | "infrastructure_error"
   | "manual_required";
+
+export type ExecutionTimingPhase =
+  | "package_validation_ms"
+  | "contract_loading_ms"
+  | "runtime_doctor_ms"
+  | "web_discovery_ms"
+  | "binding_ms"
+  | "transition_discovery_ms"
+  | "manifest_assembly_ms"
+  | "approval_wait_ms"
+  | "execution_ms"
+  | "report_ms";
+export type TimingState = "not_executed" | "running" | "completed" | "blocked";
+export type ExecutionTimings = Partial<Record<ExecutionTimingPhase, number | null>>;
+export type ExecutionTimingStates = Partial<Record<ExecutionTimingPhase, TimingState>>;
 export type RiskLevel = "R0" | "R1" | "R2" | "R3";
 export type ReadinessLevel = "E0" | "E1" | "E2" | "E3" | "E4";
 
@@ -289,6 +308,9 @@ export type ManifestAction =
 
 export interface RunManifestCase {
   case_id: string;
+  isolation_scope?: "case" | "flow_group" | "suite" | "external_existing";
+  flow_group?: string | null;
+  execution_contract?: ContractCase;
   original: {
     "用例 ID": string;
     "所属模块": string;
@@ -305,6 +327,17 @@ export interface RunManifestCase {
   steps: ManifestAction[];
 }
 
+export interface DiscoveryReceiptReference {
+  discovery_task_id: string;
+  source_case_id: string;
+  case_id: string;
+  page_state_id: string;
+  final_url?: string;
+  discovery_id: string;
+  receipt_path: string;
+  receipt_sha256: string;
+}
+
 export interface RunManifest {
   protocol_version: ProtocolVersion;
   manifest_id: string;
@@ -312,6 +345,10 @@ export interface RunManifest {
   source: { path: string; sha256: string };
   targets?: HttpUrl[];
   rule_versions?: string[];
+  contract_version?: ProtocolVersion;
+  package_id?: string;
+  package_sha256?: string;
+  discovery_receipts?: DiscoveryReceiptReference[];
   cases: RunManifestCase[];
 }
 
@@ -319,6 +356,8 @@ export interface Approval {
   protocol_version: ProtocolVersion;
   approval_id: string;
   manifest_hash: string;
+  manifest_sha256: string;
+  package_sha256?: string;
   source_hash: string;
   runner?: { version: ProtocolVersion };
   rule_versions?: string[];
@@ -348,7 +387,11 @@ export interface RunCaseResult {
   run_status: RunStatus;
   assertions: AssertionResult[];
   evidence: EvidenceReference[];
+  execution_contract?: ContractCase;
+  contract_field_status?: Record<keyof ContractCase, ContractFieldStatus>;
 }
+
+export type ContractFieldStatus = "executed" | "blocked" | "skipped" | "failed";
 
 export interface RootDefectSummary {
   defect_id: string;
@@ -361,9 +404,13 @@ export interface RunResult {
   protocol_version: ProtocolVersion;
   run_id: string;
   manifest_hash: string;
+  contract_version?: ProtocolVersion;
+  package_sha256?: string;
   run_status: RunStatus;
   started_at: string;
   completed_at?: string;
+  timings?: ExecutionTimings;
+  timing_states?: ExecutionTimingStates;
   cases: RunCaseResult[];
   defects?: RootDefectSummary[];
 }
