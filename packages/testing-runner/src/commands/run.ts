@@ -436,6 +436,7 @@ export async function runRunCommand(options: RunCommandOptions): Promise<number>
     manifest,
     mode,
     outputDir: options.outputDir,
+    traceRedactionFingerprints: secrets.fingerprints(),
   };
   if (allowedNetworkOrigin !== undefined) browserOptions.allowedNetworkOrigin = allowedNetworkOrigin;
   if (options.browser !== undefined) browserOptions.visibility = options.browser;

@@ -348,6 +348,7 @@ test("formal execution combines closed discovery contexts with fresh execution c
         source_case_id: "WEB-001",
         case_id: "WEB-001",
         page_state_id: "items",
+        final_url: `${app.baseUrl}/items`,
         discovery_id: "discovery-one",
         receipt_path: "discovery/case-one/discovery-receipt.json",
         receipt_sha256: "1".repeat(64),

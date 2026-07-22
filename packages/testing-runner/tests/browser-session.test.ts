@@ -1,9 +1,12 @@
 import assert from "node:assert/strict";
-import { mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, readdir, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
 import type { Browser, Page } from "playwright";
+import ExcelJS from "exceljs";
+import JSZip from "jszip";
 
 import {
   applyBrowserContextCleanupFailures,
@@ -13,6 +16,7 @@ import {
 import * as browserSessionRuntime from "../src/runtime/browser-session.js";
 import { runApprovedManifest } from "../src/runtime/run-orchestrator.js";
 import type { RunManifest, RunResult } from "../src/types.js";
+import { fingerprintSecret } from "../src/security/redactor.js";
 
 function manifestWith(actionType: string): RunManifest {
   return {
@@ -45,7 +49,7 @@ test("interactive api-only auto mode launches a maximized visual progress browse
     evaluate: async () => undefined,
   } as unknown as Page;
   const context = {
-    tracing: { start: async () => undefined, stop: async () => undefined },
+    tracing: { start: async () => undefined, stop: async ({ path: tracePath }) => writeMockTrace(tracePath) },
     newPage: async () => page,
     close: async () => undefined,
   };
@@ -106,7 +110,7 @@ test("visible session launches headed and writes Playwright trace", async () => 
     tracing: {
       start: async () => { tracingStarted = true; },
       stop: async ({ path: tracePath }) => {
-        await writeFile(tracePath, "trace", "utf8");
+        await writeMockTrace(tracePath);
       },
     },
     newPage: async () => page,
@@ -135,10 +139,7 @@ test("visible session launches headed and writes Playwright trace", async () => 
   await session?.close();
   assert.equal(contextClosed, true);
   assert.equal(browserClosed, true);
-  assert.equal(
-    await readFile(path.join(outputDir, "evidence", "playwright-trace.zip"), "utf8"),
-    "trace",
-  );
+  assert.equal(await mockTraceLabel(path.join(outputDir, "evidence", "playwright-trace.zip")), "trace");
 });
 
 test("prepares every Web case in a fresh browser context", async () => {
@@ -152,7 +153,7 @@ test("prepares every Web case in a fresh browser context", async () => {
       return {
         tracing: {
           start: async () => undefined,
-          stop: async ({ path: tracePath }: { path: string }) => writeFile(tracePath, `trace-${state.id}`, "utf8"),
+          stop: async ({ path: tracePath }: { path: string }) => writeMockTrace(tracePath, `trace-${state.id}`),
         },
         route: async () => { guardedContexts.push(state.id); },
         newPage: async () => ({ contextId: state.id } as unknown as Page),
@@ -186,12 +187,42 @@ test("prepares every Web case in a fresh browser context", async () => {
     { context_reused: false, isolation_scope: "case", flow_group: null },
     { context_reused: false, isolation_scope: "case", flow_group: null },
   ]);
-  assert.equal(await readFile(path.join(outputDir, "evidence", "LOGIN-001", "playwright-trace.zip"), "utf8"), "trace-1");
-  assert.equal(await readFile(path.join(outputDir, "evidence", "LOGIN-002", "playwright-trace.zip"), "utf8"), "trace-2");
+  assert.equal(await mockTraceLabel(path.join(outputDir, "evidence", "LOGIN-001", "playwright-trace.zip")), "trace-1");
+  assert.equal(await mockTraceLabel(path.join(outputDir, "evidence", "LOGIN-002", "playwright-trace.zip")), "trace-2");
   assert.deepEqual(await session?.finalizeTraces(), [
     path.join(outputDir, "evidence", "LOGIN-001", "playwright-trace.zip"),
     path.join(outputDir, "evidence", "LOGIN-002", "playwright-trace.zip"),
   ]);
+});
+
+test("Runner browser session publishes only a sanitized openable Trace", async () => {
+  const outputDir = await mkdtemp(path.join(os.tmpdir(), "sanitized-browser-trace-"));
+  const secret = "TRACE_PASSWORD_CANARY";
+  const context = {
+    tracing: {
+      start: async () => undefined,
+      stop: async ({ path: tracePath }: { path: string }) => {
+        const zip = new JSZip();
+        zip.file("trace.trace", `${JSON.stringify({ snapshot: { html: `<input type="password" value="${secret}">` } })}\n`);
+        await writeFile(tracePath, await zip.generateAsync({ type: "nodebuffer" }));
+      },
+    },
+    newPage: async () => ({} as Page),
+    close: async () => undefined,
+  };
+  const browser = { newContext: async () => context, close: async () => undefined };
+  const session = await openBrowserSession({
+    manifest: manifestWith("web.goto"),
+    mode: "ci",
+    outputDir,
+    launchBrowser: async () => browser as unknown as Browser,
+  });
+
+  await session?.close();
+  const evidenceDir = path.join(outputDir, "evidence");
+  assert.deepEqual(await readdir(evidenceDir), ["playwright-trace.zip"]);
+  const archive = await JSZip.loadAsync(await readFile(path.join(evidenceDir, "playwright-trace.zip")));
+  assert.doesNotMatch(await archive.file("trace.trace")!.async("string"), new RegExp(secret));
 });
 
 test("browser context evidence separates discovery from execution and rejects cross-phase reuse", () => {
@@ -222,7 +253,7 @@ test("explicit flow group shares one context only inside the group", async () =>
   const browser = {
     newContext: async () => {
       contexts += 1;
-      return { tracing: { start: async () => undefined, stop: async () => undefined }, newPage: async () => ({ context: contexts } as unknown as Page), close: async () => undefined };
+      return { tracing: { start: async () => undefined, stop: async ({ path: tracePath }: { path: string }) => writeMockTrace(tracePath) }, newPage: async () => ({ context: contexts } as unknown as Page), close: async () => undefined };
     },
     close: async () => undefined,
   };
@@ -258,7 +289,7 @@ test("observer rendering follows the new Page after case context rotation", asyn
         },
       } as unknown as Page;
       return {
-        tracing: { start: async () => undefined, stop: async () => undefined },
+        tracing: { start: async () => undefined, stop: async ({ path: tracePath }: { path: string }) => writeMockTrace(tracePath) },
         newPage: async () => page,
         close: async () => { state.closed = true; },
       };
@@ -283,7 +314,7 @@ test("a context close failure is recorded while the next independent case contin
       contexts += 1;
       const id = contexts;
       return {
-        tracing: { start: async () => undefined, stop: async () => undefined },
+        tracing: { start: async () => undefined, stop: async ({ path: tracePath }: { path: string }) => writeMockTrace(tracePath) },
         newPage: async () => ({ context: id } as unknown as Page),
         close: async () => { if (id === 1 || id === 3) throw new Error(`close failed: ${id}`); },
       };
@@ -332,7 +363,7 @@ test("context close failures affect their owning cases without erasing business 
 
 for (const [name, caseIds, outcomes] of [
   ["failure/success/failure", ["CASE-1", "CASE-2", "CASE-3"], ["failed", "passed", "failed"]],
-  ["success/failure/success", ["LOGIN-MINI-001", "LOGIN-MINI-002", "LOGIN-MINI-003"], ["passed", "failed", "passed"]],
+  ["live failure/success/failure", ["LOGIN-SEQ-001", "LOGIN-SEQ-002", "LOGIN-SEQ-003"], ["passed", "passed", "passed"]],
 ] as const) {
   test(`${name} Runner execution keeps every case isolated and observable`, async () => {
     const outputDir = await mkdtemp(path.join(os.tmpdir(), "case-state-ordering-"));
@@ -344,7 +375,7 @@ for (const [name, caseIds, outcomes] of [
         contextStates.push(state);
         const id = contextStates.length;
         return {
-          tracing: { start: async () => undefined, stop: async () => undefined },
+          tracing: { start: async () => undefined, stop: async ({ path: tracePath }: { path: string }) => writeMockTrace(tracePath) },
           newPage: async () => ({ context: id, state } as unknown as Page),
           close: async () => undefined,
         };
@@ -388,12 +419,26 @@ for (const [name, caseIds, outcomes] of [
       case_status: outcomes[index] === "passed" ? "通过" : "不通过",
     })));
     assert.deepEqual(observed, caseIds.flatMap((caseId) => [`started:${caseId}`, `completed:${caseId}`]));
-    if (caseIds.includes("LOGIN-MINI-003")) {
-      assert.equal(result.cases.find(({ case_id }) => case_id === "LOGIN-MINI-002")?.case_status, "不通过");
-      assert.equal(result.cases.find(({ case_id }) => case_id === "LOGIN-MINI-003")?.case_status, "通过");
-      assert.equal(observed.includes("started:LOGIN-MINI-003"), true);
+    if (caseIds.includes("LOGIN-SEQ-003")) {
+      assert.deepEqual(result.cases.map(({ case_id, case_status }) => ({ case_id, case_status })), [
+        { case_id: "LOGIN-SEQ-001", case_status: "通过" },
+        { case_id: "LOGIN-SEQ-002", case_status: "通过" },
+        { case_id: "LOGIN-SEQ-003", case_status: "通过" },
+      ]);
+      assert.equal(observed.includes("started:LOGIN-SEQ-003"), true);
     }
   });
+}
+
+async function writeMockTrace(tracePath: string, label = "trace"): Promise<void> {
+  const zip = new JSZip();
+  zip.file("trace.trace", `${JSON.stringify({ type: "context-options", version: 8, title: label })}\n`);
+  await writeFile(tracePath, await zip.generateAsync({ type: "nodebuffer" }));
+}
+
+async function mockTraceLabel(tracePath: string): Promise<string> {
+  const zip = await JSZip.loadAsync(await readFile(tracePath));
+  return String(JSON.parse((await zip.file("trace.trace")!.async("string")).trim()).title);
 }
 
 function orderedWebManifest(caseIds: readonly string[]): RunManifest {
@@ -419,7 +464,7 @@ function orderedWebManifest(caseIds: readonly string[]): RunManifest {
 test("suite and external-existing context reuse require explicit approval", async () => {
   const outputDir = await mkdtemp(path.join(os.tmpdir(), "shared-browser-approval-"));
   const browser = {
-    newContext: async () => ({ tracing: { start: async () => undefined, stop: async () => undefined }, newPage: async () => ({} as Page), close: async () => undefined }),
+    newContext: async () => ({ tracing: { start: async () => undefined, stop: async ({ path: tracePath }: { path: string }) => writeMockTrace(tracePath) }, newPage: async () => ({} as Page), close: async () => undefined }),
     close: async () => undefined,
   };
   const session = await openBrowserSession({ manifest: manifestWith("web.goto"), mode: "ci", outputDir, launchBrowser: async () => browser as unknown as Browser });
@@ -431,17 +476,26 @@ test("suite and external-existing context reuse require explicit approval", asyn
   await session?.close();
 });
 
-test("live smoke third case keeps fixed order without a business dependency or logout", async () => {
+test("live failure-success-failure fixture keeps three anonymous isolated cases without dependencies or logout", async () => {
   const fixtureRoot = new URL("../../../tests/fixtures/live-smoke/", import.meta.url);
-  const overrides = JSON.parse(await readFile(new URL("contract-overrides.json", fixtureRoot), "utf8")) as Record<string, { dependencies?: string[]; isolation_scope?: string; flow_group?: string | null }>;
-  const profile = JSON.parse(await readFile(new URL("execution-profile.json", fixtureRoot), "utf8")) as { case_plans: Record<string, Array<{ type: string; locator?: string }>> };
-  const generator = await readFile(new URL("generate-fixture.mjs", fixtureRoot), "utf8");
+  const overrides = JSON.parse(await readFile(new URL("sequence-contract-overrides.json", fixtureRoot), "utf8")) as Record<string, {
+    dependencies?: string[]; isolation_scope?: string; flow_group?: string | null;
+    effects?: { browser_state?: { target_state?: string }; identity_state?: { target_state?: string } };
+  }>;
+  const profile = JSON.parse(await readFile(new URL("sequence-execution-profile.json", fixtureRoot), "utf8")) as { case_plans: Record<string, Array<{ type: string; locator?: string }>> };
+  const workbook = new ExcelJS.Workbook();
+  await workbook.xlsx.readFile(fileURLToPath(new URL("login-seq.xlsx", fixtureRoot)));
+  const sourceCaseIds = workbook.worksheets[0]!.getColumn(1).values.slice(2);
+  const expectedCaseIds = ["LOGIN-SEQ-001", "LOGIN-SEQ-002", "LOGIN-SEQ-003"];
 
-  assert.deepEqual(overrides["LOGIN-MINI-003"]?.dependencies ?? [], []);
-  assert.deepEqual({ isolation_scope: overrides["LOGIN-MINI-003"]?.isolation_scope, flow_group: overrides["LOGIN-MINI-003"]?.flow_group }, { isolation_scope: "case", flow_group: null });
-  assert.ok(generator.indexOf('"LOGIN-MINI-002"') < generator.indexOf('"LOGIN-MINI-003"'));
-  assert.match(generator, /固定执行顺序/);
-  assert.equal(profile.case_plans["LOGIN-MINI-003"]?.some(({ type, locator }) => type === "cleanup.web" || /logout|退出/i.test(locator ?? "")), false);
+  assert.deepEqual(sourceCaseIds, expectedCaseIds);
+  for (const caseId of expectedCaseIds) {
+    assert.deepEqual(overrides[caseId]?.dependencies ?? [], []);
+    assert.deepEqual({ isolation_scope: overrides[caseId]?.isolation_scope, flow_group: overrides[caseId]?.flow_group }, { isolation_scope: "case", flow_group: null });
+    assert.equal(profile.case_plans[caseId]?.some(({ type, locator }) => type === "cleanup.web" || /logout|退出/i.test(locator ?? "")), false);
+  }
+  assert.deepEqual(expectedCaseIds.map((caseId) => overrides[caseId]?.effects?.browser_state?.target_state), ["login_error", "workspace", "login_error"]);
+  assert.deepEqual(expectedCaseIds.map((caseId) => overrides[caseId]?.effects?.identity_state?.target_state), ["anonymous", "authenticated", "anonymous"]);
 });
 
 test("visible session finalizes Trace before showing delivery results and closes idempotently", async () => {
@@ -455,7 +509,7 @@ test("visible session finalizes Trace before showing delivery results and closes
       start: async () => { events.push("trace.start"); },
       stop: async ({ path: tracePath }: { path: string }) => {
         events.push("trace.stop");
-        await writeFile(tracePath, "trace", "utf8");
+        await writeMockTrace(tracePath);
       },
     },
     newPage: async () => page,
@@ -517,7 +571,7 @@ test("smoke network policy allows only the exact 127.0.0.1 origin and fails on e
   const context = {
     tracing: {
       start: async () => undefined,
-      stop: async ({ path: tracePath }: { path: string }) => writeFile(tracePath, "trace", "utf8"),
+      stop: async ({ path: tracePath }: { path: string }) => writeMockTrace(tracePath),
     },
     route: async (_pattern: string, handler: typeof routeHandler) => { routeHandler = handler; },
     newPage: async () => ({ kind: "page" } as unknown as Page),

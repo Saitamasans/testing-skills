@@ -17,11 +17,12 @@ import {
   proposeMapping,
   type MappingProposal,
 } from "../input/mapping-proposal.js";
-import type { ExecutionProfile, NormalizedCaseSet, RunManifest, SourceSnapshot } from "../types.js";
+import type { DiscoveryReceiptReference, ExecutionProfile, NormalizedCaseSet, RunManifest, SourceSnapshot } from "../types.js";
 import { readExecutionPackage } from "../input/execution-package.js";
 import type { ContractCase } from "@saitamasans/testing-contract-compiler";
 import type { Page } from "playwright";
 import { verifyDiscoveryReceipts, type ActiveRuntimeSession } from "../security/discovery-receipt.js";
+import { planDiscoveryTasks, type DiscoveryTask } from "../discovery/discovery-task.js";
 
 export interface PlanCommandOptions {
   input: string;
@@ -98,6 +99,32 @@ export async function runPlanCommand(options: PlanCommandOptions): Promise<PlanC
   return result;
 }
 
+export function bindLoginErrorFinalUrls(
+  manifest: RunManifest,
+  discoveryReceipts: readonly DiscoveryReceiptReference[],
+  discoveryTasks: readonly DiscoveryTask[],
+  contractCases: readonly ContractCase[],
+): void {
+  for (const receipt of discoveryReceipts.filter(({ page_state_id }) => page_state_id === "login_error")) {
+    if (!receipt.final_url) throw new Error(`contract_incomplete: login_error final URL missing: ${receipt.case_id}`);
+    const task = discoveryTasks.find(({ discovery_task_id }) => discovery_task_id === receipt.discovery_task_id);
+    if (!task) throw new Error(`contract_incomplete: discovery task missing: ${receipt.discovery_task_id}`);
+    for (const sourceCaseId of task.source_case_ids) {
+      const contract = contractCases.find(({ source_case_id }) => source_case_id === sourceCaseId);
+      if (!contract) throw new Error(`contract_incomplete: discovery source case missing: ${sourceCaseId}`);
+      const item = manifest.cases.find(({ case_id }) => case_id === contract.case_id);
+      if (!item) throw new Error(`contract_incomplete: discovery case missing: ${contract.case_id}`);
+      const urlAssertions = item.steps.filter((action) => action.type === "web.assert" && action.assertion.startsWith("url="));
+      if (urlAssertions.length === 0) continue;
+      if (urlAssertions.length !== 1) throw new Error(`contract_incomplete: ${contract.case_id} must have exactly one login-page URL assertion`);
+      const targetActionId = urlAssertions[0]!.action_id;
+      item.steps = item.steps.map((action) => action.action_id === targetActionId && action.type === "web.assert"
+        ? { ...action, assertion: `url=${receipt.final_url}` }
+        : action);
+    }
+  }
+}
+
 async function runPackagePlan(options: PlanCommandOptions, profile: ExecutionProfileWithPlans): Promise<PlanCommandResult> {
   const loaded = await readExecutionPackage(options.input);
   const bindingStarted = performance.now();
@@ -128,6 +155,12 @@ async function runPackagePlan(options: PlanCommandOptions, profile: ExecutionPro
   manifest.package_id = loaded.manifest.package_id;
   manifest.package_sha256 = loaded.package_sha256;
   if (discoveryReceipts.length > 0) manifest.discovery_receipts = discoveryReceipts;
+  bindLoginErrorFinalUrls(
+    manifest,
+    discoveryReceipts,
+    planDiscoveryTasks({ contractCases: loaded.contract.cases, profile, packageSha256: loaded.package_sha256 }),
+    loaded.contract.cases,
+  );
   manifest.cases = manifest.cases.map((item) => {
     const contract = loaded.contract.cases.find(({ case_id }) => case_id === item.case_id)!;
     return {

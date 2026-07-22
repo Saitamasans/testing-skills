@@ -11,6 +11,7 @@ import { compilePackage, loadExecutionPackage } from "../../testing-contract-com
 
 import { sha256Canonical } from "../src/compiler/canonical-json.js";
 import { runDiscoverPlanCommand } from "../src/commands/discover-plan.js";
+import { bindLoginErrorFinalUrls } from "../src/commands/plan.js";
 import { discoveryTaskId, planDiscoveryTasks } from "../src/discovery/discovery-task.js";
 import * as discoveryReceiptRuntime from "../src/security/discovery-receipt.js";
 import { discoveryCaseDirectoryName } from "../src/security/discovery-receipt.js";
@@ -129,6 +130,30 @@ test("discover-plan executes the approved Runner web transition sequence", async
   assert.equal(result.manifest.discovery_receipts?.[0]?.page_state_id, "items");
 });
 
+test("root redirect discovery binds login_error URL assertion to the real final /login URL", async (t) => {
+  const app = await startDemoApp({ rootRedirectToLogin: true });
+  const actions: ManifestAction[] = [
+    { type: "web.goto", action_id: "goto-login", target_alias: "web", url: `${app.baseUrl}/`, risk: "R0", source_step: "LOGIN-001-A1" },
+  ];
+  const f = await fixture("login_error", app.baseUrl, actions);
+  t.after(() => app.close());
+  t.after(() => rm(f.root, { recursive: true, force: true }));
+  const profile = JSON.parse(await readFile(f.profile, "utf8"));
+  profile.case_plans["LOGIN-001"][1].assertion = `url=${app.baseUrl}/`;
+  await writeFile(f.profile, `${JSON.stringify(profile, null, 2)}\n`);
+  const approval = JSON.parse(await readFile(f.approval, "utf8"));
+  approval.requested_url = `${app.baseUrl}/`;
+  approval.transition_actions_sha256 = sha256Canonical(actions);
+  await writeFile(f.approval, `${JSON.stringify(approval, null, 2)}\n`);
+
+  const result = await runDiscoverPlanCommand({ input: f.packagePath, profile: f.profile, outputDir: f.output, discoveryApproval: f.approval, transitionCaseId: "LOGIN-001", browser: "headless" });
+  const urlAssertions = result.manifest.cases[0]!.steps.filter((action) => action.type === "web.assert" && action.assertion.startsWith("url="));
+  assert.equal(urlAssertions.length, 1);
+  assert.equal(urlAssertions[0]!.type === "web.assert" ? urlAssertions[0]!.assertion : undefined, `url=${app.baseUrl}/login`);
+  assert.equal(result.manifest.discovery_receipts?.[0]?.final_url, `${app.baseUrl}/login`);
+  assert.equal(result.manifest.cases[0]!.execution_contract?.effects.identity_state, null);
+});
+
 test("one READY package with success and error target states returns two discovery tasks", async (t) => {
   const app = await startDemoApp();
   const f = await multiTargetFixture(app.baseUrl);
@@ -199,6 +224,8 @@ test("identical transition and target state bindings deduplicate deterministical
   loaded.contract.cases[1]!.effects = structuredClone(loaded.contract.cases[0]!.effects);
   loaded.contract.cases[1]!.auth_profile = structuredClone(loaded.contract.cases[0]!.auth_profile);
   profile.case_plans["LOGIN-003"] = structuredClone(profile.case_plans["LOGIN-002"]);
+  profile.case_plans["LOGIN-003"][0].action_id = "LOGIN-003-open";
+  profile.case_plans["LOGIN-003"][0].source_step = "LOGIN-003-A1";
 
   const first = planDiscoveryTasks({ contractCases: loaded.contract.cases, profile, packageSha256: loaded.package_sha256 });
   const second = planDiscoveryTasks({ contractCases: loaded.contract.cases, profile, packageSha256: loaded.package_sha256 });
@@ -206,6 +233,43 @@ test("identical transition and target state bindings deduplicate deterministical
   assert.equal(first.length, 1);
   assert.deepEqual(first, second);
   assert.deepEqual(first[0]?.source_case_ids, ["LOGIN-002", "LOGIN-003"]);
+});
+
+test("one deduplicated login_error receipt binds its final URL to every covered source case", () => {
+  const manifest = {
+    cases: ["LOGIN-SEQ-001", "LOGIN-SEQ-003"].map((caseId) => ({
+      case_id: caseId,
+      steps: [
+        { type: "web.assert", action_id: `${caseId}-error`, assertion: "text-contains=用户名或密码错误" },
+        { type: "web.assert", action_id: `${caseId}-login-page`, assertion: "url=https://example.test/" },
+        { type: "web.assert", action_id: `${caseId}-form-visible`, assertion: "visible:css=input[name=username]" },
+      ],
+    })),
+  } as never;
+  const task = {
+    discovery_task_id: "discovery-task-login-error",
+    source_case_id: "LOGIN-SEQ-001",
+    source_case_ids: ["LOGIN-SEQ-001", "LOGIN-SEQ-003"],
+    target_state: "login_error",
+  } as never;
+  const receipt = {
+    discovery_task_id: "discovery-task-login-error",
+    source_case_id: "LOGIN-SEQ-001",
+    case_id: "LOGIN-SEQ-001",
+    page_state_id: "login_error",
+    final_url: "https://example.test/login",
+  } as never;
+  const contractCases = ["LOGIN-SEQ-001", "LOGIN-SEQ-003"].map((caseId) => ({ case_id: caseId, source_case_id: caseId })) as never;
+
+  bindLoginErrorFinalUrls(manifest, [receipt], [task], contractCases);
+
+  for (const item of manifest.cases) {
+    const assertions = item.steps.filter(({ assertion }) => assertion.startsWith("url="));
+    assert.equal(assertions.length, 1);
+    assert.equal(assertions[0]?.assertion, "url=https://example.test/login");
+    assert.equal(item.steps.some(({ assertion }) => assertion === "text-contains=用户名或密码错误"), true);
+    assert.equal(item.steps.some(({ assertion }) => assertion === "visible:css=input[name=username]"), true);
+  }
 });
 
 test("discovery task identity separates start state and the full auth profile", async (t) => {

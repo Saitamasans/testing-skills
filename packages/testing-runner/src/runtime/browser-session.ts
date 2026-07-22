@@ -1,5 +1,6 @@
-import { mkdir } from "node:fs/promises";
+import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
+import os from "node:os";
 import path from "node:path";
 
 import {
@@ -13,6 +14,8 @@ import {
 import type { RunManifest, RunResult } from "../types.js";
 import type { RunObserver } from "./run-orchestrator.js";
 import type { DeliverySummary } from "./visual-progress-model.js";
+import type { SecretFingerprint } from "../security/redactor.js";
+import { sanitizePlaywrightTrace } from "../security/trace-sanitizer.js";
 import {
   VisualProgressController,
   type ProgressVisibility,
@@ -32,6 +35,7 @@ export interface BrowserSessionOptions extends BrowserSettingsInput {
   progress?: ProgressVisibility;
   allowedNetworkOrigin?: string;
   launchBrowser?: (options: LaunchOptions) => Promise<Browser>;
+  traceRedactionFingerprints?: readonly SecretFingerprint[];
 }
 
 export interface BrowserSession {
@@ -266,7 +270,24 @@ export async function openBrowserSession(
         : path.join(options.outputDir, "evidence");
       await mkdir(evidenceDir, { recursive: true });
       const tracePath = path.join(evidenceDir, "playwright-trace.zip");
-      await activeContext.tracing.stop({ path: tracePath });
+      {
+        const rawTraceDirectory = await mkdtemp(path.join(os.tmpdir(), "testing-runner-trace-"));
+        const rawTracePath = path.join(rawTraceDirectory, "playwright-trace.raw.zip");
+        try {
+          await activeContext.tracing.stop({ path: rawTracePath });
+          await sanitizePlaywrightTrace({
+            rawPath: rawTracePath,
+            outputPath: tracePath,
+            fingerprints: options.traceRedactionFingerprints ?? [],
+          });
+        } catch (error) {
+          await rm(rawTracePath, { force: true }).catch(() => undefined);
+          await rm(tracePath, { force: true }).catch(() => undefined);
+          throw error;
+        } finally {
+          await rm(rawTraceDirectory, { recursive: true, force: true }).catch(() => undefined);
+        }
+      }
       if (!tracePaths.includes(tracePath)) tracePaths.push(tracePath);
       if (blockedRequests.size > 0) {
         const error = new Error(`smoke_external_request: ${[...blockedRequests].sort().join(", ")}`);

@@ -94,15 +94,22 @@ async function issueLiveReceipt(
   f: Awaited<ReturnType<typeof setup>>,
   transitionActions = DEFAULT_TRANSITION_ACTIONS as never[],
   now = RECEIPT_NOW,
+  page = fakeDiscoveryPage(),
+  pageStateId = "workspace",
 ) {
   const loaded = await loadExecutionPackage(f.package);
   const contractCase = loaded.contract.cases[0]!;
   const authProfileId = typeof contractCase.auth_profile.id === "string" ? contractCase.auth_profile.id : null;
   const session = await (discoveryReceiptRuntime as any).createActiveRuntimeSession(f.output, now);
-  const approval = await writeDiscoveryApproval(f, loaded.package_sha256, transitionActions, {}, now);
+  const firstAction = transitionActions[0] as { type?: string; url?: string } | undefined;
+  const requestedUrl = firstAction?.type === "web.goto" && firstAction.url ? firstAction.url : "https://example.test/login";
+  const approval = await writeDiscoveryApproval(f, loaded.package_sha256, transitionActions, {
+    requested_url: requestedUrl,
+    page_state_id: pageStateId,
+  }, now);
   const issued = await (discoveryReceiptRuntime as any).discoverAndIssueReceipt({
     session,
-    page: fakeDiscoveryPage(),
+    page,
     packageSha256: loaded.package_sha256,
     sourceCaseIds: ["LOGIN-001"],
     sourceCaseId: contractCase.source_case_id,
@@ -114,13 +121,64 @@ async function issueLiveReceipt(
     transitionCaseId: "LOGIN-001",
     transitionActions,
     targetOrigin: "https://example.test",
-    requestedUrl: "https://example.test/login",
-    pageStateId: "workspace",
+    requestedUrl,
+    pageStateId,
     approvalPath: approval,
     now,
   });
   return { session, approval, ...issued };
 }
+
+test("binds a login-error URL assertion to the discovery receipt final URL", async (t) => {
+  const f = await setup("错误登录后仍在登录页");
+  t.after(() => rm(f.root, { recursive: true, force: true }));
+  const transitionActions = [{
+    type: "web.goto", action_id: "goto-login", target_alias: "web", url: "https://example.test/", risk: "R0", source_step: "LOGIN-001-A1",
+  }] as const;
+  await compilePackage({
+    input: f.input,
+    output: f.package,
+    overrides: {
+      "LOGIN-001": {
+        effects: { browser_state: { target_state: "login_error" }, identity_state: null, account_data: null, shared_business_data: null, global_environment: null, external_system: null },
+      },
+    },
+  });
+  await writeFile(f.profile, `${JSON.stringify({
+    protocol_version: "1.0.0",
+    profile_id: "login-error-url-binding",
+    targets: { web: { kind: "web", origin: "https://example.test" } },
+    credentials: {},
+    case_plans: {
+      "LOGIN-001": [
+        ...transitionActions,
+        { type: "web.assert", action_id: "assert-login-page", target_alias: "web", assertion: "url=https://example.test/", risk: "R0", source_step: "LOGIN-001-E1" },
+      ],
+    },
+  }, null, 2)}\n`);
+  const issued = await issueLiveReceipt(
+    f,
+    transitionActions as never[],
+    RECEIPT_NOW,
+    fakeDiscoveryPage("https://example.test/login", "<html><body><form>login error</form></body></html>"),
+    "login_error",
+  );
+
+  const result = await runPlanCommand({
+    input: f.package,
+    profile: f.profile,
+    outputDir: f.output,
+    discoveryReceipts: [issued.receiptPath],
+    discoveryApproval: issued.approval,
+    runtimeSession: issued.session,
+    now: RECEIPT_NOW,
+  });
+
+  const assertion = result.manifest.cases[0]!.steps.find(({ action_id }) => action_id === "assert-login-page");
+  assert.equal(assertion?.type, "web.assert");
+  assert.equal(assertion?.type === "web.assert" ? assertion.assertion : undefined, "url=https://example.test/login");
+  assert.equal(result.manifest.discovery_receipts?.[0]?.page_state_id, "login_error");
+});
 
 async function writeIssuedDiscoveryReceipt(
   f: Awaited<ReturnType<typeof setup>>,
@@ -256,6 +314,7 @@ test("READY package enters package-first path and skips semantic compilation", a
     source_case_id: "LOGIN-001",
     case_id: "LOGIN-001",
     page_state_id: "workspace",
+    final_url: issued.receipt.final_url,
     discovery_id: issued.receipt.discovery_id,
     receipt_path: `discovery/${discoveryCaseDirectory("LOGIN-001")}/discovery-receipt.json`,
     receipt_sha256: createHash("sha256").update(await readFile(issued.receiptPath)).digest("hex"),

@@ -548,7 +548,7 @@ async function verifyOneReceipt(input: VerifyDiscoveryReceiptsInput, receiptPath
     }
   }
   stateFor(session, clock());
-  return { discovery_task_id: task.discovery_task_id, source_case_id: task.source_case_id, case_id: task.transition_case_id, page_state_id: task.target_state, discovery_id: receipt.discovery_id, receipt_path: located.relative, receipt_sha256: receiptSha };
+  return { discovery_task_id: task.discovery_task_id, source_case_id: task.source_case_id, case_id: task.transition_case_id, page_state_id: task.target_state, final_url: receipt.final_url, discovery_id: receipt.discovery_id, receipt_path: located.relative, receipt_sha256: receiptSha };
 }
 
 export async function verifyDiscoveryReceipts(input: VerifyDiscoveryReceiptsInput): Promise<DiscoveryReceiptReference[]> {

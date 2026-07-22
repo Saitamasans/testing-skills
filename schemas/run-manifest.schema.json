@@ -265,6 +265,7 @@
         "source_case_id": { "allOf": [{ "$ref": "#/$defs/nonSecretText" }, { "type": "string", "minLength": 1 }] },
         "case_id": { "allOf": [{ "$ref": "#/$defs/nonSecretText" }, { "type": "string", "minLength": 1 }] },
         "page_state_id": { "allOf": [{ "$ref": "#/$defs/nonSecretText" }, { "type": "string", "minLength": 1 }] },
+        "final_url": { "$ref": "#/$defs/safeHttpUrl" },
         "discovery_id": { "allOf": [{ "$ref": "#/$defs/nonSecretText" }, { "type": "string", "minLength": 1 }] },
         "receipt_path": {
           "allOf": [

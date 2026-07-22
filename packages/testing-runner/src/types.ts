@@ -332,6 +332,7 @@ export interface DiscoveryReceiptReference {
   source_case_id: string;
   case_id: string;
   page_state_id: string;
+  final_url?: string;
   discovery_id: string;
   receipt_path: string;
   receipt_sha256: string;

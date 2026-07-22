@@ -24,6 +24,10 @@ export function transitionActions(actions: ManifestAction[]): ManifestAction[] {
   return actions.filter((action) => !action.type.endsWith(".assert") && !action.type.startsWith("cleanup.") && action.type !== "execution.blocked");
 }
 
+function transitionSemantics(actions: ManifestAction[]): Array<Omit<ManifestAction, "action_id" | "source_step">> {
+  return actions.map(({ action_id: _actionId, source_step: _sourceStep, ...semantic }) => semantic);
+}
+
 export function contractTargetState(item: ContractCase): string | null {
   const browserState = item.effects.browser_state;
   if (!browserState || typeof browserState !== "object" || !("target_state" in browserState)) return null;
@@ -77,12 +81,13 @@ export function planDiscoveryTasks(input: {
     const actions = transitionActions(input.profile.case_plans?.[item.case_id] ?? []);
     const binding = webBinding(input.profile, actions);
     const transitionActionsSha256 = sha256Canonical(actions);
+    const transitionSemanticsSha256 = sha256Canonical(transitionSemantics(actions));
     const requiredAuthProfile = authProfileId(item);
     const startStateSha256 = sha256Canonical(item.start_state);
     const authProfileSha256 = sha256Canonical(item.auth_profile);
     const dedupKey = sha256Canonical({
       target_state: targetState,
-      transition_actions_sha256: transitionActionsSha256,
+      transition_semantics_sha256: transitionSemanticsSha256,
       origin: binding.origin,
       isolation_scope: item.isolation_scope,
       flow_group: item.flow_group,
