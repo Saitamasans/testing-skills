@@ -4,14 +4,17 @@ import {
   access,
   cp,
   copyFile,
+  mkdtemp,
   mkdir,
   readFile,
   readdir,
   rename,
   rm,
   stat,
+  symlink,
   writeFile,
 } from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { gunzipSync } from "node:zlib";
@@ -166,26 +169,42 @@ async function installBundledWorkspaces(manager, stageDir) {
   if (contract.schema_version !== 1 || !Array.isArray(contract.packages)) {
     throw new Error("invalid bundled workspace contract");
   }
-  for (const bundled of contract.packages) {
-    const source = path.resolve(path.dirname(BUNDLED_WORKSPACES_PATH), bundled.source);
-    await runPackageManager(manager, ["run", "build"], source);
-    const sourcePackage = JSON.parse(await readFile(path.join(source, "package.json"), "utf8"));
-    if (sourcePackage.name !== bundled.name || sourcePackage.version !== bundled.version) {
-      throw new Error("bundled workspace identity does not match contract: " + bundled.name);
+  const temporaryRoot = await mkdtemp(path.join(os.tmpdir(), "testing-runner-bundled-workspace-"));
+  try {
+    await copyFile(
+      path.join(REPO_ROOT, "tsconfig.base.json"),
+      path.join(temporaryRoot, "tsconfig.base.json"),
+    );
+    await symlink(
+      path.join(REPO_ROOT, "node_modules"),
+      path.join(temporaryRoot, "node_modules"),
+      process.platform === "win32" ? "junction" : "dir",
+    );
+    for (const bundled of contract.packages) {
+      const source = path.resolve(path.dirname(BUNDLED_WORKSPACES_PATH), bundled.source);
+      const workspace = path.join(temporaryRoot, "packages", path.basename(source));
+      await cp(source, workspace, { recursive: true });
+      await runPackageManager(manager, ["run", "build"], workspace);
+      const sourcePackage = JSON.parse(await readFile(path.join(workspace, "package.json"), "utf8"));
+      if (sourcePackage.name !== bundled.name || sourcePackage.version !== bundled.version) {
+        throw new Error("bundled workspace identity does not match contract: " + bundled.name);
+      }
+      const actualHash = await hashBundledWorkspace(workspace);
+      if (actualHash !== bundled.content_sha256) {
+        throw new Error(
+          "bundled workspace content hash does not match contract: " + bundled.name
+          + " (expected " + bundled.content_sha256 + ", got " + actualHash + ")",
+        );
+      }
+      const destination = path.join(stageDir, "node_modules", ...bundled.name.split("/"));
+      await mkdir(destination, { recursive: true });
+      await copyFile(path.join(workspace, "package.json"), path.join(destination, "package.json"));
+      for (const directory of ["dist", "schemas"]) {
+        await cp(path.join(workspace, directory), path.join(destination, directory), { recursive: true });
+      }
     }
-    const actualHash = await hashBundledWorkspace(source);
-    if (actualHash !== bundled.content_sha256) {
-      throw new Error(
-        "bundled workspace content hash does not match contract: " + bundled.name
-        + " (expected " + bundled.content_sha256 + ", got " + actualHash + ")",
-      );
-    }
-    const destination = path.join(stageDir, "node_modules", ...bundled.name.split("/"));
-    await mkdir(destination, { recursive: true });
-    await copyFile(path.join(source, "package.json"), path.join(destination, "package.json"));
-    for (const directory of ["dist", "schemas"]) {
-      await cp(path.join(source, directory), path.join(destination, directory), { recursive: true });
-    }
+  } finally {
+    await rm(temporaryRoot, { recursive: true, force: true });
   }
 }
 

@@ -495,10 +495,12 @@ class EighthSkillReleaseWorkflowContractTest(unittest.TestCase):
                     self.assertRegex(target, r"^[^@]+@[a-f0-9]{40}$")
                     self.assertRegex(version_comment, r"^v\d+")
 
-    def test_runner_112_release_is_immutable_and_publicly_contract_verified(self):
+    def test_runner_113_release_is_immutable_and_publicly_contract_verified(self):
         for phrase in [
-            "testing-runner-v1.1.2",
-            "saitamasans-testing-runner-1.1.2.tgz",
+            "testing-runner-v1.1.3",
+            "saitamasans-testing-runner-1.1.3.tgz",
+            "runner-1.1.3-release-lock.json",
+            "locked-not-published",
             "npm ci --ignore-scripts",
             "npm run pack:runner-release",
             "package.json",
@@ -533,10 +535,10 @@ class EighthSkillReleaseWorkflowContractTest(unittest.TestCase):
             self.runner_release,
         )
         for fixed_contract in [
-            'EXPECTED_VERSION: 1.1.2',
-            'RUNNER_ASSET: saitamasans-testing-runner-1.1.2.tgz',
-            'pkg.version !== "1.1.2"',
-            'cli.includes("1.1.2")',
+            'EXPECTED_VERSION: 1.1.3',
+            'RUNNER_ASSET: saitamasans-testing-runner-1.1.3.tgz',
+            'pkg.version !== "1.1.3"',
+            'cli.includes("1.1.3")',
             '["chromium", "1228"]',
         ]:
             with self.subTest(fixed_contract=fixed_contract):
@@ -650,7 +652,7 @@ class EighthSkillReleaseWorkflowContractTest(unittest.TestCase):
         self.assertIsNotNone(build)
         self.assertIn("verify-release-tarball.mjs", build.group(1))
 
-    def test_runner_111_is_retired_and_112_is_the_only_publishable_target(self):
+    def test_runner_111_is_retired_and_113_is_the_current_publishable_target(self):
         retired = "testing-runner-v1.1.1"
         for relative in [
             ".github/workflows",
@@ -670,7 +672,7 @@ class EighthSkillReleaseWorkflowContractTest(unittest.TestCase):
         self.assertIn("testing-runner-v1.1.1", readme)
         self.assertIn("未发布/作废发布目标", readme)
         self.assertIn("首个可发布目标为 `testing-runner-v1.1.2`", readme)
-        self.assertIn('tags:\n      - "testing-runner-v1.1.2"', self.runner_release)
+        self.assertIn('tags:\n      - "testing-runner-v1.1.3"', self.runner_release)
         self.assertNotIn('tags:\n      - "testing-runner-v1.1.1"', self.runner_release)
 
     def test_installer_entry_reverifies_runtime_and_frozen_release_without_mutation(self):

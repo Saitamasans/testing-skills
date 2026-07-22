@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { mkdir, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -16,6 +18,19 @@ import {
 import { verifyReleaseTarball } from "../packages/testing-runner/scripts/verify-release-tarball.mjs";
 
 const REPO_ROOT = fileURLToPath(new URL("..", import.meta.url));
+const COMPILER_ROOT = path.join(REPO_ROOT, "packages", "testing-contract-compiler");
+
+async function trackedCompilerHashes() {
+  const files = execFileSync(
+    "git",
+    ["ls-files", "packages/testing-contract-compiler"],
+    { cwd: REPO_ROOT, encoding: "utf8" },
+  ).trim().split(/\r?\n/).filter(Boolean);
+  return new Map(await Promise.all(files.map(async (relative) => [
+    relative,
+    createHash("sha256").update(await readFile(path.join(REPO_ROOT, relative))).digest("hex"),
+  ])));
+}
 
 test("release packaging consumes a committed exact dependency lock", async () => {
   const runnerPackage = JSON.parse(await readFile(
@@ -134,6 +149,23 @@ test("release tarball contains runner and bundled production dependencies", asyn
     },
   });
   assert.equal(release.manifestPath, manifestPath);
+});
+
+test("release packaging builds bundled Compiler only in a temporary copy without changing tracked source files", async (t) => {
+  const outputDir = await mkdtemp(path.join(os.tmpdir(), "runner-release-source-immutable-"));
+  t.after(() => rm(outputDir, { recursive: true, force: true }));
+  const before = await trackedCompilerHashes();
+
+  await buildReleaseTarball(outputDir, path.join(outputDir, "runner-release.json"));
+
+  assert.deepEqual(await trackedCompilerHashes(), before);
+  const changed = execFileSync(
+    "git",
+    ["diff", "--name-only", "--", "packages/testing-contract-compiler"],
+    { cwd: REPO_ROOT, encoding: "utf8" },
+  ).trim();
+  assert.equal(changed, "");
+  assert.equal(COMPILER_ROOT.endsWith(path.join("packages", "testing-contract-compiler")), true);
 });
 
 test("release tarball verification rejects workspace execution and succeeds outside checkout", async (t) => {
