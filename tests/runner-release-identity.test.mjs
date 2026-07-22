@@ -59,6 +59,7 @@ test("changed Runner bytes use the new 1.1.3 package, CLI, receipt, and release 
   assert.doesNotMatch(workflow, /--clobber/);
   assert.match(validationWorkflow, /saitamasans-testing-runner-1\.1\.3\.tgz/);
   assert.match(validationWorkflow, /runner-1\.1\.3-release-lock\.json/);
+  assert.match(validationWorkflow, /locked-not-published/);
   assert.doesNotMatch(validationWorkflow, /release-a\/saitamasans-testing-runner-1\.1\.2\.tgz/);
   assert.doesNotMatch(validationWorkflow, /Runner build differs from windows-runtime-lock\.json/);
   assert.match(mainValidationWorkflow, /fetch-depth: 0/);
