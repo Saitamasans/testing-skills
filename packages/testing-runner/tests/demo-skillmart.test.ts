@@ -112,6 +112,7 @@ test("SkillMart is understandable and usable before Runner injection", async () 
     assert.equal(await page.getByText("运行数据", { exact: true }).isVisible(), true);
     await page.getByTestId("coupon-code").fill("SKILL20");
     await page.getByTestId("create-order").click();
+    await page.waitForFunction(() => /订单已创建 ORD-/.test(document.querySelector('[data-testid="status"]')?.textContent ?? ""));
     assert.match(await page.getByTestId("status").innerText(), /订单已创建 ORD-/);
   } finally {
     await browser.close();
