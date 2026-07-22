@@ -155,16 +155,21 @@ test("release packaging builds bundled Compiler only in a temporary copy without
   const outputDir = await mkdtemp(path.join(os.tmpdir(), "runner-release-source-immutable-"));
   t.after(() => rm(outputDir, { recursive: true, force: true }));
   const before = await trackedCompilerHashes();
-
-  await buildReleaseTarball(outputDir, path.join(outputDir, "runner-release.json"));
-
-  assert.deepEqual(await trackedCompilerHashes(), before);
-  const changed = execFileSync(
+  const compilerDiffBefore = execFileSync(
     "git",
     ["diff", "--name-only", "--", "packages/testing-contract-compiler"],
     { cwd: REPO_ROOT, encoding: "utf8" },
   ).trim();
-  assert.equal(changed, "");
+
+  await buildReleaseTarball(outputDir, path.join(outputDir, "runner-release.json"));
+
+  assert.deepEqual(await trackedCompilerHashes(), before);
+  const compilerDiffAfter = execFileSync(
+    "git",
+    ["diff", "--name-only", "--", "packages/testing-contract-compiler"],
+    { cwd: REPO_ROOT, encoding: "utf8" },
+  ).trim();
+  assert.equal(compilerDiffAfter, compilerDiffBefore);
   assert.equal(COMPILER_ROOT.endsWith(path.join("packages", "testing-contract-compiler")), true);
 });
 
