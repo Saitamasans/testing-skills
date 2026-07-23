@@ -1,0 +1,47 @@
+{
+  "title": "灰盒增强测试用例",
+  "project": "替换为项目/需求名称",
+  "generated_at": "替换为 ISO 8601 时间",
+  "excel_font": "SimHei",
+  "case_contract": "requirement-test-case-v1",
+  "skill_invocation": {
+    "primary": "enhanced-graybox-test-case-generation",
+    "secondary": "无",
+    "roles": "结合已确认需求与实现证据生成一套正式用例"
+  },
+  "sheets": [
+    {
+      "name": "正式测试用例",
+      "kind": "test_cases",
+      "columns": [
+        "用例 ID",
+        "所属模块",
+        "用例标题",
+        "验证功能点",
+        "前置条件",
+        "测试步骤",
+        "预期结果",
+        "优先级",
+        "执行结果（通过 / 不通过 / 未执行）",
+        "备注"
+      ],
+      "rows": [
+        {
+          "divider": true,
+          "values": ["【模块分割行】", "第 1 模块：示例模块", "替换为覆盖范围", "-", "-", "-", "-", "-", "-", "模块起始分割"]
+        },
+        {
+          "values": ["1", "示例模块", "替换为可执行标题", "1. 替换为验证功能点", "1. 替换为独立前置条件", "1. 替换为测试步骤", "1. 替换为可判定预期", "P0", "未执行", "需求来源；实现证据；待动态验证"]
+        }
+      ]
+    },
+    {
+      "name": "证据覆盖",
+      "kind": "supplementary",
+      "columns": ["证据层", "覆盖情况", "证据位置"],
+      "rows": [
+        {"values": ["后端", "替换为已覆盖/证据缺口", "替换为仓库、分支、Commit、文件和方法"]}
+      ]
+    }
+  ]
+}

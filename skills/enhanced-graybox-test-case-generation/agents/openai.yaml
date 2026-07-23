@@ -1,0 +1,4 @@
+interface:
+  display_name: "增强版-灰盒测试用例生成"
+  short_description: "结合需求与真实实现生成可手工执行的灰盒正式用例"
+  default_prompt: "请使用 $enhanced-graybox-test-case-generation 结合需求与相关实现资料生成供测试人员手工执行的正式用例，并识别回归范围。"

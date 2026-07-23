@@ -10,6 +10,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 BANNER = "<!-- 此文件由根目录中文源文件自动生成，请勿直接编辑。 -->"
 EXECUTION_BANNER = "<!-- 此文件由源文件自动生成，请勿直接编辑。 -->"
+REQUIREMENT_CONTRACT_MARKER = "<!-- include:requirement-test-case-output-contract -->"
+REQUIREMENT_CONTRACT_ID = "requirement-test-case-v1"
 
 
 def load_manifest(root: Path = ROOT) -> dict:
@@ -31,6 +33,13 @@ def _render_skill(source_text: str, banner: str = BANNER) -> str:
     marker = "\n---\n"
     split_at = source_text.index(marker, 4) + len(marker)
     return source_text[:split_at] + "\n" + banner + "\n" + source_text[split_at:].lstrip("\n")
+
+
+def _compile_requirement_contract(source_text: str, root: Path) -> str:
+    if source_text.count(REQUIREMENT_CONTRACT_MARKER) != 1:
+        raise ValueError("需求类 Skill 必须且只能引用一次统一输出合同")
+    contract = (root / "skill-sources/shared/requirement-test-case-output-contract.md").read_text(encoding="utf-8").strip()
+    return source_text.replace(REQUIREMENT_CONTRACT_MARKER, contract)
 
 
 def _split_block(source_text: str, start_marker: str, end_marker: str, replacement: str) -> tuple[str, str]:
@@ -121,6 +130,8 @@ def build_all(root: Path = ROOT, check: bool = False) -> list[Path]:
         meta, _ = parse_frontmatter(text)
         if meta.get("name") != item["slug"]:
             raise ValueError(f"{source.name}: frontmatter name 与 slug 不一致")
+        if item.get("case_contract") == REQUIREMENT_CONTRACT_ID:
+            text = _compile_requirement_contract(text, root)
         package = root / "skills" / item["slug"]
         if item["slug"] == "single-api-test-full":
             compact, references = _split_full_skill(text)
@@ -135,6 +146,8 @@ def build_all(root: Path = ROOT, check: bool = False) -> list[Path]:
             _copy_resource_tree(source.parent, package, desired)
         else:
             desired[package / "SKILL.md"] = _render_skill(text)
+            if item.get("resource_root"):
+                _copy_resource_tree(root / item["resource_root"], package, desired)
         desired[package / "agents/openai.yaml"] = _openai_yaml(item)
         if item["case_output"]:
             renderer = root / "tooling/test-case-renderer.mjs"

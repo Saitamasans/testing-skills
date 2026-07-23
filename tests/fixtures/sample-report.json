@@ -3,9 +3,9 @@
   "project": "示例项目/支付模块",
   "generated_at": "2026-07-13T08:00:00Z",
   "skill_invocation": {
-    "primary": "requirement-test-workbench",
+    "primary": "single-api-test-full",
     "secondary": "无",
-    "roles": "主 Skill 完成需求分析与正式用例生成"
+    "roles": "主 Skill 完成接口分析与正式用例生成"
   },
   "sheets": [
     {

@@ -1,0 +1,140 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Saitamasans/testing-skills/schemas/enhanced-graybox-report.schema.json",
+  "title": "增强版-灰盒测试用例报告",
+  "type": "object",
+  "required": ["title", "generated_at", "excel_font", "case_contract", "skill_invocation", "sheets"],
+  "properties": {
+    "title": {"type": "string", "minLength": 1},
+    "project": {"type": "string"},
+    "generated_at": {"type": "string", "minLength": 1},
+    "excel_font": {"const": "SimHei"},
+    "case_contract": {"const": "requirement-test-case-v1"},
+    "skill_invocation": {
+      "oneOf": [
+        {"const": "enhanced-graybox-test-case-generation"},
+        {
+          "type": "object",
+          "required": ["primary"],
+          "properties": {
+            "primary": {"const": "enhanced-graybox-test-case-generation"},
+            "secondary": {"type": "string"},
+            "roles": {"type": "string"},
+            "confirmation": {"type": "string"}
+          },
+          "additionalProperties": true
+        }
+      ]
+    },
+    "sheets": {
+      "type": "array",
+      "minItems": 1,
+      "contains": {"$ref": "#/$defs/formalCases"},
+      "minContains": 1,
+      "maxContains": 1,
+      "items": {
+        "oneOf": [
+          {"$ref": "#/$defs/formalCases"},
+          {"$ref": "#/$defs/supplementary"}
+        ]
+      }
+    }
+  },
+  "additionalProperties": true,
+  "$defs": {
+    "columns": {
+      "type": "array",
+      "prefixItems": [
+        {"const": "用例 ID"},
+        {"const": "所属模块"},
+        {"const": "用例标题"},
+        {"const": "验证功能点"},
+        {"const": "前置条件"},
+        {"const": "测试步骤"},
+        {"const": "预期结果"},
+        {"const": "优先级"},
+        {"const": "执行结果（通过 / 不通过 / 未执行）"},
+        {"const": "备注"}
+      ],
+      "minItems": 10,
+      "maxItems": 10
+    },
+    "caseValues": {
+      "type": "array",
+      "prefixItems": [
+        {"type": "string", "pattern": "^[1-9][0-9]*$"},
+        {"type": "string", "minLength": 1},
+        {"type": "string", "minLength": 1},
+        {"type": "string", "pattern": "^1[.、]"},
+        {"type": "string", "minLength": 1},
+        {"type": "string", "minLength": 1},
+        {"type": "string", "minLength": 1},
+        {"enum": ["P0", "P1", "P2"]},
+        {"const": "未执行"},
+        {"type": "string"}
+      ],
+      "minItems": 10,
+      "maxItems": 10
+    },
+    "dividerValues": {
+      "type": "array",
+      "prefixItems": [
+        {"const": "【模块分割行】"},
+        {"type": "string", "minLength": 1},
+        {"type": "string", "minLength": 1},
+        {"const": "-"},
+        {"const": "-"},
+        {"const": "-"},
+        {"const": "-"},
+        {"const": "-"},
+        {"const": "-"},
+        {"const": "模块起始分割"}
+      ],
+      "minItems": 10,
+      "maxItems": 10
+    },
+    "formalCases": {
+      "type": "object",
+      "required": ["name", "kind", "columns", "rows"],
+      "properties": {
+        "name": {"const": "正式测试用例"},
+        "kind": {"const": "test_cases"},
+        "columns": {"$ref": "#/$defs/columns"},
+        "rows": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "oneOf": [
+              {
+                "type": "object",
+                "required": ["values"],
+                "properties": {"values": {"$ref": "#/$defs/caseValues"}},
+                "not": {"required": ["divider"]}
+              },
+              {
+                "type": "object",
+                "required": ["divider", "values"],
+                "properties": {
+                  "divider": {"const": true},
+                  "values": {"$ref": "#/$defs/dividerValues"}
+                }
+              }
+            ]
+          }
+        }
+      },
+      "additionalProperties": true
+    },
+    "supplementary": {
+      "type": "object",
+      "required": ["name", "kind", "columns", "rows"],
+      "properties": {
+        "name": {"enum": ["需求与实现差异", "回归范围", "待动态验证", "证据覆盖"]},
+        "kind": {"enum": ["overview", "supplementary"]},
+        "columns": {"type": "array", "minItems": 1, "items": {"type": "string"}},
+        "rows": {"type": "array", "items": {"type": "object", "required": ["values"]}}
+      },
+      "additionalProperties": true
+    }
+  }
+}

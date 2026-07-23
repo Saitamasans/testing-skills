@@ -5,7 +5,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tooling"))
-from build_skills import load_manifest, parse_frontmatter
+from build_skills import _compile_requirement_contract, load_manifest, parse_frontmatter
 
 ORIGINAL_SEVEN = {
     "single-api-test-full",
@@ -22,11 +22,16 @@ class SourceContractsTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.manifest = load_manifest(ROOT)["skills"]
-        cls.texts = {item["slug"]: (ROOT / item["source"]).read_text(encoding="utf-8") for item in cls.manifest}
+        cls.texts = {}
+        for item in cls.manifest:
+            text = (ROOT / item["source"]).read_text(encoding="utf-8")
+            if item.get("case_contract") == "requirement-test-case-v1":
+                text = _compile_requirement_contract(text, ROOT)
+            cls.texts[item["slug"]] = text
 
     def test_exact_filenames_and_frontmatter(self):
         self.assertGreaterEqual(len(self.manifest), 1)
-        self.assertEqual(9, len(self.manifest))
+        self.assertEqual(10, len(self.manifest))
         for item in self.manifest:
             meta, _ = parse_frontmatter(self.texts[item["slug"]])
             self.assertEqual({"name", "description"}, set(meta))
@@ -36,7 +41,7 @@ class SourceContractsTest(unittest.TestCase):
             {
                 item["slug"]
                 for item in self.manifest
-                if not item.get("execution_skill") and not item.get("compiler_skill")
+                if item["slug"] in ORIGINAL_SEVEN
             },
         )
 
@@ -67,11 +72,12 @@ class SourceContractsTest(unittest.TestCase):
             for term in required:
                 self.assertIn(term, self.texts[slug], f"{slug}: {term}")
 
-    def test_requirement_workbench_emits_actual_results_and_independent_web_cases(self):
+    def test_requirement_workbench_emits_shared_ten_columns_and_independent_web_cases(self):
         text = self.texts["requirement-test-workbench"]
-        columns = "用例 ID | 所属模块 | 用例标题 | 验证功能点 | 前置条件 | 测试步骤 | 预期结果 | 优先级 | 实际结果 | 执行结果"
+        columns = "用例 ID | 所属模块 | 用例标题 | 验证功能点 | 前置条件 | 测试步骤 | 预期结果 | 优先级 | 执行结果（通过 / 不通过 / 未执行） | 备注"
         self.assertIn(columns, text)
-        self.assertIn("实际结果默认“尚未执行”", text)
+        self.assertNotIn("| 实际结果 |", text)
+        self.assertIn("执行结果默认填写“未执行”", text)
         self.assertIn("禁止依赖上一条用例的终态", text)
         self.assertIn("新建未登录浏览器会话并打开登录页", text)
         self.assertIn("建态 → 动作 → 断言", text)

@@ -7,6 +7,8 @@
     "title": {"type": "string", "minLength": 1},
     "project": {"type": "string"},
     "generated_at": {"type": "string"},
+    "excel_font": {"type": "string", "minLength": 1},
+    "case_contract": {"enum": ["requirement-test-case-v1"]},
     "skill_invocation": {
       "oneOf": [
         {"type": "string"},
