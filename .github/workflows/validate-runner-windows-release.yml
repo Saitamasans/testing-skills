@@ -55,8 +55,8 @@ jobs:
         run: |
           $ErrorActionPreference = "Stop"
           $preparation = Get-Content -LiteralPath packages/testing-runner/release/runner-1.1.3-release-lock.json -Raw | ConvertFrom-Json
-          if ([string]$preparation.status -cne "prepared-not-published") {
-            throw "Runner 1.1.3 preparation must remain unpublished"
+          if ([string]$preparation.status -cne "locked-not-published") {
+            throw "Runner 1.1.3 lock must remain unpublished"
           }
           $name = [string]$preparation.runner.file_name
           if ($name -cne "saitamasans-testing-runner-1.1.3.tgz") {

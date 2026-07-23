@@ -50,11 +50,16 @@ test("changed Runner bytes use the new 1.1.3 package, CLI, receipt, and release 
   assert.match(releaseScript, /const VERSION = RELEASE_PREPARATION\.runner\.version/);
   assert.match(releaseScript, /const RELEASE_TAG = RELEASE_PREPARATION\.runner\.release_tag/);
   assert.doesNotMatch(releaseScript, /skill-sources[\s\S]+runner-release\.json/);
-  assert.match(workflow, /EXPECTED_VERSION: 1\.1\.2/);
-  assert.match(workflow, /EXPECTED_TAG: testing-runner-v1\.1\.2/);
-  assert.doesNotMatch(workflow, /EXPECTED_VERSION: 1\.1\.3/);
+  assert.match(workflow, /EXPECTED_VERSION: 1\.1\.3/);
+  assert.match(workflow, /EXPECTED_TAG: testing-runner-v1\.1\.3/);
+  assert.match(workflow, /RUNNER_ASSET: saitamasans-testing-runner-1\.1\.3\.tgz/);
+  assert.match(workflow, /runner-1\.1\.3-release-lock\.json/);
+  assert.match(workflow, /locked-not-published/);
+  assert.match(workflow, /public release already exists/);
+  assert.doesNotMatch(workflow, /--clobber/);
   assert.match(validationWorkflow, /saitamasans-testing-runner-1\.1\.3\.tgz/);
   assert.match(validationWorkflow, /runner-1\.1\.3-release-lock\.json/);
+  assert.match(validationWorkflow, /locked-not-published/);
   assert.doesNotMatch(validationWorkflow, /release-a\/saitamasans-testing-runner-1\.1\.2\.tgz/);
   assert.doesNotMatch(validationWorkflow, /Runner build differs from windows-runtime-lock\.json/);
   assert.match(mainValidationWorkflow, /fetch-depth: 0/);
@@ -90,7 +95,7 @@ test("Runtime 1.0.3 compatibility binds Runner 1.1.3, Compiler 1.0.0, and backwa
   assert.equal(contractSchema.properties.contract_version.const, "1.0.0");
 });
 
-test("Runner 1.1.3 preparation is non-published and preserves immutable 1.1.2 metadata", async () => {
+test("Runner 1.1.3 lock is unpublished, byte-bound, and preserves immutable 1.1.2 metadata", async () => {
   const preparation = await json("packages/testing-runner/release/runner-1.1.3-release-lock.json");
   assert.deepEqual(preparation.runner, {
     name: "@saitamasans/testing-runner",
@@ -98,12 +103,12 @@ test("Runner 1.1.3 preparation is non-published and preserves immutable 1.1.2 me
     release_tag: "testing-runner-v1.1.3",
     file_name: "saitamasans-testing-runner-1.1.3.tgz",
   });
-  assert.equal(preparation.status, "prepared-not-published");
+  assert.equal(preparation.status, "locked-not-published");
   assert.equal(preparation.publication.tag_created, false);
   assert.equal(preparation.publication.release_created, false);
   assert.equal(preparation.publication.assets_uploaded, false);
-  assert.equal(preparation.artifact.size_bytes, null);
-  assert.equal(preparation.artifact.sha256, null);
+  assert.equal(preparation.artifact.size_bytes, 22_826_699);
+  assert.equal(preparation.artifact.sha256, "22b7ed732f6e79c20c910ee1aafdb9b81871e28d65d5dafe5a09b83ad8847b78");
   assert.deepEqual(preparation.previous_release, HISTORICAL_RUNNER_1_1_2);
   assert.deepEqual(preparation.runtime_target, {
     version: "1.0.3",
