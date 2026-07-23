@@ -30,7 +30,19 @@
       "display_name": "需求测试分析工作台",
       "short_description": "从 PRD 或用户故事生成测试设计与正式用例",
       "default_prompt": "请根据这份需求完成测试分析并生成测试用例。",
-      "case_output": true
+      "case_output": true,
+      "case_contract": "requirement-test-case-v1"
+    },
+    {
+      "source": "增强版-灰盒测试用例生成_Skill.md",
+      "slug": "enhanced-graybox-test-case-generation",
+      "display_name": "增强版-灰盒测试用例生成",
+      "short_description": "结合需求与真实实现生成可手工执行的灰盒正式用例",
+      "default_prompt": "请使用 $enhanced-graybox-test-case-generation 结合需求与相关实现资料生成供测试人员手工执行的正式用例，并识别回归范围。",
+      "case_output": true,
+      "case_contract": "requirement-test-case-v1",
+      "published_installer": false,
+      "resource_root": "skill-sources/enhanced-graybox-test-case-generation"
     },
     {
       "source": "正式服验证-用例生成 Skill.md",

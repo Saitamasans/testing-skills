@@ -4,7 +4,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tooling"))
-from build_skills import BANNER, EXECUTION_BANNER, build_all, load_manifest, parse_frontmatter
+from build_skills import BANNER, EXECUTION_BANNER, _compile_requirement_contract, build_all, load_manifest, parse_frontmatter
 
 ORIGINAL_SEVEN = {
     "single-api-test-full": "\u5355\u63a5\u53e3\u7528\u4f8b\u751f\u6210\u4e0e\u5bf9\u9f50_\u5b8c\u6574\u7248Skill_v0.3.md",
@@ -24,7 +24,7 @@ class BuildSkillsTest(unittest.TestCase):
         self.assertEqual(len(items), len({item["slug"] for item in items}))
         self.assertEqual(len(items), len({item["source"].casefold() for item in items}))
         self.assertEqual(len(items), len({item["display_name"].casefold() for item in items}))
-        self.assertEqual(5, sum(bool(item["case_output"]) for item in items))
+        self.assertEqual(6, sum(bool(item["case_output"]) for item in items))
         self.assertEqual(1, sum(bool(item.get("execution_skill")) for item in items))
         by_slug = {item["slug"]: item for item in items}
         for slug, source in ORIGINAL_SEVEN.items():
@@ -38,7 +38,7 @@ class BuildSkillsTest(unittest.TestCase):
     def test_requirement_workbench_defaults_to_excel_then_markdown_for_case_modes(self):
         source = (ROOT / ORIGINAL_SEVEN["requirement-test-workbench"]).read_text(encoding="utf-8")
         required = [
-            "凡实际产出统一十一列用例的模式，默认先生成并验证 Excel",
+            "凡实际产出统一十列用例的模式，默认先生成并验证 Excel",
             "Excel 链接必须先于完整 Markdown 用例表",
             "用户明确说“不要文件”或“只在聊天中展示”时",
             "仅做需求评审、微需求澄清或测试设计时，不自动生成用例 Excel",
@@ -94,6 +94,10 @@ class BuildSkillsTest(unittest.TestCase):
                     self.assertNotIn("playwright install", combined)
                     self.assertNotIn("npm install", combined)
                 self.assertLessEqual(len(generated.read_text(encoding="utf-8").splitlines()), 500)
+            elif item.get("case_contract") == "requirement-test-case-v1":
+                compiled = _compile_requirement_contract((ROOT / item["source"]).read_text(encoding="utf-8"), ROOT)
+                _, compiled_body = parse_frontmatter(compiled)
+                self.assertIn(compiled_body.strip(), generated_body)
             else:
                 self.assertIn(source_body.strip(), generated_body)
             self.assertTrue((generated.parent / "agents/openai.yaml").exists())

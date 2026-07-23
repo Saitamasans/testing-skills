@@ -29,7 +29,7 @@ class WindowsCmdLauncherRuntimeTest(unittest.TestCase):
                 "install-web-api-test-execution-evidence.cmd",
             }
         ]
-        self.assertEqual(8, len(launchers))
+        self.assertEqual(9, len(launchers))
 
         with tempfile.TemporaryDirectory() as directory:
             temp_root = Path(directory)

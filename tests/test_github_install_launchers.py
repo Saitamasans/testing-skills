@@ -100,6 +100,10 @@ class GitHubInstallReadmeTest(unittest.TestCase):
         self.assertIn("Install All 8 Skills", self.readme)
         for slug in self.slugs:
             with self.subTest(slug=slug):
+                if slug == "enhanced-graybox-test-case-generation":
+                    self.assertIn("安装器待下一版本发布", self.readme)
+                    self.assertNotIn(RELEASE_BASE + f"install-{slug}.cmd", self.readme)
+                    continue
                 if slug == "test-case-execution-compiler":
                     self.assertIn("Runtime 1.0.3 发布后提供完整安装器", self.readme)
                     continue
@@ -262,6 +266,7 @@ class GitHubInstallReadmeTest(unittest.TestCase):
             ("单接口精炼版", "single-api-test-concise"),
             ("多接口链路测试", "multi-api-flow-test"),
             ("需求测试工作台", "requirement-test-workbench"),
+            ("增强版-灰盒测试用例生成", "enhanced-graybox-test-case-generation"),
             ("正式服验证", "production-verification-test"),
             ("用例质量审计", "test-case-quality-audit"),
             ("需求澄清", "requirement-clarification-test"),
@@ -284,6 +289,9 @@ class GitHubInstallReadmeTest(unittest.TestCase):
                 if slug == "test-case-execution-compiler":
                     self.assertEqual("Runtime 1.0.3 发布后提供完整安装器。", cells[2])
                     continue
+                if slug == "enhanced-graybox-test-case-generation":
+                    self.assertEqual("安装器待下一版本发布；本地源码与通用安装脚本可用。", cells[2])
+                    continue
                 base = (
                     RUNTIME_RELEASE_BASE
                     if slug == "web-api-test-execution-evidence"
@@ -299,7 +307,7 @@ class GitHubInstallReadmeTest(unittest.TestCase):
                 )
                 release_urls.append(asset_url)
 
-        self.assertEqual(len(skill_specs) - 1, len(set(release_urls)))
+        self.assertEqual(len(skill_specs) - 2, len(set(release_urls)))
         self.assertNotIn(
             "| 中文名称 | Package | 类型 | 适用场景 | 安装 |",
             self.readme,

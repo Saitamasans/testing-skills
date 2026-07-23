@@ -5,6 +5,7 @@ for skill in \
   single-api-test-concise \
   multi-api-flow-test \
   requirement-test-workbench \
+  enhanced-graybox-test-case-generation \
   production-verification-test \
   test-case-quality-audit \
   requirement-clarification-test \

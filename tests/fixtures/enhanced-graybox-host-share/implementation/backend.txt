@@ -1,0 +1,3 @@
+DIFF:D03 updateShare does not verify that the caller is the room owner.
+DIFF:D04 updateShare accepts decimal percentages.
+DIFF:D05 updateShare loads the target administrator by ID without room ownership filtering.

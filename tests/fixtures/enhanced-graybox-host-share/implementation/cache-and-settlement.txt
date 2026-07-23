@@ -1,0 +1,4 @@
+DIFF:D08 updateShare writes the database but does not invalidate the Redis share key.
+DIFF:D09 settlement queue reads the latest share when consuming instead of the share at earning time.
+DIFF:D10 cancelAdmin does not delete the Redis share key.
+DIFF:D11 audit log stores operator, new value and time but omits the old value.

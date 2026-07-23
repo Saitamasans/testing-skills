@@ -48,7 +48,7 @@ class ReadmeAndPackagesTest(unittest.TestCase):
 
     def test_readme_documents_package_first_execution_workflow(self):
         readme = (ROOT / "README.md").read_text(encoding="utf-8")
-        self.assertIn("9 个 Agent Skill", readme)
+        self.assertIn("10 个 Agent Skill", readme)
         self.assertIn("人工测试用例.xlsx", readme)
         self.assertIn("test-case-execution-compiler", readme)
         self.assertIn("*.execution-package.zip", readme)
