@@ -41,24 +41,6 @@ jobs:
       - name: Install build dependencies without lifecycle scripts
         run: npm ci --ignore-scripts
 
-      - name: Diagnose runtime-session path comparison
-        shell: bash
-        run: |
-          set -euo pipefail
-          node node_modules/playwright/cli.js install chromium
-          npm run build --workspace @saitamasans/testing-runner
-          python - <<'PY'
-          from pathlib import Path
-          target = Path("packages/testing-runner/src/commands/plan.ts")
-          source = target.read_text(encoding="utf-8")
-          old = 'if (options.runtimeSession && path.resolve(options.outputDir).toLowerCase() !== options.runtimeSession.runRoot.toLowerCase()) {\n    throw new Error("runtime_session_output_dir_mismatch");\n  }'
-          new = 'if (options.runtimeSession && path.resolve(options.outputDir).toLowerCase() !== options.runtimeSession.runRoot.toLowerCase()) {\n    console.error(JSON.stringify({ runtime_session_path_diagnostic: { requested: options.outputDir, resolved: path.resolve(options.outputDir), session_run_root: options.runtimeSession.runRoot } }));\n    throw new Error("runtime_session_output_dir_mismatch");\n  }'
-          if old not in source:
-              raise SystemExit("diagnostic patch anchor missing")
-          target.write_text(source.replace(old, new), encoding="utf-8")
-          PY
-          npm test --workspace @saitamasans/testing-runner
-
       - name: Build two independent locked Runner tarballs
         shell: powershell
         run: |
