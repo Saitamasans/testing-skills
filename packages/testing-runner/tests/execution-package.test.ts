@@ -213,7 +213,7 @@ async function writeIssuedDiscoveryReceipt(
     discovery_id: "discovery-login-001-workspace",
     generated_by: "@saitamasans/testing-runtime",
     runtime_version: "1.0.3-dev",
-    runner_version: "1.1.3",
+    runner_version: "1.1.4",
     target_origin: String(overrides.target_origin ?? "https://example.test"),
     requested_url: "https://example.test/login",
     final_url: artifact.url,
@@ -240,7 +240,7 @@ async function writeIssuedDiscoveryReceipt(
     run_nonce: sessionRunNonce,
     generated_by: "@saitamasans/testing-runtime",
     runtime_version: "1.0.3-dev",
-    runner_version: "1.1.3",
+    runner_version: "1.1.4",
     generated_at: generatedAt,
     expires_at: expiresAt,
     issued_receipts: [{

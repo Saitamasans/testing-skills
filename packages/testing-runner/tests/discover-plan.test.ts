@@ -190,7 +190,7 @@ test("one READY package with success and error target states returns two discove
     assert.equal(reference.receipt_sha256, createHash("sha256").update(receiptBytes).digest("hex"));
     assert.match(receipt.run_nonce, /^[a-f0-9]{64}$/);
     assert.equal(receipt.source_package_sha256, result.discovery_tasks[0]?.package_sha256);
-    assert.equal(receipt.runner_version, "1.1.3");
+    assert.equal(receipt.runner_version, "1.1.4");
     assert.equal(receipt.runtime_version, "1.0.3-dev");
     assert.match(receipt.page_fingerprint_sha256, /^[a-f0-9]{64}$/);
   }
