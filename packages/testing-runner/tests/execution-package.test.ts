@@ -617,7 +617,7 @@ test("path-like transition case IDs are encoded beneath the discovery root", asy
     transitionCaseId: "../../escape", transitionActions: DEFAULT_TRANSITION_ACTIONS, targetOrigin: "https://example.test",
     requestedUrl: "https://example.test/login", pageStateId: "workspace", approvalPath: await writeDiscoveryApproval(f, loaded.package_sha256, DEFAULT_TRANSITION_ACTIONS as never[], { transition_case_id: "../../escape" }), now: RECEIPT_NOW,
   });
-  assert.equal(path.relative(f.output, path.dirname(issued.receiptPath)), path.join("discovery", discoveryCaseDirectory("../../escape")));
+  assert.equal(path.relative(session.runRoot, path.dirname(issued.receiptPath)), path.join("discovery", discoveryCaseDirectory("../../escape")));
   await assert.rejects(() => readFile(path.join(f.root, "escape", "discovery-receipt.json")), /ENOENT/);
 });
 
@@ -676,8 +676,8 @@ test("non-ASCII case IDs retain their exact value while using a safe hashed dire
     requestedUrl: "https://example.test/login", pageStateId: "workspace", approvalPath, now: RECEIPT_NOW,
   });
   assert.equal(issued.receipt.transition_case_id, caseId);
-  assert.equal(path.relative(f.output, path.dirname(issued.receiptPath)), path.join("discovery", discoveryCaseDirectory(caseId)));
-  assert.doesNotMatch(path.relative(f.output, issued.receiptPath), /登录|用例|甲/);
+  assert.equal(path.relative(session.runRoot, path.dirname(issued.receiptPath)), path.join("discovery", discoveryCaseDirectory(caseId)));
+  assert.doesNotMatch(path.relative(session.runRoot, issued.receiptPath), /登录|用例|甲/);
 });
 
 test("forged discovery receipt is rejected", async (t) => {
@@ -720,13 +720,13 @@ test("cross-package discovery receipt is rejected", async (t) => {
 });
 
 test("cross-run-nonce discovery receipt is rejected", async (t) => {
-  const { f, receipt, artifact, approval } = await prepareReceiptPlan();
+  const { f, receipt, artifact, approval, session } = await prepareReceiptPlan();
   const otherRoot = await mkdtemp(path.join(os.tmpdir(), "runner-cross-session-"));
   const otherRun = path.join(otherRoot, ".testing-run");
   t.after(() => rm(f.root, { recursive: true, force: true }));
   t.after(() => rm(otherRoot, { recursive: true, force: true }));
   const otherSession = await (discoveryReceiptRuntime as any).createActiveRuntimeSession(otherRun, RECEIPT_NOW);
-  const otherDiscovery = path.dirname(path.join(otherRun, path.relative(f.output, receipt)));
+  const otherDiscovery = path.dirname(path.join(otherRun, path.relative(session.runRoot, receipt)));
   await mkdir(otherDiscovery, { recursive: true });
   const copiedReceipt = path.join(otherDiscovery, "discovery-receipt.json");
   const copiedArtifact = path.join(otherDiscovery, "web-discovery.json");
