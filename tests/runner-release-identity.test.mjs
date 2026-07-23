@@ -20,7 +20,7 @@ const HISTORICAL_RUNNER_1_1_2 = {
   size_bytes: 22_769_464,
 };
 
-test("changed Runner bytes use the new 1.1.3 package, CLI, receipt, and release identity", async () => {
+test("changed Runner bytes use the new 1.1.4 package, CLI, receipt, and release identity", async () => {
   const runnerPackage = await json("packages/testing-runner/package.json");
   const rootLock = await json("package-lock.json");
   const releasePackage = await json("packages/testing-runner/release/package.json");
@@ -38,27 +38,27 @@ test("changed Runner bytes use the new 1.1.3 package, CLI, receipt, and release 
     "utf8",
   );
 
-  assert.equal(runnerPackage.version, "1.1.3");
-  assert.equal(rootLock.packages["packages/testing-runner"].version, "1.1.3");
-  assert.equal(releasePackage.version, "1.1.3");
-  assert.equal(releaseDependencyLock.version, "1.1.3");
-  assert.equal(releaseDependencyLock.packages[""].version, "1.1.3");
+  assert.equal(runnerPackage.version, "1.1.4");
+  assert.equal(rootLock.packages["packages/testing-runner"].version, "1.1.4");
+  assert.equal(releasePackage.version, "1.1.4");
+  assert.equal(releaseDependencyLock.version, "1.1.4");
+  assert.equal(releaseDependencyLock.packages[""].version, "1.1.4");
   assert.equal(receiptSchema.properties.runtime_version.const, "1.0.3-dev");
-  assert.equal(receiptSchema.properties.runner_version.const, "1.1.3");
-  assert.match(source, /TESTING_RUNNER_VERSION = "1\.1\.3"/);
-  assert.match(releaseScript, /runner-1\.1\.3-release-lock\.json/);
+  assert.equal(receiptSchema.properties.runner_version.const, "1.1.4");
+  assert.match(source, /TESTING_RUNNER_VERSION = "1\.1\.4"/);
+  assert.match(releaseScript, /runner-1\.1\.4-release-lock\.json/);
   assert.match(releaseScript, /const VERSION = RELEASE_PREPARATION\.runner\.version/);
   assert.match(releaseScript, /const RELEASE_TAG = RELEASE_PREPARATION\.runner\.release_tag/);
   assert.doesNotMatch(releaseScript, /skill-sources[\s\S]+runner-release\.json/);
-  assert.match(workflow, /EXPECTED_VERSION: 1\.1\.3/);
-  assert.match(workflow, /EXPECTED_TAG: testing-runner-v1\.1\.3/);
-  assert.match(workflow, /RUNNER_ASSET: saitamasans-testing-runner-1\.1\.3\.tgz/);
-  assert.match(workflow, /runner-1\.1\.3-release-lock\.json/);
+  assert.match(workflow, /EXPECTED_VERSION: 1\.1\.4/);
+  assert.match(workflow, /EXPECTED_TAG: testing-runner-v1\.1\.4/);
+  assert.match(workflow, /RUNNER_ASSET: saitamasans-testing-runner-1\.1\.4\.tgz/);
+  assert.match(workflow, /runner-1\.1\.4-release-lock\.json/);
   assert.match(workflow, /locked-not-published/);
   assert.match(workflow, /public release already exists/);
   assert.doesNotMatch(workflow, /--clobber/);
-  assert.match(validationWorkflow, /saitamasans-testing-runner-1\.1\.3\.tgz/);
-  assert.match(validationWorkflow, /runner-1\.1\.3-release-lock\.json/);
+  assert.match(validationWorkflow, /saitamasans-testing-runner-1\.1\.4\.tgz/);
+  assert.match(validationWorkflow, /runner-1\.1\.4-release-lock\.json/);
   assert.match(validationWorkflow, /locked-not-published/);
   assert.doesNotMatch(validationWorkflow, /release-a\/saitamasans-testing-runner-1\.1\.2\.tgz/);
   assert.doesNotMatch(validationWorkflow, /Runner build differs from windows-runtime-lock\.json/);
@@ -74,19 +74,19 @@ test("changed Runner bytes use the new 1.1.3 package, CLI, receipt, and release 
   assert.notEqual(runnerPackage.version, HISTORICAL_RUNNER_1_1_2.version);
 });
 
-test("Runtime 1.0.3 compatibility binds Runner 1.1.3, Compiler 1.0.0, and backward-compatible Contract 1.0.0", async () => {
+test("Runtime 1.0.3 compatibility binds Runner 1.1.4, Compiler 1.0.0, and backward-compatible Contract 1.0.0", async () => {
   const matrix = await json("packages/testing-runner/release/compatibility-matrix.json");
   assert.deepEqual(matrix.targets["1.0.3"], {
     status: "preparation",
     node: "22.23.1",
-    runner: "1.1.3",
+    runner: "1.1.4",
     compiler: "1.0.0",
     contract: "1.0.0",
     playwright: "1.61.1",
   });
   assert.deepEqual(matrix.contract_decisions["1.0.0"], {
     compatibility: "backward-compatible",
-    rationale: "Runner 1.1.3 adds package-first validation, discovery binding, action handling, context isolation, and result fields without removing or reinterpreting Contract 1.0.0 fields.",
+    rationale: "Runner 1.1.4 adds package-first validation, discovery binding, action handling, context isolation, and result fields without removing or reinterpreting Contract 1.0.0 fields.",
   });
 
   const compilerPackage = await json("packages/testing-contract-compiler/package.json");
@@ -95,20 +95,20 @@ test("Runtime 1.0.3 compatibility binds Runner 1.1.3, Compiler 1.0.0, and backwa
   assert.equal(contractSchema.properties.contract_version.const, "1.0.0");
 });
 
-test("Runner 1.1.3 lock is unpublished, byte-bound, and preserves immutable 1.1.2 metadata", async () => {
-  const preparation = await json("packages/testing-runner/release/runner-1.1.3-release-lock.json");
+test("Runner 1.1.4 lock is unpublished, byte-bound, and preserves immutable 1.1.2 metadata", async () => {
+  const preparation = await json("packages/testing-runner/release/runner-1.1.4-release-lock.json");
   assert.deepEqual(preparation.runner, {
     name: "@saitamasans/testing-runner",
-    version: "1.1.3",
-    release_tag: "testing-runner-v1.1.3",
-    file_name: "saitamasans-testing-runner-1.1.3.tgz",
+    version: "1.1.4",
+    release_tag: "testing-runner-v1.1.4",
+    file_name: "saitamasans-testing-runner-1.1.4.tgz",
   });
   assert.equal(preparation.status, "locked-not-published");
   assert.equal(preparation.publication.tag_created, false);
   assert.equal(preparation.publication.release_created, false);
   assert.equal(preparation.publication.assets_uploaded, false);
-  assert.equal(preparation.artifact.size_bytes, 22_826_699);
-  assert.equal(preparation.artifact.sha256, "22b7ed732f6e79c20c910ee1aafdb9b81871e28d65d5dafe5a09b83ad8847b78");
+  assert.equal(preparation.artifact.size_bytes, 22_826_773);
+  assert.equal(preparation.artifact.sha256, "aa861bf0e82a8cabba7e5b93151950873eab8f421310fccf45fd38933578058a");
   assert.deepEqual(preparation.previous_release, HISTORICAL_RUNNER_1_1_2);
   assert.deepEqual(preparation.runtime_target, {
     version: "1.0.3",

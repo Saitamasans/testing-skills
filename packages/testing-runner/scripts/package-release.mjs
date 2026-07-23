@@ -21,7 +21,7 @@ import { gunzipSync } from "node:zlib";
 
 const PACKAGE_NAME = "@saitamasans/testing-runner";
 const RELEASE_PREPARATION_PATH = fileURLToPath(
-  new URL("../release/runner-1.1.3-release-lock.json", import.meta.url),
+  new URL("../release/runner-1.1.4-release-lock.json", import.meta.url),
 );
 const RELEASE_PREPARATION = JSON.parse(await readFile(RELEASE_PREPARATION_PATH, "utf8"));
 const VERSION = RELEASE_PREPARATION.runner.version;

@@ -497,9 +497,9 @@ class EighthSkillReleaseWorkflowContractTest(unittest.TestCase):
 
     def test_runner_113_release_is_immutable_and_publicly_contract_verified(self):
         for phrase in [
-            "testing-runner-v1.1.3",
-            "saitamasans-testing-runner-1.1.3.tgz",
-            "runner-1.1.3-release-lock.json",
+            "testing-runner-v1.1.4",
+            "saitamasans-testing-runner-1.1.4.tgz",
+            "runner-1.1.4-release-lock.json",
             "locked-not-published",
             "npm ci --ignore-scripts",
             "npm run pack:runner-release",
@@ -535,10 +535,10 @@ class EighthSkillReleaseWorkflowContractTest(unittest.TestCase):
             self.runner_release,
         )
         for fixed_contract in [
-            'EXPECTED_VERSION: 1.1.3',
-            'RUNNER_ASSET: saitamasans-testing-runner-1.1.3.tgz',
-            'pkg.version !== "1.1.3"',
-            'cli.includes("1.1.3")',
+            'EXPECTED_VERSION: 1.1.4',
+            'RUNNER_ASSET: saitamasans-testing-runner-1.1.4.tgz',
+            'pkg.version !== "1.1.4"',
+            'cli.includes("1.1.4")',
             '["chromium", "1228"]',
         ]:
             with self.subTest(fixed_contract=fixed_contract):
@@ -574,8 +574,8 @@ class EighthSkillReleaseWorkflowContractTest(unittest.TestCase):
             "build/release-a",
             "build/release-b",
             "Get-FileHash",
-            "runner-1.1.3-release-lock.json",
-            "saitamasans-testing-runner-1.1.3.tgz",
+            "runner-1.1.4-release-lock.json",
+            "saitamasans-testing-runner-1.1.4.tgz",
             "verify-release-tarball.mjs",
             "CompleteInstallerTest.test_clean_install_is_path_independent_and_writes_receipt_after_smoke",
             "CompleteInstallerTest.test_smoke_failure_retains_diagnostics_but_not_receipt",
@@ -672,7 +672,7 @@ class EighthSkillReleaseWorkflowContractTest(unittest.TestCase):
         self.assertIn("testing-runner-v1.1.1", readme)
         self.assertIn("未发布/作废发布目标", readme)
         self.assertIn("首个可发布目标为 `testing-runner-v1.1.2`", readme)
-        self.assertIn('tags:\n      - "testing-runner-v1.1.3"', self.runner_release)
+        self.assertIn('tags:\n      - "testing-runner-v1.1.4"', self.runner_release)
         self.assertNotIn('tags:\n      - "testing-runner-v1.1.1"', self.runner_release)
 
     def test_installer_entry_reverifies_runtime_and_frozen_release_without_mutation(self):
