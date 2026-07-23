@@ -20,6 +20,9 @@ RAW_INSTALLER = (
     "https://raw.githubusercontent.com/Saitamasans/testing-skills/"
     "main/scripts/install.ps1"
 )
+NO_PUBLIC_INSTALLER_SKILLS = {
+    "multi-source-test-audit",
+}
 
 
 class GitHubInstallLauncherTest(unittest.TestCase):
@@ -30,7 +33,9 @@ class GitHubInstallLauncherTest(unittest.TestCase):
 
     def test_exactly_one_all_and_manifest_launchers_exist(self):
         expected = {"install-all.cmd"} | {
-            f"install-{slug}.cmd" for slug in self.slugs
+            f"install-{slug}.cmd"
+            for slug in self.slugs
+            if slug not in NO_PUBLIC_INSTALLER_SKILLS
         }
         actual = (
             {path.name for path in self.installers.glob("*.cmd")}
@@ -50,6 +55,9 @@ class GitHubInstallLauncherTest(unittest.TestCase):
     def test_single_launchers_use_one_fixed_manifest_selector(self):
         for slug in self.slugs:
             with self.subTest(slug=slug):
+                if slug in NO_PUBLIC_INSTALLER_SKILLS:
+                    self.assertFalse((self.installers / f"install-{slug}.cmd").exists())
+                    continue
                 launcher = self.installers / f"install-{slug}.cmd"
                 self.assertTrue(launcher.exists(), launcher)
                 text = launcher.read_text(encoding="utf-8")
@@ -102,6 +110,12 @@ class GitHubInstallReadmeTest(unittest.TestCase):
             with self.subTest(slug=slug):
                 if slug == "test-case-execution-compiler":
                     self.assertIn("Runtime 1.0.3 发布后提供完整安装器", self.readme)
+                    continue
+                if slug in NO_PUBLIC_INSTALLER_SKILLS:
+                    expected = (
+                        "本地源码安装已验证；公开安装器待发布。"
+                    )
+                    self.assertIn(expected, self.readme)
                     continue
                 base = (
                     RUNTIME_RELEASE_BASE
@@ -267,6 +281,7 @@ class GitHubInstallReadmeTest(unittest.TestCase):
             ("需求澄清", "requirement-clarification-test"),
             ("自动执行与证据回填", "web-api-test-execution-evidence"),
             ("测试用例可执行化编译", "test-case-execution-compiler"),
+            ("多源测试审计", "multi-source-test-audit"),
         ]
         self.assertEqual(len(skill_specs), len(rows))
         release_urls = []
@@ -284,6 +299,9 @@ class GitHubInstallReadmeTest(unittest.TestCase):
                 if slug == "test-case-execution-compiler":
                     self.assertEqual("Runtime 1.0.3 发布后提供完整安装器。", cells[2])
                     continue
+                if slug == "multi-source-test-audit":
+                    self.assertEqual("本地源码安装已验证；公开安装器待发布。", cells[2])
+                    continue
                 base = (
                     RUNTIME_RELEASE_BASE
                     if slug == "web-api-test-execution-evidence"
@@ -299,7 +317,7 @@ class GitHubInstallReadmeTest(unittest.TestCase):
                 )
                 release_urls.append(asset_url)
 
-        self.assertEqual(len(skill_specs) - 1, len(set(release_urls)))
+        self.assertEqual(len(skill_specs) - 2, len(set(release_urls)))
         self.assertNotIn(
             "| 中文名称 | Package | 类型 | 适用场景 | 安装 |",
             self.readme,
