@@ -41,6 +41,14 @@ jobs:
       - name: Install build dependencies without lifecycle scripts
         run: npm ci --ignore-scripts
 
+      - name: Build and test Runner after a clean Windows install
+        shell: bash
+        run: |
+          set -euo pipefail
+          node node_modules/playwright/cli.js install chromium
+          npm run build --workspace @saitamasans/testing-runner
+          npm test --workspace @saitamasans/testing-runner
+
       - name: Build two independent locked Runner tarballs
         shell: powershell
         run: |

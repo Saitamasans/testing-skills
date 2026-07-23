@@ -820,6 +820,29 @@ test("active RuntimeSession rejects an arbitrary caller output directory", async
   );
 });
 
+test("active RuntimeSession accepts an existing junction alias for its run root", async (t) => {
+  const { f, receipt, session, approval } = await prepareReceiptPlan();
+  const aliasRoot = path.join(path.dirname(f.root), `runner-session-alias-${randomBytes(8).toString("hex")}`);
+  t.after(() => rm(aliasRoot, { recursive: true, force: true }));
+  t.after(() => rm(f.root, { recursive: true, force: true }));
+  await symlink(f.root, aliasRoot, process.platform === "win32" ? "junction" : "dir");
+  const aliasOutput = process.platform === "win32"
+    ? `${path.join(aliasRoot.toUpperCase(), ".TESTING-RUN").replace(/\\\\/g, "/")}/`
+    : path.join(aliasRoot, ".testing-run");
+
+  const result = await runPlanCommand({
+    input: f.package,
+    profile: f.profile,
+    outputDir: aliasOutput,
+    discoveryReceipts: [receipt],
+    discoveryApproval: approval,
+    runtimeSession: session,
+    now: RECEIPT_NOW,
+  });
+
+  assert.equal(result.manifest.cases[0]?.case_id, "LOGIN-001");
+});
+
 test("user target_state_discovered boolean is rejected as profile data", async (t) => {
   const f = await setup();
   t.after(() => rm(f.root, { recursive: true, force: true }));

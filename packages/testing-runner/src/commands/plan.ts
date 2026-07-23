@@ -1,4 +1,4 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, realpath, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { performance } from "node:perf_hooks";
 
@@ -60,8 +60,16 @@ type ReadCasesResult =
 
 const MAPPING_APPROVAL_REQUIRED_MESSAGE = "Nonstandard Excel requires --mapping-approval before manifest planning";
 
+async function outputDirMatchesRuntimeSession(outputDir: string, runtimeSession: ActiveRuntimeSession): Promise<boolean> {
+  try {
+    return (await realpath(outputDir)).toLowerCase() === runtimeSession.runRoot.toLowerCase();
+  } catch {
+    return false;
+  }
+}
+
 export async function runPlanCommand(options: PlanCommandOptions): Promise<PlanCommandResult> {
-  if (options.runtimeSession && path.resolve(options.outputDir).toLowerCase() !== options.runtimeSession.runRoot.toLowerCase()) {
+  if (options.runtimeSession && !(await outputDirMatchesRuntimeSession(options.outputDir, options.runtimeSession))) {
     throw new Error("runtime_session_output_dir_mismatch");
   }
   await mkdir(options.outputDir, { recursive: true });
