@@ -64,7 +64,7 @@ def download(item: dict, cache: Path, offline: bool) -> Path:
     if not target.exists():
         if offline: raise RuntimeError(f"offline cache miss: {item['filename']}")
         url = item.get("download_url") or item["immutable_url"]
-        request = urllib.request.Request(url, headers={"User-Agent":"multi-source-test-audit-builder/0.1.0"})
+        request = urllib.request.Request(url, headers={"User-Agent":"multi-source-test-audit-builder/0.1.1"})
         with urllib.request.urlopen(request) as response:
             final = response.geturl()
             if not (final.startswith("https://www.python.org/") or final.startswith("https://files.pythonhosted.org/")):

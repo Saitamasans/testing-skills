@@ -11,10 +11,10 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $script:Slug = 'multi-source-test-audit'
-$script:Version = '0.1.0'
-$script:ReleaseTag = 'multi-source-test-audit-v0.1.0'
-$script:InstallerVersion = '0.1.0'
-$script:ArchiveName = 'multi-source-test-audit-0.1.0-windows-x64.zip'
+$script:Version = '0.1.1'
+$script:ReleaseTag = 'multi-source-test-audit-v0.1.1'
+$script:InstallerVersion = '0.1.1'
+$script:ArchiveName = 'multi-source-test-audit-0.1.1-windows-x64.zip'
 $script:FixedReleaseUrl = "https://github.com/Saitamasans/testing-skills/releases/download/$script:ReleaseTag/$script:ArchiveName"
 $script:PublishedArchiveSha256 = '__ARCHIVE_SHA256__'
 
