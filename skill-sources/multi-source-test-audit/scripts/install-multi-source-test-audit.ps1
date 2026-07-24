@@ -36,12 +36,13 @@ function Assert-ReleaseUrl {
 
 function Assert-ReleaseConfiguration {
     param([string]$Url, [string]$Sha256)
+    $placeholder = '__' + 'ARCHIVE_SHA256__'
     if (-not $Url) { $Url = $script:FixedReleaseUrl }
     if (-not $Sha256) { $Sha256 = $script:PublishedArchiveSha256 }
-    if ($AllowLocalFixture -and $Sha256 -eq '__ARCHIVE_SHA256__') {
+    if ($AllowLocalFixture -and $Sha256 -eq $placeholder) {
         throw 'release_not_published: local fixture still requires an explicit archive SHA-256'
     }
-    if (-not $AllowLocalFixture -and ($Sha256 -eq '__ARCHIVE_SHA256__' -or $Sha256 -notmatch '^[0-9a-fA-F]{64}$')) {
+    if (-not $AllowLocalFixture -and ($Sha256 -eq $placeholder -or $Sha256 -notmatch '^[0-9a-fA-F]{64}$')) {
         throw 'release_not_published: installer template requires immutable Release SHA-256'
     }
     Assert-ReleaseUrl -Url $Url

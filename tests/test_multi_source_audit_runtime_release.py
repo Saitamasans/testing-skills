@@ -87,6 +87,8 @@ class MultiSourceAuditRuntimeReleaseContractTest(unittest.TestCase):
             )
             installer = (root / "assets" / "install-multi-source-test-audit.ps1").read_text(encoding="utf-8")
             self.assertNotIn("__ARCHIVE_SHA256__", installer)
+            self.assertIn("$script:PublishedArchiveSha256 = '" + hashlib.sha256(archive.read_bytes()).hexdigest() + "'", installer)
+            self.assertIn("$placeholder = '__' + 'ARCHIVE_SHA256__'", installer)
             sums = (root / "assets" / "SHA256SUMS.txt").read_text(encoding="utf-8")
             self.assertIn("multi-source-test-audit-0.1.0-windows-x64.zip", sums)
 
