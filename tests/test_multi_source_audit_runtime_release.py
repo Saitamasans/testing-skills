@@ -1,6 +1,7 @@
 import hashlib
 import json
 import os
+import shutil
 import subprocess
 import sys
 import threading
@@ -156,6 +157,7 @@ class MultiSourceAuditRuntimeReleaseContractTest(unittest.TestCase):
             sums = (root / "assets" / "SHA256SUMS.txt").read_text(encoding="utf-8")
             self.assertIn("multi-source-test-audit-0.1.1-windows-x64.zip", sums)
 
+    @unittest.skipUnless(shutil.which("powershell.exe"), "PowerShell is required for template execution")
     def test_unrendered_template_fails_closed_and_rendered_guard_is_not_replaced(self):
         source = PACKAGE.parent / "scripts" / "install-multi-source-test-audit.ps1"
         text = source.read_text(encoding="utf-8")
