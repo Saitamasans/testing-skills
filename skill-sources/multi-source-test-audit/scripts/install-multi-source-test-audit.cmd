@@ -3,8 +3,8 @@ chcp 65001 >nul
 setlocal EnableExtensions DisableDelayedExpansion
 set "PSModulePath=%SystemRoot%\System32\WindowsPowerShell\v1.0\Modules"
 
-set "BOOTSTRAP_VERSION=0.1.2"
-set "PS1_URL=https://github.com/Saitamasans/testing-skills/releases/download/multi-source-test-audit-v0.1.2/install-multi-source-test-audit.ps1"
+set "BOOTSTRAP_VERSION=0.1.3"
+set "PS1_URL=https://github.com/Saitamasans/testing-skills/releases/download/multi-source-test-audit-v0.1.3/install-multi-source-test-audit.ps1"
 set "EXPECTED_PS1_SHA256=__INSTALLER_SHA256__"
 set "UNPUBLISHED_SENTINEL=__"
 set "UNPUBLISHED_SENTINEL=%UNPUBLISHED_SENTINEL%INSTALLER_SHA256__"
@@ -44,19 +44,19 @@ if errorlevel 1 (
 
 echo 正在下载并校验 multi-source-test-audit %BOOTSTRAP_VERSION% 安装脚本...
 where.exe curl.exe >nul 2>&1
-if not errorlevel 1 (
-    curl.exe --fail --location --silent --show-error --retry 3 --connect-timeout 20 --output "%PS1_PATH%" "%PS1_URL%"
-    if errorlevel 1 (
-        echo curl.exe 下载 PS1 失败。
-        exit /b 11
-    )
-) else (
-    powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "$ProgressPreference='SilentlyContinue'; Invoke-WebRequest -UseBasicParsing -Uri $env:MSA_BOOTSTRAP_URL -OutFile $env:MSA_BOOTSTRAP_OUTPUT"
-    if errorlevel 1 (
-        echo Windows PowerShell 下载 PS1 失败。
-        exit /b 11
-    )
+if errorlevel 1 goto :download_with_powershell
+curl.exe --fail --location --silent --show-error --retry 3 --connect-timeout 20 --output "%PS1_PATH%" "%PS1_URL%"
+if not errorlevel 1 goto :verify_download
+echo curl.exe 下载 PS1 失败，回退 Windows PowerShell。
+
+:download_with_powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "$ProgressPreference='SilentlyContinue'; Invoke-WebRequest -UseBasicParsing -Uri $env:MSA_BOOTSTRAP_URL -OutFile $env:MSA_BOOTSTRAP_OUTPUT"
+if errorlevel 1 (
+    echo Windows PowerShell 下载 PS1 失败。
+    exit /b 11
 )
+
+:verify_download
 if not exist "%PS1_PATH%" (
     echo 下载完成后找不到临时 PS1 文件。
     exit /b 12
