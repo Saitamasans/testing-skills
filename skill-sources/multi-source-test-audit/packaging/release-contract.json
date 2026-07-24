@@ -6,9 +6,9 @@
   "platform": "windows-x64",
   "python": "3.12.10",
   "installer_version": "0.1.4",
-  "archive_sha256": "9be43879f5b81a4d5bd86d4c96e3cc81da9fd7f88c9d3a088a230dc42629931b",
-  "archive_size_bytes": 15439991,
-  "release_status": "pending-public-release",
+  "archive_sha256": "6ea41684d6e9b701323308e8371faf68a851a7c529beedfb6d0786c46733aba9",
+  "archive_size_bytes": 15450074,
+  "release_status": "published",
   "required_release_assets": [
     "install-multi-source-test-audit.cmd",
     "install-multi-source-test-audit.ps1",
