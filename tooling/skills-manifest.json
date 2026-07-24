@@ -73,6 +73,15 @@
       "default_prompt": "请把这份已有 Web UI 人工测试用例编译为 Execution Package。",
       "case_output": false,
       "compiler_skill": true
+    },
+    {
+      "source": "skill-sources/multi-source-test-audit/多源测试审计_Skill.md",
+      "slug": "multi-source-test-audit",
+      "display_name": "多源测试审计",
+      "short_description": "关联多源测试材料，生成可追溯的静态审计线索与审批计划",
+      "default_prompt": "请只读审计这些多源材料，先盘点材料和能力等级，给出 3 条候选业务链；我选择后只生成该链的阶段 A 报告，不调用接口或数据库。",
+      "case_output": false,
+      "resource_dirs": ["schemas", "runtime"]
     }
   ]
 }

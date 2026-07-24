@@ -26,13 +26,13 @@ class SourceContractsTest(unittest.TestCase):
 
     def test_exact_filenames_and_frontmatter(self):
         self.assertGreaterEqual(len(self.manifest), 1)
-        self.assertEqual(9, len(self.manifest))
+        self.assertEqual(10, len(self.manifest))
         for item in self.manifest:
             meta, _ = parse_frontmatter(self.texts[item["slug"]])
             self.assertEqual({"name", "description"}, set(meta))
             self.assertEqual(item["slug"], meta["name"])
         self.assertEqual(
-            ORIGINAL_SEVEN,
+            ORIGINAL_SEVEN | {"multi-source-test-audit"},
             {
                 item["slug"]
                 for item in self.manifest
