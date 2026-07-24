@@ -19,7 +19,7 @@
 | 需求澄清<br>`requirement-clarification-test` | 在写用例前找出需求缺口并判断是否具备开测条件。 | [![Install](https://img.shields.io/badge/Install-2ea44f)](https://github.com/Saitamasans/testing-skills/releases/download/skill-installers-v1/install-requirement-clarification-test.cmd) |
 | 自动执行与证据回填<br>`web-api-test-execution-evidence` | 自动执行已有 Web/API 正式用例并回填 Excel、HTML 和证据。 | [![Install](https://img.shields.io/badge/Install-2ea44f)](https://github.com/Saitamasans/testing-skills/releases/download/web-api-test-execution-evidence-v1.0.2/install-web-api-test-execution-evidence.cmd) |
 | 测试用例可执行化编译<br>`test-case-execution-compiler` | 将已有 Web UI 人工用例编译为可审核、可追踪的 Execution Package。 | Runtime 1.0.3 发布后提供完整安装器。 |
-| 多源测试审计<br>`multi-source-test-audit` | 关联需求、接口文档、客户端、后端和 Admin 等多源材料，完成能力分级、候选业务链、静态审计线索和阶段 B 审批计划；v0.1 不执行接口或数据库。 | [![Install](https://img.shields.io/badge/Install-2ea44f)](https://github.com/Saitamasans/testing-skills/releases/download/multi-source-test-audit-v0.1.1/install-multi-source-test-audit.cmd) |
+| 多源测试审计<br>`multi-source-test-audit` | 关联需求、接口文档、客户端、后端和 Admin 等多源材料，完成能力分级、候选业务链、静态审计线索和阶段 B 审批计划；v0.1 不执行接口或数据库。 | 公开安装器维护中，请暂勿使用。 |
 
 选择时以当前交付目标为准：一个任务只选择一个主 Skill，最多建议一个辅助 Skill；调用辅助 Skill 前先说明分工并等待确认，最终只生成一套结果。
 
@@ -39,10 +39,7 @@
 
 ### 第 10 个 Skill：多源测试审计
 
-1. 点击上方 `Install` 按钮，下载 CMD 安装器。
-2. 双击运行；安装器会下载并校验完整离线 Runtime。
-3. 安装完成后重启 Codex。
-4. 调用 `multi-source-test-audit` 开始只读多源测试审计。
+公开安装器维护中，请暂勿使用。修复后的单文件 CMD 安装器将在 v0.1.2 发布并通过完整公开安装验收后重新提供。
 
 第 8 个 Skill 的执行就绪安装器：`install-web-api-test-execution-evidence.cmd` 或 `install-web-api-test-execution-evidence.ps1`。它使用固定版本的 GitHub Release 完整安装器，显示下载进度、速度、ETA、重试、续传、校验、解压和 smoke test；安装已损坏或不完整时，用同一安装器加 `-Repair`，不要在执行过程中下载或替换任何组件。
 
