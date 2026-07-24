@@ -20,6 +20,7 @@ MULTI_SOURCE_RUNTIME_RELEASE_BASE = (
     "https://github.com/Saitamasans/testing-skills/releases/download/"
     "multi-source-test-audit-v0.1.1/"
 )
+MULTI_SOURCE_INSTALL_MAINTENANCE = "公开安装器维护中，请暂勿使用。"
 RAW_INSTALLER = (
     "https://raw.githubusercontent.com/Saitamasans/testing-skills/"
     "main/scripts/install.ps1"
@@ -116,8 +117,8 @@ class GitHubInstallReadmeTest(unittest.TestCase):
                     self.assertIn("Runtime 1.0.3 发布后提供完整安装器", self.readme)
                     continue
                 if slug in NO_PUBLIC_INSTALLER_SKILLS:
-                    asset_url = MULTI_SOURCE_RUNTIME_RELEASE_BASE + f"install-{slug}.cmd"
-                    self.assertEqual(1, self.readme.count(asset_url))
+                    self.assertIn(MULTI_SOURCE_INSTALL_MAINTENANCE, self.readme)
+                    self.assertNotIn(MULTI_SOURCE_RUNTIME_RELEASE_BASE, self.readme)
                     continue
                 base = (
                     RUNTIME_RELEASE_BASE
@@ -302,12 +303,7 @@ class GitHubInstallReadmeTest(unittest.TestCase):
                     self.assertEqual("Runtime 1.0.3 发布后提供完整安装器。", cells[2])
                     continue
                 if slug == "multi-source-test-audit":
-                    asset_url = MULTI_SOURCE_RUNTIME_RELEASE_BASE + "install-multi-source-test-audit.cmd"
-                    self.assertEqual(1, cells[2].count(asset_url))
-                    self.assertRegex(
-                        cells[2],
-                        rf"^\[!\[Install\]\([^)]+\)\]\({re.escape(asset_url)}\)$",
-                    )
+                    self.assertEqual(MULTI_SOURCE_INSTALL_MAINTENANCE, cells[2])
                     continue
                 base = (
                     RUNTIME_RELEASE_BASE
