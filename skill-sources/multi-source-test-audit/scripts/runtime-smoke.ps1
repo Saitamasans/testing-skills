@@ -14,7 +14,7 @@ from multi_source_test_audit.excel import AUDIT_SHEETS, write_stage_a_workbook_v
 from multi_source_test_audit.paths import WritePolicy
 root = Path(sys.executable).parents[2]
 assert sys.version_info[:3] == (3, 12, 10)
-assert multi_source_test_audit.__version__ == '0.1.0'
+assert multi_source_test_audit.__version__ == '0.1.1'
 assert openpyxl.__version__ == '3.1.5' and cryptography.__version__ == '49.0.0' and cffi.__version__ == '2.1.0'
 assert not any('site-packages' in p and str(root) not in p for p in sys.path)
 for name in ('stage-a-analysis.schema.json', 'selected-chain-plan.schema.json'):

@@ -1,18 +1,18 @@
 {
   "slug": "multi-source-test-audit",
-  "version": "0.1.0",
-  "release_tag": "multi-source-test-audit-v0.1.0",
-  "archive_name": "multi-source-test-audit-0.1.0-windows-x64.zip",
+  "version": "0.1.1",
+  "release_tag": "multi-source-test-audit-v0.1.1",
+  "archive_name": "multi-source-test-audit-0.1.1-windows-x64.zip",
   "platform": "windows-x64",
   "python": "3.12.10",
-  "installer_version": "0.1.0",
-  "archive_sha256": "452bffb5576e267484f1131cf8d84288e071574470c5bf73b173c7257eb928a2",
-  "archive_size_bytes": 15448413,
+  "installer_version": "0.1.1",
+  "archive_sha256": "907d0e37f659d060bd9838906fb8fc93de9044a8843766bcd1422eb52050916a",
+  "archive_size_bytes": 15438336,
   "release_status": "implementation-only-not-published",
   "required_release_assets": [
     "install-multi-source-test-audit.cmd",
     "install-multi-source-test-audit.ps1",
-    "multi-source-test-audit-0.1.0-windows-x64.zip",
+    "multi-source-test-audit-0.1.1-windows-x64.zip",
     "release-manifest.json",
     "SHA256SUMS.txt"
   ]
