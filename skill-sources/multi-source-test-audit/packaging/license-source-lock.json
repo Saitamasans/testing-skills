@@ -1,0 +1,40 @@
+{
+  "sources": [
+    {
+      "package": "CPython",
+      "version": "3.12.10",
+      "source_type": "embeddable_zip",
+      "filename": "python-3.12.10-embed-amd64.zip",
+      "immutable_url": "https://www.python.org/ftp/python/3.12.10/python-3.12.10-embed-amd64.zip",
+      "archive_sha256": "4acbed6dd1c744b0376e3b1cf57ce906f9dc9e95e68824584c8099a63025a3c3",
+      "archive_member": "LICENSE.txt",
+      "output_filename": "CPython.txt",
+      "license_identifier": "PSF-2.0",
+      "extracted_content_sha256": "bea187a467a1d78100a00dc904c232c9f2e1b35deaec44d40f790c2f33a2ebe8"
+    },
+    {
+      "package": "openpyxl",
+      "version": "3.1.5",
+      "source_type": "sdist",
+      "filename": "openpyxl-3.1.5.tar.gz",
+      "immutable_url": "https://files.pythonhosted.org/packages/3d/f9/88d94a75de065ea32619465d2f77b29a0469500e99012523b91cc4141cd1/openpyxl-3.1.5.tar.gz",
+      "archive_sha256": "cf0e3cf56142039133628b5acffe8ef0c12bc902d2aadd3e0fe5878dc08d1050",
+      "archive_member": "openpyxl-3.1.5/LICENCE.rst",
+      "output_filename": "openpyxl.txt",
+      "license_identifier": "MIT",
+      "extracted_content_sha256": "0c84bb42f5d367e5ebf9fc2dde35b16141df5ee0fdc189250858bc6c5560f69e"
+    },
+    {
+      "package": "et_xmlfile",
+      "version": "2.0.0",
+      "source_type": "sdist",
+      "filename": "et_xmlfile-2.0.0.tar.gz",
+      "immutable_url": "https://files.pythonhosted.org/packages/d3/38/af70d7ab1ae9d4da450eeec1fa3918940a5fafb9055e934af8d6eb0c2313/et_xmlfile-2.0.0.tar.gz",
+      "archive_sha256": "dab3f4764309081ce75662649be815c4c9081e88f0837825f90fd28317d4da54",
+      "archive_member": "et_xmlfile-2.0.0/LICENCE.rst",
+      "output_filename": "et_xmlfile.txt",
+      "license_identifier": "MIT",
+      "extracted_content_sha256": "0c84bb42f5d367e5ebf9fc2dde35b16141df5ee0fdc189250858bc6c5560f69e"
+    }
+  ]
+}
