@@ -28,17 +28,19 @@ CMD_SOURCE = PACKAGE.parent / "scripts" / "install-multi-source-test-audit.cmd"
 
 
 class MultiSourceAuditBootstrapperContractTest(unittest.TestCase):
-    def test_cmd_is_a_standalone_v012_bootstrapper_template(self):
+    def test_cmd_is_a_standalone_v013_bootstrapper_template(self):
         text = CMD_SOURCE.read_text(encoding="utf-8")
-        self.assertIn('set "BOOTSTRAP_VERSION=0.1.2"', text)
+        self.assertIn('set "BOOTSTRAP_VERSION=0.1.3"', text)
         self.assertIn(
             "https://github.com/Saitamasans/testing-skills/releases/download/"
-            "multi-source-test-audit-v0.1.2/install-multi-source-test-audit.ps1",
+            "multi-source-test-audit-v0.1.3/install-multi-source-test-audit.ps1",
             text,
         )
         self.assertIn("__INSTALLER_SHA256__", text)
         self.assertIn("curl.exe", text)
         self.assertIn("Invoke-WebRequest", text)
+        self.assertIn("curl.exe 下载 PS1 失败，回退 Windows PowerShell", text)
+        self.assertIn(":download_with_powershell", text)
         self.assertIn("pause", text.casefold())
         for phrase in ["安装失败", "错误码", "日志位置", "建议操作", "预期 SHA-256", "实际 SHA-256", "TESTING_SKILLS_NO_PAUSE"]:
             self.assertIn(phrase, text)
@@ -81,7 +83,7 @@ class MultiSourceAuditBootstrapperContractTest(unittest.TestCase):
             thread = threading.Thread(target=server.serve_forever, daemon=True)
             thread.start()
             try:
-                public_url = "https://github.com/Saitamasans/testing-skills/releases/download/multi-source-test-audit-v0.1.2/install-multi-source-test-audit.ps1"
+                public_url = "https://github.com/Saitamasans/testing-skills/releases/download/multi-source-test-audit-v0.1.3/install-multi-source-test-audit.ps1"
                 fixture_url = f"http://127.0.0.1:{server.server_address[1]}/install-multi-source-test-audit.ps1"
                 fixture_archive_url = f"http://127.0.0.1:{server.server_address[1]}/{archive.name}"
                 only_cmd = root / "only-cmd"
@@ -96,6 +98,15 @@ class MultiSourceAuditBootstrapperContractTest(unittest.TestCase):
                 state = root / "状态 中文"
                 env = os.environ.copy()
                 env["TESTING_SKILLS_NO_PAUSE"] = "1"
+                fake_bin = root / "fake-curl"
+                fake_bin.mkdir()
+                shutil.copy2(Path(os.environ["SystemRoot"]) / "System32" / "where.exe", fake_bin / "curl.exe")
+                fallback_env = env.copy()
+                fallback_env["PATH"] = ";".join([
+                    str(fake_bin),
+                    os.environ["SystemRoot"] + "\\System32",
+                    os.environ["SystemRoot"] + "\\System32\\WindowsPowerShell\\v1.0",
+                ])
                 command = [
                     "cmd.exe", "/d", "/c", "call", str(launcher),
                     "-AllowLocalFixture", "-ReleaseUrl", fixture_archive_url,
@@ -109,12 +120,12 @@ class MultiSourceAuditBootstrapperContractTest(unittest.TestCase):
                     encoding="utf-8",
                     errors="replace",
                     check=False,
-                    env=env,
+                    env=fallback_env,
                 )
                 self.assertEqual(0, result.returncode, result.stdout + result.stderr)
-                self.assertIn("multi-source-test-audit 0.1.2", result.stdout + result.stderr)
+                self.assertIn("multi-source-test-audit 0.1.3", result.stdout + result.stderr)
                 receipt = json.loads((state / "installations" / "multi-source-test-audit.json").read_text(encoding="utf-8"))
-                self.assertEqual("0.1.2", receipt["version"])
+                self.assertEqual("0.1.3", receipt["version"])
                 self.assertEqual("passed", receipt["smoke_status"])
                 forced = subprocess.run(
                     command + ["-Force"],
@@ -161,7 +172,7 @@ class MultiSourceAuditBootstrapperContractTest(unittest.TestCase):
             thread = threading.Thread(target=server.serve_forever, daemon=True)
             thread.start()
             try:
-                public_url = "https://github.com/Saitamasans/testing-skills/releases/download/multi-source-test-audit-v0.1.2/install-multi-source-test-audit.ps1"
+                public_url = "https://github.com/Saitamasans/testing-skills/releases/download/multi-source-test-audit-v0.1.3/install-multi-source-test-audit.ps1"
                 fixture_url = f"http://127.0.0.1:{server.server_address[1]}/install-multi-source-test-audit.ps1"
                 only_cmd = root / "only-cmd"
                 only_cmd.mkdir()
@@ -212,7 +223,7 @@ class MultiSourceAuditBootstrapperContractTest(unittest.TestCase):
             thread = threading.Thread(target=server.serve_forever, daemon=True)
             thread.start()
             try:
-                public_url = "https://github.com/Saitamasans/testing-skills/releases/download/multi-source-test-audit-v0.1.2/install-multi-source-test-audit.ps1"
+                public_url = "https://github.com/Saitamasans/testing-skills/releases/download/multi-source-test-audit-v0.1.3/install-multi-source-test-audit.ps1"
                 fixture_url = f"http://127.0.0.1:{server.server_address[1]}/missing.ps1"
                 only_cmd = root / "only-cmd"
                 only_cmd.mkdir()
@@ -280,7 +291,7 @@ class MultiSourceAuditRuntimeReleaseContractTest(unittest.TestCase):
                 thread.join(timeout=5)
 
     @unittest.skipUnless(os.environ.get("MSA_FINAL_ARCHIVE"), "set MSA_FINAL_ARCHIVE for full rendered installer integration")
-    def test_rendered_installer_really_installs_v012_and_writes_receipt(self):
+    def test_rendered_installer_really_installs_v013_and_writes_receipt(self):
         archive = Path(os.environ["MSA_FINAL_ARCHIVE"])
         with tempfile.TemporaryDirectory() as raw:
             root = Path(raw)
@@ -290,7 +301,7 @@ class MultiSourceAuditRuntimeReleaseContractTest(unittest.TestCase):
             self.assertEqual(0, result.returncode, result.stderr + result.stdout)
             self.assertNotIn("release_not_published", result.stderr + result.stdout)
             receipt = json.loads((root / "state 中文/installations/multi-source-test-audit.json").read_text(encoding="utf-8"))
-            self.assertEqual("0.1.2", receipt["version"])
+            self.assertEqual("0.1.3", receipt["version"])
             self.assertEqual("passed", receipt["smoke_status"])
 
     @unittest.skipUnless(os.environ.get("MSA_FINAL_ARCHIVE"), "set MSA_FINAL_ARCHIVE for full rendered installer integration")
@@ -309,13 +320,13 @@ class MultiSourceAuditRuntimeReleaseContractTest(unittest.TestCase):
     def test_runtime_manifest_contract_is_explicit_and_hashes_key_files(self):
         manifest = build_runtime_metadata(
             slug="multi-source-test-audit",
-            runtime_version="0.1.2",
+            runtime_version="0.1.3",
             python_version="3.12.10",
             dependencies={"openpyxl": "3.1.5", "cryptography": "49.0.0", "cffi": "2.1.0", "et_xmlfile": "2.0.0", "pycparser": "3.0"},
             key_files={"python/python.exe": "a" * 64, "app/multi_source_test_audit/__main__.py": "b" * 64},
         )
         self.assertEqual("multi-source-test-audit", manifest["slug"])
-        self.assertEqual("0.1.2", manifest["runtime_version"])
+        self.assertEqual("0.1.3", manifest["runtime_version"])
         self.assertEqual("3.12.10", manifest["python_version"])
         self.assertEqual("windows-x64", manifest["platform"])
         self.assertEqual(
@@ -338,11 +349,11 @@ class MultiSourceAuditRuntimeReleaseContractTest(unittest.TestCase):
     def test_bundle_manifest_has_complete_file_inventory_and_receipt_contract(self):
         manifest = build_bundle_metadata(
             slug="multi-source-test-audit",
-            runtime_version="0.1.2",
+            runtime_version="0.1.3",
             files=[{"path": "VERSION", "sha256": "a" * 64, "size": 4}],
         )
         self.assertEqual("multi-source-test-audit", manifest["slug"])
-        self.assertEqual("0.1.2", manifest["runtime_version"])
+        self.assertEqual("0.1.3", manifest["runtime_version"])
         self.assertTrue(manifest["files"])
         paths = {item["path"] for item in manifest["files"]}
         self.assertEqual(len(paths), len(manifest["files"]))
@@ -358,7 +369,7 @@ class MultiSourceAuditRuntimeReleaseContractTest(unittest.TestCase):
     def test_release_asset_renderer_injects_archive_identity_and_checksums(self):
         with tempfile.TemporaryDirectory() as raw:
             root = Path(raw)
-            archive = root / "multi-source-test-audit-0.1.2-windows-x64.zip"
+            archive = root / "multi-source-test-audit-0.1.3-windows-x64.zip"
             bundle = root / "bundle" / "multi-source-test-audit"
             (bundle / "runtime").mkdir(parents=True)
             (bundle / "runtime" / "runtime-manifest.json").write_text("{}\n", encoding="utf-8")
@@ -369,7 +380,7 @@ class MultiSourceAuditRuntimeReleaseContractTest(unittest.TestCase):
                         output.write(path, path.relative_to(bundle.parent).as_posix())
             assets = render_release_assets(archive, root / "assets")
             self.assertEqual(
-                {"SHA256SUMS.txt", "install-multi-source-test-audit.cmd", "install-multi-source-test-audit.ps1", "multi-source-test-audit-0.1.2-windows-x64.zip", "release-manifest.json"},
+                {"SHA256SUMS.txt", "install-multi-source-test-audit.cmd", "install-multi-source-test-audit.ps1", "multi-source-test-audit-0.1.3-windows-x64.zip", "release-manifest.json"},
                 {path.name for path in assets},
             )
             installer = (root / "assets" / "install-multi-source-test-audit.ps1").read_text(encoding="utf-8")
@@ -382,7 +393,7 @@ class MultiSourceAuditRuntimeReleaseContractTest(unittest.TestCase):
                 launcher,
             )
             sums = (root / "assets" / "SHA256SUMS.txt").read_text(encoding="utf-8")
-            self.assertIn("multi-source-test-audit-0.1.2-windows-x64.zip", sums)
+            self.assertIn("multi-source-test-audit-0.1.3-windows-x64.zip", sums)
 
     @unittest.skipUnless(shutil.which("powershell.exe"), "PowerShell is required for template execution")
     def test_unrendered_template_fails_closed_and_rendered_guard_is_not_replaced(self):
@@ -438,7 +449,7 @@ class MultiSourceAuditRuntimeReleaseContractTest(unittest.TestCase):
         python_lock = json.loads((PACKAGE / "python-runtime-lock.json").read_text(encoding="utf-8"))
         wheels = json.loads((PACKAGE / "wheel-lock.json").read_text(encoding="utf-8"))
 
-        self.assertEqual("0.1.2", python_lock["runtime_version"])
+        self.assertEqual("0.1.3", python_lock["runtime_version"])
         self.assertEqual("3.12.10", python_lock["python_version"])
         self.assertEqual(
             "4acbed6dd1c744b0376e3b1cf57ce906f9dc9e95e68824584c8099a63025a3c3",
@@ -458,15 +469,15 @@ class MultiSourceAuditRuntimeReleaseContractTest(unittest.TestCase):
 
     def test_release_identity_has_no_development_version(self):
         version = (ROOT / "skill-sources/multi-source-test-audit/runtime/multi_source_test_audit/version.py").read_text(encoding="utf-8")
-        self.assertIn('__version__ = "0.1.2"', version)
+        self.assertIn('__version__ = "0.1.3"', version)
         self.assertNotIn("0.1.0.dev0", version)
 
     def test_release_contract_declares_only_the_expected_windows_asset(self):
         contract = json.loads((PACKAGE / "release-contract.json").read_text(encoding="utf-8"))
         self.assertEqual("multi-source-test-audit", contract["slug"])
-        self.assertEqual("0.1.2", contract["version"])
+        self.assertEqual("0.1.3", contract["version"])
         self.assertEqual(
-            "multi-source-test-audit-0.1.2-windows-x64.zip",
+            "multi-source-test-audit-0.1.3-windows-x64.zip",
             contract["archive_name"],
         )
         self.assertRegex(contract["archive_sha256"], r"^[0-9a-f]{64}$")
