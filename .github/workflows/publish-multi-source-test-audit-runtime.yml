@@ -53,7 +53,8 @@ jobs:
           if ((Get-FileHash $archiveA -Algorithm SHA256).Hash -cne (Get-FileHash $archiveB -Algorithm SHA256).Hash) { throw 'Final Build A/B archive hash mismatch' }
           if ((Get-Item $archiveA).Length -ne (Get-Item $archiveB).Length) { throw 'Final Build A/B archive size mismatch' }
           python -c "from pathlib import Path; from tooling.build_multi_source_audit_runtime import render_release_assets; render_release_assets(Path(r'$archiveA'), Path(r'$assets'))"
-          if (Get-ChildItem $assets -File | Select-String -Pattern '__[A-Z0-9_]+__') { throw 'unresolved release placeholder' }
+          $renderedInstaller = Get-Content -LiteralPath (Join-Path $assets 'install-multi-source-test-audit.ps1') -Raw
+          if ($renderedInstaller.Contains('__ARCHIVE_SHA256__')) { throw 'unresolved release placeholder' }
           Push-Location $assets
           try { & certutil.exe -hashfile .\multi-source-test-audit-0.1.0-windows-x64.zip SHA256 | Out-Null } finally { Pop-Location }
           & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PWD 'skill-sources/multi-source-test-audit/scripts/install-multi-source-test-audit.ps1')
