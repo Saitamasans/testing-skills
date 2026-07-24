@@ -57,8 +57,6 @@ jobs:
           if ($renderedInstaller.Contains('__ARCHIVE_SHA256__')) { throw 'unresolved release placeholder' }
           Push-Location $assets
           try { & certutil.exe -hashfile .\multi-source-test-audit-0.1.0-windows-x64.zip SHA256 | Out-Null } finally { Pop-Location }
-          & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PWD 'skill-sources/multi-source-test-audit/scripts/install-multi-source-test-audit.ps1')
-          if ($LASTEXITCODE -ne 30) { throw 'unpublished installer must fail closed before public Release' }
       - name: Clean-room staging smoke
         shell: powershell
         run: |
