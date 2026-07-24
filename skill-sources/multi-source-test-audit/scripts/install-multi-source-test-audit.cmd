@@ -3,8 +3,8 @@ chcp 65001 >nul
 setlocal EnableExtensions DisableDelayedExpansion
 set "PSModulePath=%SystemRoot%\System32\WindowsPowerShell\v1.0\Modules"
 
-set "BOOTSTRAP_VERSION=0.1.3"
-set "PS1_URL=https://github.com/Saitamasans/testing-skills/releases/download/multi-source-test-audit-v0.1.3/install-multi-source-test-audit.ps1"
+set "BOOTSTRAP_VERSION=0.1.4"
+set "PS1_URL=https://github.com/Saitamasans/testing-skills/releases/download/multi-source-test-audit-v0.1.4/install-multi-source-test-audit.ps1"
 set "EXPECTED_PS1_SHA256=__INSTALLER_SHA256__"
 set "UNPUBLISHED_SENTINEL=__"
 set "UNPUBLISHED_SENTINEL=%UNPUBLISHED_SENTINEL%INSTALLER_SHA256__"

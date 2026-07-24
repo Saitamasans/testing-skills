@@ -11,16 +11,38 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $script:Slug = 'multi-source-test-audit'
-$script:Version = '0.1.3'
-$script:ReleaseTag = 'multi-source-test-audit-v0.1.3'
-$script:InstallerVersion = '0.1.3'
-$script:ArchiveName = 'multi-source-test-audit-0.1.3-windows-x64.zip'
+$script:Version = '0.1.4'
+$script:ReleaseTag = 'multi-source-test-audit-v0.1.4'
+$script:InstallerVersion = '0.1.4'
+$script:ArchiveName = 'multi-source-test-audit-0.1.4-windows-x64.zip'
 $script:FixedReleaseUrl = "https://github.com/Saitamasans/testing-skills/releases/download/$script:ReleaseTag/$script:ArchiveName"
 $script:PublishedArchiveSha256 = '__ARCHIVE_SHA256__'
 
 function Get-Sha256 {
     param([Parameter(Mandatory = $true)][string]$Path)
     return (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash.ToLowerInvariant()
+}
+
+function Invoke-ReleaseDownload {
+    param(
+        [Parameter(Mandatory = $true)][string]$Url,
+        [Parameter(Mandatory = $true)][string]$OutFile
+    )
+    [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+    $lastError = $null
+    for ($attempt = 1; $attempt -le 3; $attempt++) {
+        try {
+            Remove-Item -LiteralPath $OutFile -Force -ErrorAction SilentlyContinue
+            Invoke-WebRequest -UseBasicParsing -Uri $Url -OutFile $OutFile
+            return
+        }
+        catch {
+            $lastError = $_
+            Remove-Item -LiteralPath $OutFile -Force -ErrorAction SilentlyContinue
+            if ($attempt -lt 3) { Start-Sleep -Seconds $attempt }
+        }
+    }
+    throw "installation_failed: Runtime ZIP download failed after 3 attempts: $($lastError.Exception.Message)"
 }
 
 function Assert-ReleaseUrl {
@@ -214,7 +236,7 @@ function Install-Release {
     $activated = $false
     try {
         New-Directory -Path $tempRoot
-        Invoke-WebRequest -UseBasicParsing -Uri $configuration.Url -OutFile $archive
+        Invoke-ReleaseDownload -Url $configuration.Url -OutFile $archive
         if ((Get-Sha256 $archive) -cne $configuration.Sha256) { throw 'installation_failed: ZIP SHA-256 mismatch' }
         Expand-SafeZip -Archive $archive -Destination $extractRoot
         $bundle = Join-Path $extractRoot $script:Slug
