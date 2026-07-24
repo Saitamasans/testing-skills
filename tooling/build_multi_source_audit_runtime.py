@@ -64,7 +64,7 @@ def download(item: dict, cache: Path, offline: bool) -> Path:
     if not target.exists():
         if offline: raise RuntimeError(f"offline cache miss: {item['filename']}")
         url = item.get("download_url") or item["immutable_url"]
-        request = urllib.request.Request(url, headers={"User-Agent":"multi-source-test-audit-builder/0.1.1"})
+        request = urllib.request.Request(url, headers={"User-Agent":"multi-source-test-audit-builder/0.1.2"})
         with urllib.request.urlopen(request) as response:
             final = response.geturl()
             if not (final.startswith("https://www.python.org/") or final.startswith("https://files.pythonhosted.org/")):
@@ -154,8 +154,14 @@ def render_release_assets(archive_path: Path, output_dir: Path) -> list[Path]:
         raise RuntimeError("unresolved release installer placeholder")
     rendered = output_dir / "install-multi-source-test-audit.ps1"
     rendered.write_text(installer, encoding="utf-8", newline="\n")
+    installer_sha = digest(rendered)
     launcher = output_dir / "install-multi-source-test-audit.cmd"
-    launcher.write_bytes((SOURCE / "scripts" / "install-multi-source-test-audit.cmd").read_bytes())
+    launcher_text = (SOURCE / "scripts" / "install-multi-source-test-audit.cmd").read_bytes().decode("utf-8")
+    launcher_text = launcher_text.replace("__INSTALLER_SHA256__", installer_sha)
+    if "__INSTALLER_SHA256__" in launcher_text:
+        raise RuntimeError("unresolved bootstrapper installer SHA placeholder")
+    launcher_text = launcher_text.replace("\r\n", "\n").replace("\n", "\r\n")
+    launcher.write_bytes(launcher_text.encode("utf-8"))
     rendered_archive = output_dir / archive_name
     rendered_archive.write_bytes(archive_path.read_bytes())
     release_tag = contract.get("release_tag") or f"{contract['slug']}-v{contract['version']}"
@@ -170,6 +176,11 @@ def render_release_assets(archive_path: Path, output_dir: Path) -> list[Path]:
             "size_bytes": archive_size,
             "sha256": archive_sha,
             "download_url": f"https://github.com/Saitamasans/testing-skills/releases/download/{release_tag}/{archive_name}",
+        },
+        "installer": {
+            "file_name": "install-multi-source-test-audit.ps1",
+            "sha256": installer_sha,
+            "download_url": f"https://github.com/Saitamasans/testing-skills/releases/download/{release_tag}/install-multi-source-test-audit.ps1",
         },
         "bundle_manifest": {"path": "multi-source-test-audit/bundle-manifest.json", "sha256": bundle_manifest_sha},
         "assets": ["install-multi-source-test-audit.cmd", "install-multi-source-test-audit.ps1", archive_name, "release-manifest.json", "SHA256SUMS.txt"],
