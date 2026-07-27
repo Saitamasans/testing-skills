@@ -27,7 +27,7 @@ function Read-Manifest {
 
 function Assert-Bundle {
     $runtime = Read-Manifest -Path $script:RuntimeManifestPath
-    if ($runtime.slug -cne 'multi-source-test-audit' -or $runtime.runtime_version -cne '0.1.4' -or $runtime.python_version -cne '3.12.10' -or $runtime.platform -cne 'windows-x64') { throw 'installation_incomplete: runtime manifest identity mismatch' }
+    if ($runtime.slug -cne 'multi-source-test-audit' -or $runtime.runtime_version -cne '0.1.5' -or $runtime.python_version -cne '3.12.10' -or $runtime.platform -cne 'windows-x64') { throw 'installation_incomplete: runtime manifest identity mismatch' }
     $expectedDependencies = [ordered]@{ openpyxl = '3.1.5'; cryptography = '49.0.0'; cffi = '2.1.0'; et_xmlfile = '2.0.0'; pycparser = '3.0' }
     foreach ($name in $expectedDependencies.Keys) {
         if ([string]$runtime.dependencies.$name -cne $expectedDependencies[$name]) { throw "installation_incomplete: dependency version mismatch: $name" }
@@ -42,7 +42,7 @@ function Assert-Bundle {
         if (-not (Test-Path -LiteralPath $schemaPath -PathType Leaf)) { throw "installation_incomplete: schema missing: $schema" }
     }
     $bundle = Read-Manifest -Path $script:BundleManifestPath
-    if ($bundle.slug -cne 'multi-source-test-audit' -or $bundle.runtime_version -cne '0.1.4') { throw 'installation_incomplete: bundle manifest identity mismatch' }
+    if ($bundle.slug -cne 'multi-source-test-audit' -or $bundle.runtime_version -cne '0.1.5') { throw 'installation_incomplete: bundle manifest identity mismatch' }
     $expected = @{}
     foreach ($item in @($bundle.files)) {
         $relative = ([string]$item.path).Replace('\', '/')
@@ -59,7 +59,7 @@ function Assert-Bundle {
 
 try {
     if (-not (Test-Path -LiteralPath $script:Python -PathType Leaf) -or -not (Test-Path -LiteralPath (Join-Path $script:Root 'VERSION') -PathType Leaf)) { throw 'installation_incomplete: bundled Runtime files are missing' }
-    if ((Get-Content -LiteralPath (Join-Path $script:Root 'VERSION') -Raw).Trim() -cne '0.1.4') { throw 'installation_incomplete: VERSION mismatch' }
+    if ((Get-Content -LiteralPath (Join-Path $script:Root 'VERSION') -Raw).Trim() -cne '0.1.5') { throw 'installation_incomplete: VERSION mismatch' }
     Assert-Bundle | Out-Null
     & $script:Python -I -m multi_source_test_audit @Arguments
     exit $LASTEXITCODE
