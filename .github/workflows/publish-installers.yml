@@ -1,0 +1,130 @@
+name: Publish Windows skill installers
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "installers/*.cmd"
+      - "docs/release/skill-installers-v1.md"
+      - ".github/workflows/publish-installers.yml"
+  workflow_dispatch:
+  workflow_run:
+    workflows: ["Publish verified eighth Skill runtime"]
+    types: [completed]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: skill-installers-v1-${{ github.repository }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the release source
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
+          fetch-depth: 0
+          clean: true
+
+      - name: Validate immutable public installer entries
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUNTIME_TAG: web-api-test-execution-evidence-v1.0.2
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin main
+          source_commit="$(git rev-parse HEAD)"
+          git merge-base --is-ancestor "$source_commit" "refs/remotes/origin/main"
+          test "$source_commit" = "${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}"
+
+          mapfile -t ordinary < <(find installers -maxdepth 1 -type f -name 'install-*.cmd' \
+            ! -name 'install-all.cmd' \
+            ! -name 'install-web-api-test-execution-evidence.cmd' | sort)
+          test "${#ordinary[@]}" -eq 7
+
+          mkdir -p build
+          runtime_release_ready=false
+          if git fetch --force origin "refs/tags/$RUNTIME_TAG:refs/tags/$RUNTIME_TAG"; then
+            runtime_tag_commit="$(git rev-parse "refs/tags/$RUNTIME_TAG^{commit}")"
+            if git merge-base --is-ancestor "$runtime_tag_commit" "refs/remotes/origin/main" && \
+              gh api "repos/$GITHUB_REPOSITORY/releases/tags/$RUNTIME_TAG" \
+                > build/runtime-release-metadata.json 2>/dev/null; then
+              if node - "$RUNTIME_TAG" "$runtime_tag_commit" build/runtime-release-metadata.json <<'NODE'
+          const fs = require("node:fs");
+          const [tag, commit, file] = process.argv.slice(2);
+          const value = JSON.parse(fs.readFileSync(file, "utf8"));
+          const expected = [
+            "SHA256SUMS.txt", "install-all.cmd", "install-web-api-test-execution-evidence.cmd",
+            "install-web-api-test-execution-evidence.ps1", "install.ps1",
+            "web-api-test-execution-evidence-1.0.2-windows-x64.manifest.json",
+            "web-api-test-execution-evidence-1.0.2-windows-x64.zip",
+          ];
+          const actual = value.assets.map(({ name }) => name).sort();
+          if (value.tag_name !== tag || value.target_commitish !== commit || value.draft !== false || value.immutable !== true) {
+            process.exit(1);
+          }
+          if (JSON.stringify(actual) !== JSON.stringify(expected)) {
+            console.error("exact runtime asset allowlist does not match");
+            process.exit(1);
+          }
+          NODE
+              then
+                runtime_release_ready=true
+              fi
+            fi
+          fi
+          if [[ "$runtime_release_ready" != "true" ]]; then
+            if [[ "$GITHUB_EVENT_NAME" == "workflow_run" ]]; then
+              echo "successful runtime workflow did not publish the required immutable release" >&2
+              exit 1
+            fi
+            echo "runtime release is missing or not immutable; public installer entry is unchanged"
+            exit 0
+          fi
+          mkdir -p build/immutable-all build/frozen-installers
+          gh release download "$RUNTIME_TAG" --dir build/immutable-all
+          test "$(grep -c '  install-all.cmd$' build/immutable-all/SHA256SUMS.txt)" -eq 1
+          grep '  install-all.cmd$' build/immutable-all/SHA256SUMS.txt |
+            (cd build/immutable-all && sha256sum -c -)
+
+          git fetch --force origin "refs/tags/skill-installers-v1:refs/tags/skill-installers-v1"
+          frozen_tag_commit="$(git rev-parse 'refs/tags/skill-installers-v1^{commit}')"
+          git merge-base --is-ancestor "$frozen_tag_commit" "refs/remotes/origin/main"
+          gh api "repos/$GITHUB_REPOSITORY/releases/tags/skill-installers-v1" \
+            > build/frozen-installer-release-metadata.json
+          node - build/frozen-installer-release-metadata.json <<'NODE'
+          const fs = require("node:fs");
+          const value = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
+          const expected = [
+            "SHA256SUMS.txt",
+            "install-all.cmd",
+            "install-multi-api-flow-test.cmd",
+            "install-production-verification-test.cmd",
+            "install-requirement-clarification-test.cmd",
+            "install-requirement-test-workbench.cmd",
+            "install-single-api-test-concise.cmd",
+            "install-single-api-test-full.cmd",
+            "install-test-case-quality-audit.cmd",
+          ];
+          const actual = value.assets.map(({ name }) => name).sort();
+          if (value.tag_name !== "skill-installers-v1" || value.draft !== false ||
+              value.prerelease !== false || value.immutable !== true) {
+            throw new Error("skill-installers-v1 is not the expected frozen public release");
+          }
+          if (JSON.stringify(actual) !== JSON.stringify(expected)) {
+            throw new Error("frozen installer asset allowlist does not match");
+          }
+          NODE
+          gh release download skill-installers-v1 --dir build/frozen-installers
+          test -f build/frozen-installers/SHA256SUMS.txt
+          (cd build/frozen-installers && sha256sum -c SHA256SUMS.txt)
+          for launcher in "${ordinary[@]}"; do
+            cmp "$launcher" "build/frozen-installers/$(basename "$launcher")"
+          done
+          echo "frozen skill-installers-v1 remains unchanged; the all-Skills and eighth-Skill entry is the immutable $RUNTIME_TAG release"

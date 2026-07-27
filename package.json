@@ -10,10 +10,12 @@
     "test": "node --test tests/*.test.mjs",
     "test:runner": "npm test --workspace @saitamasans/testing-runner",
     "build:runner": "npm run build --workspace @saitamasans/testing-runner",
+    "build:windows-bundle": "node packages/testing-runner/scripts/build-windows-bundle.mjs",
     "pack:runner-release": "node packages/testing-runner/scripts/package-release.mjs",
     "render:sample": "node tooling/test-case-renderer.mjs --input tests/fixtures/sample-report.json --output-dir build/test-output --basename sample"
   },
   "devDependencies": {
-    "playwright": "^1.52.0"
+    "playwright": "1.61.1",
+    "unzipper": "0.10.14"
   }
 }

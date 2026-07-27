@@ -9,7 +9,7 @@ function roleLocator(page: Page, spec: string): Locator {
   return page.getByRole(match[1] as Parameters<Page["getByRole"]>[0], options);
 }
 
-function rawLocator(page: Page, spec: string): Locator {
+export function locatorForSpec(page: Page, spec: string): Locator {
   if (spec.startsWith("data-testid=")) return page.getByTestId(spec.slice("data-testid=".length));
   if (spec.startsWith("testid=")) return page.getByTestId(spec.slice("testid=".length));
   if (spec.startsWith("role=")) return roleLocator(page, spec);
@@ -20,7 +20,7 @@ function rawLocator(page: Page, spec: string): Locator {
 }
 
 export async function resolveLocator(page: Page, spec: string): Promise<Locator> {
-  const locator = rawLocator(page, spec);
+  const locator = locatorForSpec(page, spec);
   const count = await locator.count();
   let visibleIndex = -1;
   let visibleCount = 0;

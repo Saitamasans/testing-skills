@@ -3,30 +3,42 @@ import { spawn } from "node:child_process";
 import {
   access,
   cp,
+  copyFile,
+  mkdtemp,
   mkdir,
   readFile,
   readdir,
   rename,
   rm,
   stat,
+  symlink,
   writeFile,
 } from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { gunzipSync } from "node:zlib";
 
 const PACKAGE_NAME = "@saitamasans/testing-runner";
-const VERSION = "1.0.4";
-const FILE_NAME = "saitamasans-testing-runner-1.0.4.tgz";
-const RELEASE_TAG = "testing-runner-v1.0.4";
+const RELEASE_PREPARATION_PATH = fileURLToPath(
+  new URL("../release/runner-1.1.4-release-lock.json", import.meta.url),
+);
+const RELEASE_PREPARATION = JSON.parse(await readFile(RELEASE_PREPARATION_PATH, "utf8"));
+const VERSION = RELEASE_PREPARATION.runner.version;
+const FILE_NAME = RELEASE_PREPARATION.runner.file_name;
+const RELEASE_TAG = RELEASE_PREPARATION.runner.release_tag;
 const RELEASE_URL = "https://github.com/Saitamasans/testing-skills/releases/download/"
   + RELEASE_TAG + "/" + FILE_NAME;
 const CHROMIUM_ESTIMATED_SIZE_BYTES = 180_000_000;
 const BUNDLED_DEPENDENCIES = [
+  "@saitamasans/testing-contract-compiler",
   "ajv",
   "commander",
   "exceljs",
+  "jszip",
+  "mysql2",
   "node-sql-parser",
+  "pg",
   "playwright",
 ];
 const OWNED_TEXT_EXTENSIONS = new Set([
@@ -34,46 +46,62 @@ const OWNED_TEXT_EXTENSIONS = new Set([
   ".html",
   ".js",
   ".json",
+  ".map",
   ".md",
   ".mjs",
   ".txt",
+  ".ts",
   ".yaml",
   ".yml",
 ]);
 const REPO_ROOT = fileURLToPath(new URL("../../..", import.meta.url));
 const PACKAGE_ROOT = fileURLToPath(new URL("..", import.meta.url));
-const DEFAULT_MANIFEST_PATH = path.join(
-  REPO_ROOT,
-  "skill-sources",
-  "web-api-test-execution-evidence",
-  "assets",
-  "runner-release.json",
+const RELEASE_DEPENDENCY_LOCK_PATH = fileURLToPath(
+  new URL("../release/package-lock.json", import.meta.url),
+);
+const BUNDLED_WORKSPACES_PATH = fileURLToPath(
+  new URL("../release/bundled-workspaces.json", import.meta.url),
 );
 
+async function readNormalizedHashBytes(file) {
+  const bytes = await readFile(file);
+  if (!OWNED_TEXT_EXTENSIONS.has(path.extname(file))) {
+    return bytes;
+  }
+  return Buffer.from(bytes.toString("utf8").replace(/\r\n?/g, "\n"), "utf8");
+}
 export function resolveReleaseOutputDir(outputDir = path.join(REPO_ROOT, "build", "releases")) {
   return path.resolve(REPO_ROOT, outputDir);
 }
 
-async function npmCliPath() {
-  if (process.env.npm_execpath) return process.env.npm_execpath;
-  const candidate = path.join(
-    path.dirname(process.execPath),
-    "node_modules",
-    "npm",
-    "bin",
-    "npm-cli.js",
-  );
-  await access(candidate);
-  return candidate;
+async function packageManager() {
+  if (process.env.npm_execpath) {
+    if (!/[\\/]npm(?:-cli)?\.(?:js|cjs)$/i.test(process.env.npm_execpath)) {
+      throw new Error("release packaging requires npm with the committed dependency lock");
+    }
+    return {
+      kind: "npm",
+      cli: process.env.npm_execpath,
+    };
+  }
+  const candidate = {
+    kind: "npm",
+    cli: path.join(path.dirname(process.execPath), "node_modules", "npm", "bin", "npm-cli.js"),
+  };
+  try {
+    await access(candidate.cli);
+    return candidate;
+  } catch {
+    throw new Error("release packaging requires npm with the committed dependency lock");
+  }
 }
 
-async function runNpm(args, cwd = REPO_ROOT) {
-  const cli = await npmCliPath();
+async function runPackageManager(manager, args, cwd = REPO_ROOT) {
   const env = { ...process.env };
   const pathKey = Object.keys(env).find((key) => key.toLowerCase() === "path") || "PATH";
   env[pathKey] = path.dirname(process.execPath) + path.delimiter + (env[pathKey] || "");
   return await new Promise((resolve, reject) => {
-    const child = spawn(process.execPath, [cli, ...args], {
+    const child = spawn(process.execPath, [manager.cli, ...args], {
       cwd,
       env,
       stdio: ["ignore", "pipe", "pipe"],
@@ -87,9 +115,9 @@ async function runNpm(args, cwd = REPO_ROOT) {
     child.once("error", reject);
     child.once("exit", (code, signal) => {
       if (signal) {
-        reject(new Error("npm terminated by " + signal));
+        reject(new Error(manager.kind + " terminated by " + signal));
       } else if (code !== 0) {
-        reject(new Error("npm exited with " + code + "\n" + stdout + "\n" + stderr));
+        reject(new Error(manager.kind + " exited with " + code + "\n" + stdout + "\n" + stderr));
       } else {
         resolve({ stdout, stderr });
       }
@@ -100,6 +128,84 @@ async function runNpm(args, cwd = REPO_ROOT) {
 export async function sha256File(file) {
   const bytes = await readFile(file);
   return createHash("sha256").update(bytes).digest("hex");
+}
+
+async function addTreeToHash(hash, root, relative = "") {
+  const directory = path.join(root, relative);
+  const entries = await readdir(directory, { withFileTypes: true });
+  entries.sort((left, right) => (
+    left.name < right.name ? -1 : left.name > right.name ? 1 : 0
+  ));
+  for (const entry of entries) {
+    const child = path.join(relative, entry.name);
+    if (entry.isDirectory()) {
+      await addTreeToHash(hash, root, child);
+    } else if (entry.isFile()) {
+      hash.update(child.replaceAll(path.sep, "/") + "\0");
+      hash.update(await readNormalizedHashBytes(path.join(root, child)));
+      hash.update("\0");
+    }
+  }
+}
+
+export async function hashBundledWorkspace(root) {
+  const hash = createHash("sha256");
+  for (const relative of ["package.json", "dist", "schemas"]) {
+    const absolute = path.join(root, relative);
+    const info = await stat(absolute);
+    if (info.isDirectory()) {
+      await addTreeToHash(hash, root, relative);
+    } else {
+      hash.update(relative + "\0");
+      hash.update(await readNormalizedHashBytes(absolute));
+      hash.update("\0");
+    }
+  }
+  return hash.digest("hex");
+}
+
+async function installBundledWorkspaces(manager, stageDir) {
+  const contract = JSON.parse(await readFile(BUNDLED_WORKSPACES_PATH, "utf8"));
+  if (contract.schema_version !== 1 || !Array.isArray(contract.packages)) {
+    throw new Error("invalid bundled workspace contract");
+  }
+  const temporaryRoot = await mkdtemp(path.join(os.tmpdir(), "testing-runner-bundled-workspace-"));
+  try {
+    await copyFile(
+      path.join(REPO_ROOT, "tsconfig.base.json"),
+      path.join(temporaryRoot, "tsconfig.base.json"),
+    );
+    await symlink(
+      path.join(REPO_ROOT, "node_modules"),
+      path.join(temporaryRoot, "node_modules"),
+      process.platform === "win32" ? "junction" : "dir",
+    );
+    for (const bundled of contract.packages) {
+      const source = path.resolve(path.dirname(BUNDLED_WORKSPACES_PATH), bundled.source);
+      const workspace = path.join(temporaryRoot, "packages", path.basename(source));
+      await cp(source, workspace, { recursive: true });
+      await runPackageManager(manager, ["run", "build"], workspace);
+      const sourcePackage = JSON.parse(await readFile(path.join(workspace, "package.json"), "utf8"));
+      if (sourcePackage.name !== bundled.name || sourcePackage.version !== bundled.version) {
+        throw new Error("bundled workspace identity does not match contract: " + bundled.name);
+      }
+      const actualHash = await hashBundledWorkspace(workspace);
+      if (actualHash !== bundled.content_sha256) {
+        throw new Error(
+          "bundled workspace content hash does not match contract: " + bundled.name
+          + " (expected " + bundled.content_sha256 + ", got " + actualHash + ")",
+        );
+      }
+      const destination = path.join(stageDir, "node_modules", ...bundled.name.split("/"));
+      await mkdir(destination, { recursive: true });
+      await copyFile(path.join(workspace, "package.json"), path.join(destination, "package.json"));
+      for (const directory of ["dist", "schemas"]) {
+        await cp(path.join(workspace, directory), path.join(destination, directory), { recursive: true });
+      }
+    }
+  } finally {
+    await rm(temporaryRoot, { recursive: true, force: true });
+  }
 }
 
 export async function normalizeReleaseTextTree(root) {
@@ -148,16 +254,18 @@ export async function listTarEntries(archivePath) {
 
 export async function buildReleaseTarball(
   outputDir = path.join(REPO_ROOT, "build", "releases"),
-  manifestPath = DEFAULT_MANIFEST_PATH,
+  manifestPath,
 ) {
   outputDir = resolveReleaseOutputDir(outputDir);
+  manifestPath ??= path.join(outputDir, "runner-release.json");
   await mkdir(outputDir, { recursive: true });
   const archivePath = path.join(outputDir, FILE_NAME);
   const checksumPath = archivePath + ".sha256";
   await rm(archivePath, { force: true });
   await rm(checksumPath, { force: true });
 
-  await runNpm(["run", "build", "--workspace", PACKAGE_NAME]);
+  const manager = await packageManager();
+  await runPackageManager(manager, ["run", "build"], PACKAGE_ROOT);
   const stageDir = path.join(outputDir, ".stage-" + randomUUID());
   try {
     await mkdir(stageDir, { recursive: true });
@@ -168,6 +276,34 @@ export async function buildReleaseTarball(
     }
     await normalizeReleaseTextTree(stageDir);
     const packageJson = JSON.parse(await readFile(path.join(PACKAGE_ROOT, "package.json"), "utf8"));
+    if (packageJson.name !== PACKAGE_NAME || packageJson.version !== VERSION) {
+      throw new Error("Runner package identity does not match the prepared release lock");
+    }
+    const publicPackageJson = structuredClone(packageJson);
+    delete publicPackageJson.dependencies["@saitamasans/testing-contract-compiler"];
+    publicPackageJson.scripts = {};
+    publicPackageJson.bundledDependencies = BUNDLED_DEPENDENCIES.filter(
+      (name) => name !== "@saitamasans/testing-contract-compiler",
+    );
+    delete publicPackageJson.devDependencies;
+    await writeFile(
+      path.join(stageDir, "package.json"),
+      JSON.stringify(publicPackageJson, null, 2) + "\n",
+      "utf8",
+    );
+    const releaseLock = JSON.parse(await readFile(RELEASE_DEPENDENCY_LOCK_PATH, "utf8"));
+    const lockedRoot = releaseLock.packages?.[""];
+    if (releaseLock.lockfileVersion !== 3
+        || lockedRoot?.name !== publicPackageJson.name
+        || lockedRoot?.version !== publicPackageJson.version
+        || JSON.stringify(lockedRoot?.dependencies) !== JSON.stringify(publicPackageJson.dependencies)) {
+      throw new Error("committed Runner release dependency lock does not match package.json");
+    }
+    await copyFile(RELEASE_DEPENDENCY_LOCK_PATH, path.join(stageDir, "package-lock.json"));
+    await runPackageManager(manager, [
+      "ci", "--omit=dev", "--ignore-scripts", "--no-audit", "--no-fund",
+    ], stageDir);
+    await installBundledWorkspaces(manager, stageDir);
     packageJson.scripts = {};
     packageJson.bundledDependencies = BUNDLED_DEPENDENCIES;
     delete packageJson.devDependencies;
@@ -176,32 +312,16 @@ export async function buildReleaseTarball(
       JSON.stringify(packageJson, null, 2) + "\n",
       "utf8",
     );
-    await runNpm([
-      "install",
-      "--package-lock-only",
-      "--ignore-scripts",
-      "--no-audit",
-      "--no-fund",
-    ], stageDir);
-    await runNpm([
-      "ci",
-      "--omit=dev",
-      "--ignore-scripts",
-      "--no-audit",
-      "--no-fund",
-    ], stageDir);
-    const packed = await runNpm([
-      "pack",
-      "--pack-destination",
-      outputDir,
-      "--json",
-      "--ignore-scripts",
-    ], stageDir);
-    const result = JSON.parse(packed.stdout.trim());
-    if (!Array.isArray(result) || result.length !== 1 || !result[0]?.filename) {
-      throw new Error("npm pack did not return exactly one archive");
+    const packArgs = ["pack", "--pack-destination", outputDir, "--json", "--ignore-scripts"];
+    const packed = await runPackageManager(manager, packArgs, stageDir);
+    const parsed = JSON.parse(packed.stdout.trim());
+    const result = Array.isArray(parsed) ? parsed[0] : parsed;
+    if (!result?.filename) {
+      throw new Error(manager.kind + " pack did not return an archive filename");
     }
-    const producedPath = path.join(outputDir, result[0].filename);
+    const producedPath = path.isAbsolute(result.filename)
+      ? result.filename
+      : path.join(outputDir, result.filename);
     if (path.resolve(producedPath) !== path.resolve(archivePath)) {
       await rename(producedPath, archivePath);
     }

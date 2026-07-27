@@ -19,6 +19,12 @@ async function readJsonBody(request: http.IncomingMessage): Promise<unknown> {
   return JSON.parse(text) as unknown;
 }
 
+async function readFormBody(request: http.IncomingMessage): Promise<URLSearchParams> {
+  const chunks: Buffer[] = [];
+  for await (const chunk of request) chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+  return new URLSearchParams(Buffer.concat(chunks).toString("utf8"));
+}
+
 function writeHtml(response: http.ServerResponse, html: string): void {
   response.writeHead(200, { "content-type": "text/html; charset=utf-8" });
   response.end(html);
@@ -29,14 +35,23 @@ function writeJson(response: http.ServerResponse, status: number, value: unknown
   response.end(JSON.stringify(value));
 }
 
-export async function startDemoApp(): Promise<DemoApp> {
+export async function startDemoApp(options: {
+  rootRedirectToLogin?: boolean;
+  sequenceLogin?: { username: string; password: string };
+} = {}): Promise<DemoApp> {
   const items = new Map<string, Item>();
   let counter = 0;
   let lastId = "";
+  let loginErrorPending = false;
 
   const server = http.createServer(async (request, response) => {
     try {
       const url = new URL(request.url ?? "/", "http://127.0.0.1");
+      if (options.rootRedirectToLogin && request.method === "GET" && url.pathname === "/") {
+        response.writeHead(302, { location: "/login" });
+        response.end();
+        return;
+      }
       if (request.method === "POST" && url.pathname === "/api/items") {
         const body = await readJsonBody(request);
         const name = typeof body === "object" && body !== null && "name" in body
@@ -47,6 +62,16 @@ export async function startDemoApp(): Promise<DemoApp> {
         const item = { id, name };
         items.set(id, item);
         writeJson(response, 201, item);
+        return;
+      }
+
+      if (request.method === "POST" && url.pathname === "/login" && options.sequenceLogin) {
+        const body = await readFormBody(request);
+        const valid = body.get("username") === options.sequenceLogin.username
+          && body.get("password") === options.sequenceLogin.password;
+        loginErrorPending = !valid;
+        response.writeHead(303, { location: valid ? "/items" : "/login" });
+        response.end();
         return;
       }
 
@@ -62,10 +87,15 @@ export async function startDemoApp(): Promise<DemoApp> {
       }
 
       if (request.method === "GET" && url.pathname === "/login") {
+        const sequenceError = options.sequenceLogin && loginErrorPending
+          ? "<p>用户名或密码错误</p>"
+          : "";
+        loginErrorPending = false;
         writeHtml(response, `
           <!doctype html>
           <title>Login</title>
-          <form method="GET" action="/items">
+          ${sequenceError}
+          <form method="${options.sequenceLogin ? "POST" : "GET"}" action="${options.sequenceLogin ? "/login" : "/items"}">
             <label>Username <input name="username" /></label>
             <label>Password <input name="password" type="password" /></label>
             <button data-testid="login-submit" type="submit">Login</button>
@@ -81,6 +111,7 @@ export async function startDemoApp(): Promise<DemoApp> {
         writeHtml(response, `
           <!doctype html>
           <title>Items</title>
+          ${options.sequenceLogin ? "<h1>测试工作台</h1>" : ""}
           <h1>Items for ${url.searchParams.get("username") ?? "guest"}</h1>
           <ul>${links}</ul>
         `);

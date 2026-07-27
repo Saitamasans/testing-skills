@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "status": "locked-not-published",
+  "runner": {
+    "name": "@saitamasans/testing-runner",
+    "version": "1.1.4",
+    "release_tag": "testing-runner-v1.1.4",
+    "file_name": "saitamasans-testing-runner-1.1.4.tgz"
+  },
+  "artifact": { "size_bytes": 22826773, "sha256": "aa861bf0e82a8cabba7e5b93151950873eab8f421310fccf45fd38933578058a" },
+  "publication": { "tag_created": false, "release_created": false, "assets_uploaded": false },
+  "runtime_target": { "version": "1.0.3", "compiler": "1.0.0", "contract": "1.0.0" },
+  "previous_release": { "name": "@saitamasans/testing-runner", "version": "1.1.2", "download_url": "https://github.com/Saitamasans/testing-skills/releases/download/testing-runner-v1.1.2/saitamasans-testing-runner-1.1.2.tgz", "sha256": "0db2c917eaf786fa9c03bacc9f33a058ef8a9b429bc111772c7833f82c664a07", "size_bytes": 22769464 },
+  "rules": { "reject_previous_version_label": "1.1.2", "require_reproducible_artifact_before_locking": true, "forbid_overwrite_of_previous_release": true }
+}

@@ -1,0 +1,41 @@
+{
+  "protocol_version": "1.0.0",
+  "profile_id": "saitama-login-sequence-live",
+  "targets": {
+    "workbench": { "kind": "web", "origin": "https://test.saitamatest.top" }
+  },
+  "credentials": {
+    "username": { "source": "env", "name": "SAITAMA_TEST_USERNAME" },
+    "password": { "source": "env", "name": "SAITAMA_TEST_PASSWORD" },
+    "wrong_password": { "source": "env", "name": "SAITAMA_TEST_WRONG_PASSWORD" }
+  },
+  "case_plans": {
+    "LOGIN-SEQ-001": [
+      { "type": "web.goto", "action_id": "LOGIN-SEQ-001-open", "target_alias": "workbench", "url": "https://test.saitamatest.top/", "risk": "R0", "source_step": "LOGIN-SEQ-001-A1" },
+      { "type": "web.fill", "action_id": "LOGIN-SEQ-001-username", "target_alias": "workbench", "locator": "css=input[name=username]", "value_ref": { "source": "env", "name": "username" }, "risk": "R1", "source_step": "LOGIN-SEQ-001-A2" },
+      { "type": "web.fill", "action_id": "LOGIN-SEQ-001-password", "target_alias": "workbench", "locator": "css=input[name=password]", "value_ref": { "source": "env", "name": "wrong_password" }, "risk": "R1", "source_step": "LOGIN-SEQ-001-A3" },
+      { "type": "web.click", "action_id": "LOGIN-SEQ-001-submit", "target_alias": "workbench", "locator": "css=button[type=submit]", "risk": "R1", "source_step": "LOGIN-SEQ-001-A4" },
+      { "type": "web.assert", "action_id": "LOGIN-SEQ-001-error", "target_alias": "workbench", "assertion": "text-contains=用户名或密码错误", "risk": "R0", "source_step": "LOGIN-SEQ-001-E1" },
+      { "type": "web.assert", "action_id": "LOGIN-SEQ-001-login-page", "target_alias": "workbench", "assertion": "url=https://test.saitamatest.top/", "risk": "R0", "source_step": "LOGIN-SEQ-001-E2" },
+      { "type": "web.assert", "action_id": "LOGIN-SEQ-001-form-visible", "target_alias": "workbench", "assertion": "visible:css=input[name=username]", "risk": "R0", "source_step": "LOGIN-SEQ-001-E3" }
+    ],
+    "LOGIN-SEQ-002": [
+      { "type": "web.goto", "action_id": "LOGIN-SEQ-002-open", "target_alias": "workbench", "url": "https://test.saitamatest.top/", "risk": "R0", "source_step": "LOGIN-SEQ-002-A1" },
+      { "type": "web.fill", "action_id": "LOGIN-SEQ-002-username", "target_alias": "workbench", "locator": "css=input[name=username]", "value_ref": { "source": "env", "name": "username" }, "risk": "R1", "source_step": "LOGIN-SEQ-002-A2" },
+      { "type": "web.fill", "action_id": "LOGIN-SEQ-002-password", "target_alias": "workbench", "locator": "css=input[name=password]", "value_ref": { "source": "env", "name": "password" }, "risk": "R1", "source_step": "LOGIN-SEQ-002-A3" },
+      { "type": "web.click", "action_id": "LOGIN-SEQ-002-submit", "target_alias": "workbench", "locator": "css=button[type=submit]", "risk": "R1", "source_step": "LOGIN-SEQ-002-A4" },
+      { "type": "web.assert", "action_id": "LOGIN-SEQ-002-workspace", "target_alias": "workbench", "assertion": "text=测试工作台", "risk": "R0", "source_step": "LOGIN-SEQ-002-E1" },
+      { "type": "web.assert", "action_id": "LOGIN-SEQ-002-form-hidden", "target_alias": "workbench", "assertion": "not-exists:css=input[name=username]", "risk": "R0", "source_step": "LOGIN-SEQ-002-E2" }
+    ],
+    "LOGIN-SEQ-003": [
+      { "type": "web.goto", "action_id": "LOGIN-SEQ-003-open", "target_alias": "workbench", "url": "https://test.saitamatest.top/", "risk": "R0", "source_step": "LOGIN-SEQ-003-A1" },
+      { "type": "web.fill", "action_id": "LOGIN-SEQ-003-username", "target_alias": "workbench", "locator": "css=input[name=username]", "value_ref": { "source": "env", "name": "username" }, "risk": "R1", "source_step": "LOGIN-SEQ-003-A2" },
+      { "type": "web.fill", "action_id": "LOGIN-SEQ-003-password", "target_alias": "workbench", "locator": "css=input[name=password]", "value_ref": { "source": "env", "name": "wrong_password" }, "risk": "R1", "source_step": "LOGIN-SEQ-003-A3" },
+      { "type": "web.click", "action_id": "LOGIN-SEQ-003-submit", "target_alias": "workbench", "locator": "css=button[type=submit]", "risk": "R1", "source_step": "LOGIN-SEQ-003-A4" },
+      { "type": "web.assert", "action_id": "LOGIN-SEQ-003-error", "target_alias": "workbench", "assertion": "text-contains=用户名或密码错误", "risk": "R0", "source_step": "LOGIN-SEQ-003-E1" },
+      { "type": "web.assert", "action_id": "LOGIN-SEQ-003-login-page", "target_alias": "workbench", "assertion": "url=https://test.saitamatest.top/", "risk": "R0", "source_step": "LOGIN-SEQ-003-E2" },
+      { "type": "web.assert", "action_id": "LOGIN-SEQ-003-form-visible", "target_alias": "workbench", "assertion": "visible:css=input[name=username]", "risk": "R0", "source_step": "LOGIN-SEQ-003-E3" }
+    ]
+  },
+  "rule_versions": ["1.0.0"]
+}

@@ -267,11 +267,15 @@ export class VisualProgressController implements RunObserver {
   private state = createInitialVisualProgressState({ manifestHash: "", origins: [], caseTotal: 0 });
 
   constructor(
-    private readonly page: Page,
+    private page: Page,
     private readonly fullscreen: boolean,
     private readonly actionResultPauseMs = 0,
     private readonly pause: (milliseconds: number) => Promise<void> = delay,
   ) {}
+
+  setPage(page: Page): void {
+    this.page = page;
+  }
 
   private async render(): Promise<void> {
     this.state.elapsedMs = Date.now() - this.startedAt;

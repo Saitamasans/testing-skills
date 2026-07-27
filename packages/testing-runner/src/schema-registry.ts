@@ -14,12 +14,16 @@ interface JsonSchema {
 const schemaFiles: Record<SchemaId, string> = {
   report: "report.schema.json",
   "execution-profile": "execution-profile.schema.json",
+  "discovery-approval": "discovery-approval.schema.json",
+  "discovery-receipt": "discovery-receipt.schema.json",
   "run-manifest": "run-manifest.schema.json",
   approval: "approval.schema.json",
   "run-result": "run-result.schema.json",
 };
 const semanticSchemaIds = new Set<SchemaId>([
   "execution-profile",
+  "discovery-approval",
+  "discovery-receipt",
   "run-manifest",
   "approval",
   "run-result",
@@ -72,9 +76,16 @@ const validators = new Map<SchemaId, ValidateFunction>();
 
 ajv.addSchema(loadSchema("persisted-value.schema.json"));
 
+const loadedSchemas = new Map<SchemaId, JsonSchema>();
 for (const schemaId of Object.keys(schemaFiles) as SchemaId[]) {
   const schema = loadSchema(schemaFiles[schemaId]);
-  validators.set(schemaId, ajv.compile(schema));
+  loadedSchemas.set(schemaId, schema);
+  ajv.addSchema(schema);
+}
+
+for (const [schemaId, schema] of loadedSchemas) {
+  const validator = schema.$id ? ajv.getSchema(schema.$id) : undefined;
+  validators.set(schemaId, validator ?? ajv.compile(schema));
 }
 
 export class ProtocolValidationError extends Error {

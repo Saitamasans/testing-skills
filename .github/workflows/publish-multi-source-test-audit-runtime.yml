@@ -1,0 +1,94 @@
+name: Publish multi-source-test-audit Windows runtime
+
+on:
+  push:
+    tags:
+      - "multi-source-test-audit-v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Immutable release tag
+        required: true
+        default: multi-source-test-audit-v0.1.6
+        type: string
+
+permissions:
+  contents: write
+
+env:
+  EXPECTED_TAG: multi-source-test-audit-v0.1.6
+
+jobs:
+  build-and-publish:
+    if: ${{ github.event_name != 'push' || github.ref_name == 'multi-source-test-audit-v0.1.6' }}
+    runs-on: windows-2025
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          fetch-depth: 0
+          clean: true
+      - name: Verify immutable tag
+        shell: powershell
+        run: |
+          $tag = if ('${{ github.event_name }}' -eq 'workflow_dispatch') { '${{ inputs.tag }}' } else { '${{ github.ref_name }}' }
+          if ($tag -cne $env:EXPECTED_TAG) { throw "unexpected release tag: $tag" }
+          git fetch --no-tags origin main
+          git merge-base --is-ancestor "refs/tags/$tag" refs/remotes/origin/main
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.12'
+          architecture: x64
+      - name: Final Build A and B
+        shell: powershell
+        run: |
+          $cache = Join-Path $env:RUNNER_TEMP 'multi-source-test-audit-cache'
+          $a = Join-Path $env:RUNNER_TEMP 'multi-source-test-audit-final-a'
+          $b = Join-Path $env:RUNNER_TEMP 'multi-source-test-audit-final-b'
+          $assets = Join-Path $PWD 'build/release-assets'
+          New-Item -ItemType Directory -Path $a, $b, $assets -Force | Out-Null
+          python tooling/build_multi_source_audit_runtime.py --output-dir $a --download-cache $cache
+          python tooling/build_multi_source_audit_runtime.py --output-dir $b --download-cache $cache
+          $archiveA = Join-Path $a 'multi-source-test-audit-0.1.6-windows-x64.zip'
+          $archiveB = Join-Path $b 'multi-source-test-audit-0.1.6-windows-x64.zip'
+          if ((Get-FileHash $archiveA -Algorithm SHA256).Hash -cne (Get-FileHash $archiveB -Algorithm SHA256).Hash) { throw 'Final Build A/B archive hash mismatch' }
+          if ((Get-Item $archiveA).Length -ne (Get-Item $archiveB).Length) { throw 'Final Build A/B archive size mismatch' }
+          python -c "from pathlib import Path; from tooling.build_multi_source_audit_runtime import render_release_assets; render_release_assets(Path(r'$archiveA'), Path(r'$assets'))"
+          $renderedInstaller = Get-Content -LiteralPath (Join-Path $assets 'install-multi-source-test-audit.ps1') -Raw
+          if ($renderedInstaller.Contains('__ARCHIVE_SHA256__')) { throw 'unresolved release placeholder' }
+          $renderedLauncher = Get-Content -LiteralPath (Join-Path $assets 'install-multi-source-test-audit.cmd') -Raw
+          if ($renderedLauncher.Contains('__INSTALLER_SHA256__')) { throw 'unresolved bootstrapper placeholder' }
+          $expectedInstallerSha = (Get-FileHash -LiteralPath (Join-Path $assets 'install-multi-source-test-audit.ps1') -Algorithm SHA256).Hash.ToLowerInvariant()
+          $expectedLauncherLine = 'set "EXPECTED_PS1_SHA256=' + $expectedInstallerSha + '"'
+          if (-not $renderedLauncher.Contains($expectedLauncherLine)) { throw 'CMD does not authorize the rendered PS1 SHA-256' }
+          if (-not $renderedLauncher.Contains('multi-source-test-audit-v0.1.6/install-multi-source-test-audit.ps1')) { throw 'CMD does not use the fixed v0.1.6 PS1 URL' }
+          Push-Location $assets
+          try { & certutil.exe -hashfile .\multi-source-test-audit-0.1.6-windows-x64.zip SHA256 | Out-Null } finally { Pop-Location }
+      - name: Execute standalone CMD bootstrapper fixture from an empty directory
+        shell: powershell
+        run: |
+          $env:MSA_FINAL_ARCHIVE = Join-Path $PWD 'build/release-assets/multi-source-test-audit-0.1.6-windows-x64.zip'
+          python -m unittest tests.test_multi_source_audit_runtime_release.MultiSourceAuditBootstrapperContractTest -v
+          if ($LASTEXITCODE -ne 0) { throw 'standalone CMD bootstrapper fixture failed' }
+      - name: Clean-room staging smoke
+        shell: powershell
+        run: |
+          $archive = Join-Path $PWD 'build/release-assets/multi-source-test-audit-0.1.6-windows-x64.zip'
+          $extract = Join-Path $env:RUNNER_TEMP 'multi-source-test-audit-smoke'
+          Expand-Archive -LiteralPath $archive -DestinationPath $extract -Force
+          & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $extract 'multi-source-test-audit/scripts/runtime-smoke.ps1')
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Publish one immutable GitHub Release
+        shell: powershell
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tag = if ('${{ github.event_name }}' -eq 'workflow_dispatch') { '${{ inputs.tag }}' } else { '${{ github.ref_name }}' }
+          gh release create $tag --verify-tag --title 'Multi-Source Test Audit v0.1.6' --notes 'v0.1.6 adds an explicit installer result protocol so the CMD bootstrapper reports new installation, healthy idempotence, repair, and upgrade outcomes accurately. Stage A functionality and output contracts are unchanged.' (Get-ChildItem build/release-assets -File | ForEach-Object FullName)
+      - name: Verify public Release assets
+        shell: powershell
+        run: |
+          $base = "https://github.com/Saitamasans/testing-skills/releases/download/$env:EXPECTED_TAG"
+          foreach ($asset in @('install-multi-source-test-audit.cmd','install-multi-source-test-audit.ps1','multi-source-test-audit-0.1.6-windows-x64.zip','release-manifest.json','SHA256SUMS.txt')) {
+            $response = Invoke-WebRequest -UseBasicParsing -Method Head -Uri "$base/$asset"
+            if ($response.StatusCode -ne 200) { throw "public asset is not HTTP 200: $asset" }
+          }

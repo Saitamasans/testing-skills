@@ -1,0 +1,52 @@
+{
+  "LOGIN-MINI-001": {
+    "start_state": { "description": "fresh anonymous BrowserContext at login page" },
+    "evidence_policy": { "screenshot": "always", "trace": "retain" },
+    "unresolved": []
+  },
+  "LOGIN-MINI-002": {
+    "start_state": { "description": "fresh anonymous BrowserContext at login page" },
+    "auth_profile": {
+      "id": "normal_user",
+      "strategy": "environment",
+      "credential_refs": {
+        "username_env": "SAITAMA_TEST_USERNAME",
+        "password_env": "SAITAMA_TEST_PASSWORD"
+      }
+    },
+    "effects": {
+      "browser_state": { "target_state": "workspace" },
+      "identity_state": { "target_state": "authenticated" },
+      "account_data": null,
+      "shared_business_data": null,
+      "global_environment": null,
+      "external_system": null
+    },
+    "evidence_policy": { "screenshot": "always", "trace": "retain" },
+    "unresolved": []
+  },
+  "LOGIN-MINI-003": {
+    "start_state": { "description": "fresh anonymous BrowserContext at login page" },
+    "isolation_scope": "case",
+    "flow_group": null,
+    "auth_profile": {
+      "id": "normal_user_wrong_password",
+      "strategy": "environment",
+      "credential_refs": {
+        "username_env": "SAITAMA_TEST_USERNAME",
+        "password_env": "SAITAMA_TEST_WRONG_PASSWORD"
+      }
+    },
+    "dependencies": [],
+    "effects": {
+      "browser_state": { "target_state": "login_error" },
+      "identity_state": { "target_state": "anonymous" },
+      "account_data": null,
+      "shared_business_data": null,
+      "global_environment": null,
+      "external_system": null
+    },
+    "evidence_policy": { "screenshot": "always", "trace": "retain" },
+    "unresolved": []
+  }
+}

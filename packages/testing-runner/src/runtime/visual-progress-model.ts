@@ -236,7 +236,7 @@ function actionTitle(action: ManifestAction): string {
   if (action.type === "web.click") return "点击控件";
   if (action.type === "web.select") return "选择选项";
   if (action.type === "web.wait") return "等待页面状态";
-  if (action.type === "web.assert" || action.type === "api.assert") return "核对断言";
+  if (action.type === "web.assert" || action.type === "api.assert" || action.type === "db.assert") return "核对断言";
   if (action.type === "api.request" || action.type === "api.concurrent") return "发送 API 请求";
   if (action.type === "api.extract") return "提取响应变量";
   if (action.type === "db.select") return "只读数据库核对";
@@ -251,7 +251,7 @@ function actionSummary(action: ManifestAction): string {
     return action.locator;
   }
   if (action.type === "web.wait") return action.condition;
-  if (action.type === "web.assert" || action.type === "api.assert") return action.assertion;
+  if (action.type === "web.assert" || action.type === "api.assert" || action.type === "db.assert") return action.assertion;
   if (action.type === "api.extract") return `${action.from} → ${action.as}`;
   if (action.type === "db.select") return "只读数据库校验";
   return action.reason;

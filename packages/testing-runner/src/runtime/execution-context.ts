@@ -5,6 +5,7 @@ import type { DatabaseAdapter } from "../actions/database-adapter.js";
 import type { RuntimeSecretStore } from "../security/credential-resolver.js";
 import type { SecretFingerprint } from "../security/redactor.js";
 import type { DataReference, ExecutionTarget, ManifestAction } from "../types.js";
+import type { RedactedRowSet } from "../actions/database-adapter.js";
 
 export type ActionOutcomeStatus =
   | "passed"
@@ -63,6 +64,7 @@ export interface ExecutionContext {
   redactionFingerprints: SecretFingerprint[];
   lastApiResponse?: LastApiResponse;
   lastApiResponses?: LastApiResponse[];
+  lastDatabaseResult?: RedactedRowSet;
   databaseAdapters?: Partial<Record<"mysql" | "postgresql", DatabaseAdapter>>;
 }
 
@@ -75,6 +77,7 @@ export interface CreateExecutionContextInput {
   mode?: "interactive" | "ci";
   redactionFingerprints?: SecretFingerprint[];
   databaseAdapters?: Partial<Record<"mysql" | "postgresql", DatabaseAdapter>>;
+  lastDatabaseResult?: RedactedRowSet;
 }
 
 export class ActionExecutionError extends Error {
@@ -101,6 +104,7 @@ export function createExecutionContext(input: CreateExecutionContextInput): Exec
   };
   if (input.page) context.page = input.page;
   if (input.databaseAdapters) context.databaseAdapters = input.databaseAdapters;
+  if (input.lastDatabaseResult) context.lastDatabaseResult = input.lastDatabaseResult;
   return context;
 }
 
@@ -144,6 +148,6 @@ export function interpolateActionText(text: string, context: ExecutionContext): 
 
 export function actionTargetKind(action: ManifestAction): "web" | "api" | "database" {
   if (action.type.startsWith("web.") || action.type === "cleanup.web") return "web";
-  if (action.type === "db.select") return "database";
+  if (action.type === "db.select" || action.type === "db.assert") return "database";
   return "api";
 }

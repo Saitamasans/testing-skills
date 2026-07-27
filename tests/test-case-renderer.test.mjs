@@ -14,6 +14,15 @@ test("validates exact ten-column report", () => {
   assert.throws(() => validateReport(bad), /统一十列/);
 });
 
+test("validates workbench eleven-column report with actual results", () => {
+  const eleven = structuredClone(fixture);
+  const cases = eleven.sheets.find((sheet) => sheet.kind === "test_cases");
+  cases.columns.splice(8, 0, "实际结果");
+  for (const row of cases.rows) row.values.splice(8, 0, row.divider ? "-" : "尚未执行");
+
+  assert.doesNotThrow(() => validateReport(eleven));
+});
+
 test("report id is deterministic and isolated", () => {
   assert.equal(buildReportId(fixture), buildReportId(structuredClone(fixture)));
   const other = structuredClone(fixture);

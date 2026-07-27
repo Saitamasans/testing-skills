@@ -8,7 +8,8 @@ for skill in \
   production-verification-test \
   test-case-quality-audit \
   requirement-clarification-test \
-  web-api-test-execution-evidence
+  web-api-test-execution-evidence \
+  test-case-execution-compiler
 do
   npx skills add "Saitamasans/testing-skills@$skill" -g -y
 done

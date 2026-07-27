@@ -73,6 +73,7 @@ test("executes db.select through an injected read-only adapter and redacts bound
     approvedOrigins: [],
     data: {
       user_query: { id: "u1" },
+      expected_status: "active",
     },
     secrets: resolveCredentials([], {}),
     databaseAdapters: { postgresql: adapter },
@@ -92,6 +93,50 @@ test("executes db.select through an injected read-only adapter and redacts bound
   assert.equal(outcome.status, "passed");
   assert.doesNotMatch(JSON.stringify(outcome.actual), /customer@example\.test|literal-token/);
   assert.match(JSON.stringify(outcome.actual), /row_count/);
+
+  const countAssertion = await executeAction({
+    type: "db.assert",
+    action_id: "DB-001-count",
+    target_alias: "database",
+    assertion: "row-count equals 1",
+    risk: "R0",
+  } as ManifestAction, context);
+  const fieldAssertion = await executeAction({
+    type: "db.assert",
+    action_id: "DB-001-status",
+    target_alias: "database",
+    assertion: "row 0 field status equals fixture:expected_status",
+    risk: "R0",
+  } as ManifestAction, context);
+
+  assert.equal(countAssertion.status, "passed");
+  assert.equal(fieldAssertion.status, "passed");
+});
+
+test("db.assert blocks when no prior database result exists", async () => {
+  const context = createExecutionContext({
+    targets: {
+      database: {
+        kind: "database",
+        dialect: "postgresql",
+        host: "db.example.test",
+        database: "orders",
+      },
+    },
+    approvedOrigins: [],
+    secrets: resolveCredentials([], {}),
+  });
+
+  const outcome = await executeAction({
+    type: "db.assert",
+    action_id: "DB-NO-RESULT",
+    target_alias: "database",
+    assertion: "row-count equals 1",
+    risk: "R0",
+  } as ManifestAction, context);
+
+  assert.equal(outcome.status, "blocked");
+  assert.match(outcome.error?.message ?? "", /database result/i);
 });
 
 test("blocks db.select when read-only capability cannot be demonstrated", async () => {
@@ -128,7 +173,40 @@ test("blocks db.select when read-only capability cannot be demonstrated", async 
   assert.match(outcome.error?.message ?? "", /read-only/i);
 });
 
-test("database driver loading is fixed and reports missing optional packages without installing", async () => {
-  await assert.rejects(() => loadDatabaseAdapter("postgresql"), /npm install pg/i);
-  await assert.rejects(() => loadDatabaseAdapter("mysql"), /npm install mysql2/i);
+test("built-in database drivers require explicit credential aliases instead of guessing", async () => {
+  const secrets = resolveCredentials([], {});
+  await assert.rejects(() => loadDatabaseAdapter({
+    kind: "database",
+    dialect: "postgresql",
+    host: "db.example.test",
+    database: "orders",
+  }, secrets), /credential aliases/i);
+  await assert.rejects(() => loadDatabaseAdapter({
+    kind: "database",
+    dialect: "mysql",
+    host: "db.example.test",
+    database: "orders",
+  }, secrets), /credential aliases/i);
+});
+
+test("built-in PostgreSQL and MySQL drivers load only from explicit runtime credential aliases", async () => {
+  const secrets = resolveCredentials([
+    { alias: "db_user", source: "configured_env", name: "TEST_DB_USER" },
+    { alias: "db_password", source: "configured_env", name: "TEST_DB_PASSWORD" },
+  ], {
+    TEST_DB_USER: "readonly-user",
+    TEST_DB_PASSWORD: "runtime-only-password",
+  });
+  for (const dialect of ["postgresql", "mysql"] as const) {
+    const adapter = await loadDatabaseAdapter({
+      kind: "database",
+      dialect,
+      host: "127.0.0.1",
+      database: "orders",
+      username_credential: "db_user",
+      password_credential: "db_password",
+    }, secrets);
+    assert.equal(adapter.dialect, dialect);
+    await adapter.close?.();
+  }
 });

@@ -45,48 +45,50 @@ class ExecutionSkillContractsTest(unittest.TestCase):
             "缺失材料",
             "非标准 Excel 必须确认字段映射",
             "不要猜测正式服或测试服",
-            "优先使用用户提供的账号、密码、测试数据和数据库只读账号",
-            "可以继续执行；如果用例来自 Saitamasans/testing-skills，效果会更好",
-            "用户确认后才加载辅助 Skill",
+            "execution_contract_required",
+            "test-case-execution-compiler",
         ]:
             self.assertIn(phrase, self.body)
 
-    def test_new_user_materials_are_classified_and_require_formal_cases(self):
+    def test_execution_package_is_the_only_default_formal_input(self):
+        for document in [self.text, self.generated_text]:
+            for phrase in [
+                "*.execution-package.zip", "package_status=READY", "semantic_compilation=skipped",
+                "semantic_compiler=test-case-execution-compiler", "contract_version=1.0.0",
+                "contract_incomplete", "package_validation_ms", "manifest_assembly_ms",
+                "browser_id", "context_id", "context_close_status",
+            ]:
+                self.assertIn(phrase, document)
+            self.assertIn("raw Excel", document)
+            self.assertIn("deprecated", document)
+
+    def test_black_box_inputs_are_classified_and_require_confirmation(self):
         input_reference = (
             ROOT / "skills" / self.item["slug"] / "references" / "input-and-readiness.md"
         ).read_text(encoding="utf-8")
-        documents = [self.text, self.generated_text, input_reference]
-        required_phrases = [
-            "强制资料",
-            "条件强制资料",
-            "辅助资料",
-            "需求文档、需求截图、原型和流程图不能代替正式测试用例",
-            "已有可访问测试地址时通常不需要前后端源码",
-            "只有需求资料而没有正式测试用例时，不得直接执行",
-            "Node.js 20+",
-        ]
-        for document in documents:
-            for phrase in required_phrases:
+        for document in [self.text, self.generated_text]:
+            for phrase in [
+                "普通十列测试用例（Test Cases）只描述测试意图，不等于机器执行清单",
+                "只读页面探测",
+                "用户确认后",
+                "不能真实执行",
+            ]:
                 self.assertIn(phrase, document)
 
         for phrase in [
-            "正式测试用例",
-            "目标 Web/API 地址",
-            "环境性质和执行授权",
-            "执行前确认",
-            "需要登录时",
-            "接口用例缺少可执行调用细节时",
-            "会新增或修改数据时",
-            "本地应用尚未运行时",
-            "CI 执行时",
-            "requirement-test-workbench",
+            "正式输入",
+            "非正式输入",
+            "标准十列测试用例（Test Cases）是人工测试意图输入",
+            "缺少已确认定位器",
+            "显式业务断言",
+            "非标准 Excel 每次都展示字段映射预览",
         ]:
             self.assertIn(phrase, input_reference)
 
     def test_runner_commands_statuses_and_report_gate(self):
         for phrase in [
-            "scripts/testing-runner.mjs plan",
-            "scripts/testing-runner.mjs run",
+            'scripts\\testing-runner.ps1" discover-plan',
+            'scripts\\testing-runner.ps1" run',
             "run-result.json 是唯一判定来源",
             "Excel/HTML/JSON 一致性",
             "未执行",
@@ -102,6 +104,63 @@ class ExecutionSkillContractsTest(unittest.TestCase):
             "manual_required",
         ]:
             self.assertIn(phrase, self.body)
+
+    def test_complete_installation_and_execution_contract(self):
+        readme = (ROOT / "README.md").read_text(encoding="utf-8")
+        for document in [self.text, self.generated_text, readme]:
+            for phrase in [
+                "GitHub Release 完整安装器",
+                "Node 22.23.1",
+                "Runner 1.1.2",
+                "Playwright 1.61.1",
+                "Chromium 1228",
+                "headless shell 1228",
+                "FFmpeg 1011",
+                "无需系统安装 Node.js、npm、Git、Chrome、Excel 或 Python",
+                "安装回执、回执绑定的 bundle 清单、固定组件身份和关键可执行/证据标记",
+                "不会下载、安装或修改运行时",
+                "installation_incomplete",
+                "installation_corrupt",
+                "-Repair",
+                "scripts\\testing-runner.ps1",
+            ]:
+                self.assertIn(phrase, document)
+            self.assertNotIn("scripts/testing-runner.mjs", document)
+            self.assertNotIn("node <ABSOLUTE_SKILL_ROOT>", document)
+            self.assertNotIn("首次运行下载", document)
+
+        installer = (ROOT / "scripts" / "install-web-api-test-execution-evidence.ps1").read_text(
+            encoding="utf-8"
+        )
+        for phrase in [
+            "总字节=",
+            "字节/秒=",
+            "ETA=",
+            "重试=",
+            "续传偏移=",
+            "SHA-256",
+            "本地完整 smoke test",
+            "安装完成，可以执行 Web/API 自动化测试",
+        ]:
+            self.assertIn(phrase, installer)
+        self.assertEqual(1, installer.count("安装完成，可以执行 Web/API 自动化测试"))
+
+    def test_runner_command_reference_uses_verified_launcher_without_downloads(self):
+        source_reference = self.text.split(
+            "<!-- reference: references/runner-commands.md -->", 1
+        )[1].split("<!-- /reference -->", 1)[0]
+        generated_reference = (
+            ROOT / "skills" / self.item["slug"] / "references" / "runner-commands.md"
+        ).read_text(encoding="utf-8")
+        self.assertEqual(source_reference.strip(), generated_reference.strip())
+        for document in [source_reference, generated_reference]:
+            self.assertIn("scripts\\testing-runner.ps1", document)
+            self.assertIn("installation_incomplete", document)
+            self.assertIn("installation_corrupt", document)
+            self.assertIn("-Repair", document)
+            self.assertNotIn("testing-runner.mjs", document)
+            self.assertNotIn("node <ABSOLUTE_SKILL_ROOT>", document)
+            self.assertNotIn("启动或下载浏览器", document)
 
     def test_interactive_execution_is_visually_explained_by_default(self):
         for phrase in [
@@ -131,20 +190,21 @@ class ExecutionSkillContractsTest(unittest.TestCase):
             ]:
                 self.assertIn(phrase, document)
 
-    def test_execution_skill_uses_automatic_bootstrap_only(self):
+    def test_execution_skill_uses_verified_installed_runtime_only(self):
         combined = self.text + self.generated_text + (ROOT / "README.md").read_text(encoding="utf-8")
         for phrase in [
-            "scripts/testing-runner.mjs",
-            "首次运行",
-            "自动下载",
-            "无需 npm 账号",
+            "scripts\\testing-runner.ps1",
+            "installation_incomplete",
+            "installation_corrupt",
+            "-Repair",
         ]:
             self.assertIn(phrase, combined)
         self.assertNotIn("npm install --save-dev @saitamasans/testing-runner", combined)
         self.assertNotIn("npx @saitamasans/testing-runner", combined)
 
         launcher = (ROOT / "skill-sources/web-api-test-execution-evidence/scripts/testing-runner.mjs").read_text(encoding="utf-8")
-        self.assertIn("prepareBrowserForCommand", launcher)
+        self.assertIn("verifyInstalledRuntime", launcher)
+        self.assertNotIn("prepareBrowserForCommand", launcher)
 
     def test_progressive_references_are_declared(self):
         for reference in [
@@ -170,6 +230,62 @@ class ExecutionSkillContractsTest(unittest.TestCase):
         self.assertIn("--expires-at <ISO_EXPIRES_AT>", combined)
         self.assertIn("短期", combined)
         self.assertNotIn("2999-01-01T00:00:00.000Z", combined)
+
+    def test_cross_state_web_cases_require_transition_discovery(self):
+        required = [
+            "起始状态 → 迁移动作 → 目标状态 → 终态业务断言",
+            "transition_discovery_required",
+            "状态迁移探测预览",
+            "不回填正式 Excel/HTML",
+            "重新生成 discovery/proposal hash",
+            "重新经过第二次确认门禁",
+            "目标状态 discovery 结果必须与正式 manifest 预览在第二次确认门禁一并确认",
+        ]
+        for document in [self.text, self.generated_text]:
+            for phrase in required:
+                self.assertIn(phrase, document)
+
+    def test_action_conservation_and_core_path_gate_are_required(self):
+        required = [
+            "动作守恒矩阵",
+            "mapped",
+            "禁止把包含已确认迁移动作的整条用例",
+            "完整可执行核心路径数",
+            "不能进入 E4",
+            "普通的“确认执行”不得被解释为接受核心业务目标降级",
+        ]
+        for document in [self.text, self.generated_text]:
+            for phrase in required:
+                self.assertIn(phrase, document)
+
+    def test_partial_execution_cannot_claim_core_business_completion(self):
+        required = [
+            "部分执行",
+            "核心流程未执行",
+            "产物一致，只证明产物一致",
+            "不证明核心业务目标已覆盖",
+        ]
+        for document in [self.text, self.generated_text]:
+            for phrase in required:
+                self.assertIn(phrase, document)
+
+    def test_similar_state_transition_failures_are_prevented_before_approval(self):
+        locator_reference = (
+            ROOT / "skills" / self.item["slug"] / "references/locators-assertions-and-rules.md"
+        ).read_text(encoding="utf-8")
+        required = [
+            "搜索首页 → 搜索结果页",
+            "登录页 → 登录后工作台",
+            "SPA 页面 → 弹窗或异步结果区域",
+            "当前页 → 新标签页",
+            "提交页 → 下载或确认页",
+            "R2/R3",
+            "Enter 不受支持时不得用点击替代",
+            "第一次确认门禁前纠正",
+        ]
+        for document in [self.text, locator_reference]:
+            for phrase in required:
+                self.assertIn(phrase, document)
 
 
 if __name__ == "__main__":

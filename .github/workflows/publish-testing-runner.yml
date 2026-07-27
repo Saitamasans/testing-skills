@@ -1,0 +1,346 @@
+name: Publish immutable testing Runner
+
+on:
+  push:
+    tags:
+      - "testing-runner-v1.1.4"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing reviewed Runner tag to publish
+        required: true
+        default: testing-runner-v1.1.4
+        type: string
+
+concurrency:
+  group: testing-runner-release-${{ github.repository }}-${{ github.event.inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  EXPECTED_TAG: testing-runner-v1.1.4
+  EXPECTED_VERSION: 1.1.4
+  RUNNER_ASSET: saitamasans-testing-runner-1.1.4.tgz
+
+jobs:
+  validate-tag:
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.identity.outputs.tag }}
+      commit: ${{ steps.identity.outputs.commit }}
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          fetch-depth: 0
+          clean: true
+      - id: identity
+        name: Verify immutable Runner tag and main ancestry
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag="${{ github.event.inputs.tag || github.ref_name }}"
+          test "$tag" = "$EXPECTED_TAG"
+          test "$(node -p "require('./packages/testing-runner/package.json').version")" = "$EXPECTED_VERSION"
+          test "$(node -p "require('./packages/testing-runner/release/runner-1.1.4-release-lock.json').status")" = "locked-not-published"
+          test "$(node -p "require('./packages/testing-runner/release/runner-1.1.4-release-lock.json').publication.tag_created")" = "false"
+          if gh release view "$tag" >/dev/null 2>&1; then echo "public release already exists for $tag" >&2; exit 1; fi
+          git fetch --force origin "refs/tags/$tag:refs/tags/$tag"
+          commit="$(git rev-parse "refs/tags/$tag^{commit}")"
+          if [[ "$GITHUB_EVENT_NAME" == "push" ]]; then test "$commit" = "$GITHUB_SHA"; fi
+          git fetch --no-tags origin main
+          git merge-base --is-ancestor "$commit" "refs/remotes/origin/main"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "commit=$commit" >> "$GITHUB_OUTPUT"
+
+  build-and-contract-test:
+    needs: validate-tag
+    runs-on: windows-2025
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          ref: ${{ needs.validate-tag.outputs.commit }}
+          clean: true
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: "22.23.1"
+          cache: npm
+      - name: Build, test, and package the exact Runner
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(node -p process.arch)" = "x64"
+          npm ci --ignore-scripts
+          node node_modules/playwright/cli.js install chromium
+          npm run build --workspace @saitamasans/testing-runner
+          npm test --workspace @saitamasans/testing-runner
+          npm run pack:runner-release
+          test -f "build/releases/$RUNNER_ASSET"
+          test -f "build/releases/$RUNNER_ASSET.sha256"
+          node - <<'NODE'
+          const fs = require("node:fs");
+          const crypto = require("node:crypto");
+          const path = require("node:path");
+          const releaseDir = "build/releases";
+          const assetName = "saitamasans-testing-runner-1.1.4.tgz";
+          const asset = path.join(releaseDir, assetName);
+          const lock = JSON.parse(fs.readFileSync("packages/testing-runner/release/runner-1.1.4-release-lock.json", "utf8"));
+          const bytes = fs.readFileSync(asset);
+          const actual = { size_bytes: bytes.length, sha256: crypto.createHash("sha256").update(bytes).digest("hex") };
+          const checksumPath = asset + ".sha256";
+          const expectedChecksum = `${actual.sha256}  ${assetName}\n`;
+          if (fs.readFileSync(checksumPath, "utf8") !== expectedChecksum) throw new Error("Runner checksum companion mismatch");
+          if (lock.status !== "locked-not-published" || lock.runner?.name !== "@saitamasans/testing-runner" || lock.runner?.version !== "1.1.4") throw new Error("locked Runner identity mismatch");
+          if (lock.artifact?.size_bytes !== actual.size_bytes || lock.artifact?.sha256 !== actual.sha256) throw new Error("built Runner does not match locked size and SHA-256");
+          const sums = [assetName, assetName + ".sha256"].sort().map((name) => {
+            const digest = crypto.createHash("sha256").update(fs.readFileSync(path.join(releaseDir, name))).digest("hex");
+            return `${digest}  ${name}`;
+          }).join("\n") + "\n";
+          fs.writeFileSync(path.join(releaseDir, "SHA256SUMS.txt"), sums, "utf8");
+          NODE
+      - name: Inspect packaged Runner contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf build/runner-inspection
+          mkdir -p build/runner-inspection
+          tar -xzf "build/releases/$RUNNER_ASSET" -C build/runner-inspection
+          node - <<'NODE'
+          const fs = require("node:fs");
+          const root = "build/runner-inspection/package";
+          const pkg = JSON.parse(fs.readFileSync(`${root}/package.json`, "utf8"));
+          if (pkg.name !== "@saitamasans/testing-runner" || pkg.version !== "1.1.4") throw new Error("Runner package identity mismatch");
+          if (pkg.dependencies?.playwright !== "1.61.1") throw new Error('"playwright": "1.61.1" is required');
+          for (const relative of [
+            "dist/cli.js", "dist/commands/run.js", "dist/commands/verify-report.js",
+            "dist/reporting/report-projector.js", "vendor/test-case-renderer.mjs",
+            "node_modules/playwright/cli.js", "node_modules/playwright-core/browsers.json",
+          ]) if (!fs.statSync(`${root}/${relative}`).isFile()) throw new Error(`missing packaged Runner file: ${relative}`);
+          const cli = fs.readFileSync(`${root}/dist/cli.js`, "utf8");
+          if (!cli.includes("1.1.4")) throw new Error("compiled CLI does not expose Runner 1.1.4");
+          const run = fs.readFileSync(`${root}/dist/commands/run.js`, "utf8");
+          if (!run.includes("run-result.json")) throw new Error("packaged Runner lacks current result behavior");
+          const browsers = JSON.parse(fs.readFileSync(`${root}/node_modules/playwright-core/browsers.json`, "utf8")).browsers;
+          for (const [name, revision] of [["chromium", "1228"], ["chromium-headless-shell", "1228"], ["ffmpeg", "1011"]]) {
+            const entry = browsers.find((value) => value.name === name);
+            if (entry?.revision !== revision || entry.installByDefault !== true) throw new Error(`packaged Playwright ${name} identity mismatch`);
+          }
+          NODE
+          grep -F "installation-smoke-test.mjs" packages/testing-runner/scripts/build-windows-bundle.mjs
+      - name: Execute the packaged production dependency combination
+        shell: powershell
+        run: |
+          $ErrorActionPreference = "Stop"
+          $archive = (Resolve-Path -LiteralPath "build/releases/$env:RUNNER_ASSET").Path
+          $evidenceRoot = Join-Path $PWD "build/packaged-tar-verification"
+          $smokeRoot = Join-Path $env:RUNNER_TEMP ("runner-tar-smoke-" + [Guid]::NewGuid().ToString("N"))
+          try {
+            node packages/testing-runner/scripts/verify-release-tarball.mjs $archive $smokeRoot
+            if ($LASTEXITCODE -ne 0) { throw "packaged Runner execution failed" }
+          } finally {
+            try {
+              New-Item -ItemType Directory -Path $evidenceRoot -Force | Out-Null
+              $evidenceFiles = @{
+                "packaged-tar-evidence.json" = "packaged-tar-evidence.json"
+                "execution-network.jsonl" = "execution-network.jsonl"
+                "result/run-result.json" = "packaged-run-result.json"
+                "result/projected-report.json" = "packaged-projected-report.json"
+                "plan/run-manifest.json" = "packaged-run-manifest.json"
+                "plan/approval.json" = "packaged-approval.json"
+              }
+              foreach ($entry in $evidenceFiles.GetEnumerator()) {
+                $source = Join-Path $smokeRoot $entry.Key
+                if (Test-Path -LiteralPath $source -PathType Leaf) {
+                  Copy-Item -LiteralPath $source -Destination (Join-Path $evidenceRoot $entry.Value) -Force
+                }
+              }
+            } finally {
+              if (Test-Path -LiteralPath $smokeRoot) {
+                Remove-Item -LiteralPath $smokeRoot -Recurse -Force
+              }
+            }
+          }
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: testing-runner-1.1.4-execution-evidence
+          path: build/packaged-tar-verification/**
+          if-no-files-found: error
+          retention-days: 14
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: verified-testing-runner-1.1.4-assets
+          path: |
+            build/releases/saitamasans-testing-runner-1.1.4.tgz
+            build/releases/saitamasans-testing-runner-1.1.4.tgz.sha256
+            build/releases/SHA256SUMS.txt
+          if-no-files-found: error
+          retention-days: 14
+
+  attest-assets:
+    needs: post-publish-verify
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      attestations: write
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: verified-testing-runner-1.1.4-assets
+          path: build/runner-release
+      - id: attest
+        continue-on-error: true
+        uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2
+        with:
+          subject-path: build/runner-release/*
+      - if: steps.attest.outcome != 'success'
+        run: echo "::warning::attestation creation failed for the published Runner assets"
+
+  immutable-release-advisory:
+    needs: validate-tag
+    runs-on: ubuntu-latest
+    steps:
+      - name: Report repository immutable-release configuration
+        env:
+          GH_TOKEN: ${{ secrets.IMMUTABLE_RELEASES_ADMIN_READ_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -z "${GH_TOKEN:-}" ]]; then
+            echo "::warning::immutable release settings admin-read token is not configured"
+            exit 0
+          fi
+          if ! enabled="$(gh api "repos/$GITHUB_REPOSITORY/immutable-releases" --jq .enabled)"; then
+            echo "::warning::immutable release settings could not be read"
+            exit 0
+          fi
+          if [[ "$enabled" != "true" ]]; then
+            echo "::warning::immutable releases are not enabled"
+            exit 0
+          fi
+          echo "Repository immutable releases are enabled."
+
+  create-draft:
+    needs: [validate-tag, build-and-contract-test, immutable-release-advisory]
+    runs-on: ubuntu-latest
+    outputs:
+      release_id: ${{ steps.draft.outputs.release_id }}
+      release_url: ${{ steps.draft.outputs.release_url }}
+      created_or_reused: ${{ steps.draft.outputs.created_or_reused }}
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          fetch-depth: 0
+          clean: true
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: verified-testing-runner-1.1.4-assets
+          path: build/trusted
+      - id: draft
+        name: Discover or create one non-overwritable Runner draft
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ needs.validate-tag.outputs.tag }}
+          TAG_COMMIT: ${{ needs.validate-tag.outputs.commit }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          node packages/testing-runner/scripts/release-draft-lifecycle.mjs prepare \
+            --tag "$RELEASE_TAG" --target "$TAG_COMMIT" \
+            --title "Testing Runner 1.1.4" --assets-dir build/trusted
+      - name: Verify the selected Runner draft by Release ID
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ needs.validate-tag.outputs.tag }}
+          TAG_COMMIT: ${{ needs.validate-tag.outputs.commit }}
+          RELEASE_ID: ${{ steps.draft.outputs.release_id }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf build/draft && mkdir build/draft
+          node packages/testing-runner/scripts/release-draft-lifecycle.mjs download \
+            --release-id "$RELEASE_ID" --tag "$RELEASE_TAG" --target "$TAG_COMMIT" \
+            --trusted-dir build/trusted --output-dir build/draft
+          (cd build/trusted && sha256sum -c SHA256SUMS.txt)
+          (cd build/draft && sha256sum -c SHA256SUMS.txt)
+          diff --no-dereference --recursive build/trusted build/draft
+
+  publish-release:
+    needs: [validate-tag, create-draft]
+    runs-on: ubuntu-latest
+    environment: release
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          fetch-depth: 0
+          clean: true
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: verified-testing-runner-1.1.4-assets
+          path: build/trusted
+      - name: Reverify draft provenance and publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ needs.validate-tag.outputs.tag }}
+          TAG_COMMIT: ${{ needs.validate-tag.outputs.commit }}
+          RELEASE_ID: ${{ needs.create-draft.outputs.release_id }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse "refs/tags/$RELEASE_TAG^{commit}")" = "$TAG_COMMIT"
+          rm -rf build/draft && mkdir build/draft
+          node packages/testing-runner/scripts/release-draft-lifecycle.mjs download \
+            --release-id "$RELEASE_ID" --tag "$RELEASE_TAG" --target "$TAG_COMMIT" \
+            --trusted-dir build/trusted --output-dir build/draft
+          (cd build/trusted && sha256sum -c SHA256SUMS.txt)
+          (cd build/draft && sha256sum -c SHA256SUMS.txt)
+          diff --no-dereference --recursive build/trusted build/draft
+          node packages/testing-runner/scripts/release-draft-lifecycle.mjs publish \
+            --release-id "$RELEASE_ID" --tag "$RELEASE_TAG" --target "$TAG_COMMIT" \
+            --trusted-dir build/trusted
+
+  post-publish-verify:
+    needs: [validate-tag, create-draft, publish-release]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          clean: true
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: verified-testing-runner-1.1.4-assets
+          path: build/trusted
+      - name: Verify public immutable Runner bytes and package contract
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ needs.validate-tag.outputs.tag }}
+          TAG_COMMIT: ${{ needs.validate-tag.outputs.commit }}
+          RELEASE_ID: ${{ needs.create-draft.outputs.release_id }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf build/public && mkdir build/public
+          node packages/testing-runner/scripts/release-draft-lifecycle.mjs verify-public \
+            --release-id "$RELEASE_ID" --tag "$RELEASE_TAG" --target "$TAG_COMMIT" \
+            --trusted-dir build/trusted --output-dir build/public
+          diff --no-dereference --recursive build/trusted build/public
+          (cd build/public && sha256sum -c SHA256SUMS.txt)
+          mkdir build/public-package
+          tar -xzf "build/public/$RUNNER_ASSET" -C build/public-package
+          node - <<'NODE'
+          const fs = require("node:fs");
+          const root = "build/public-package/package";
+          const pkg = JSON.parse(fs.readFileSync(`${root}/package.json`, "utf8"));
+          if (pkg.version !== "1.1.4" || pkg.dependencies?.playwright !== "1.61.1") throw new Error("public Runner package contract mismatch");
+          for (const file of ["dist/cli.js", "dist/commands/run.js", "dist/commands/verify-report.js", "vendor/test-case-renderer.mjs"]) {
+            if (!fs.statSync(`${root}/${file}`).isFile()) throw new Error(`public Runner is missing ${file}`);
+          }
+          NODE

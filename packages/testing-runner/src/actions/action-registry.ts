@@ -27,6 +27,7 @@ const ALLOWED_ACTION_TYPES = new Set([
   "api.assert",
   "execution.blocked",
   "db.select",
+  "db.assert",
   "cleanup.api",
   "cleanup.web",
 ]);
@@ -81,7 +82,7 @@ export async function executeAction(action: ManifestAction, context: ExecutionCo
       }, context);
     }
     targetFor(context, action.target_alias, actionTargetKind(action));
-    const result = action.type === "db.select"
+    const result = action.type === "db.select" || action.type === "db.assert"
       ? await executeDatabaseAction(action, context)
       : action.type.startsWith("web.") || action.type === "cleanup.web"
         ? await executeWebAction(action as Parameters<typeof executeWebActionType>[0], context)

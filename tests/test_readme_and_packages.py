@@ -21,7 +21,8 @@ class ReadmeAndPackagesTest(unittest.TestCase):
             self.assertTrue((package / "SKILL.md").exists())
             self.assertTrue((package / "agents/openai.yaml").exists())
             self.assertIn(item["slug"], readme)
-            self.assertIn(item["slug"], installers[2])
+            if item["slug"] != "multi-source-test-audit":
+                self.assertIn(item["slug"], installers[2])
         self.assertIn('Join-Path $PSScriptRoot "install.ps1"', installers[1])
         self.assertIn("-All", installers[1])
         self.assertNotIn("npx", installers[0] + installers[1])
@@ -39,7 +40,21 @@ class ReadmeAndPackagesTest(unittest.TestCase):
             "npx skills add Saitamasans/testing-skills@web-api-test-execution-evidence -g -y",
             readme,
         )
-        self.assertIn("-Skill 'web-api-test-execution-evidence'", readme)
+        self.assertNotIn("-Skill 'web-api-test-execution-evidence'", readme)
+        self.assertIn(
+            "web-api-test-execution-evidence-v1.0.2/"
+            "install-web-api-test-execution-evidence.cmd",
+            readme,
+        )
+
+    def test_readme_documents_package_first_execution_workflow(self):
+        readme = (ROOT / "README.md").read_text(encoding="utf-8")
+        self.assertIn(f"{len(load_manifest(ROOT)['skills'])} 个 Agent Skill", readme)
+        self.assertIn("人工测试用例.xlsx", readme)
+        self.assertIn("test-case-execution-compiler", readme)
+        self.assertIn("*.execution-package.zip", readme)
+        self.assertIn("execution_contract_required", readme)
+        self.assertNotIn("上传十列 Excel 测试用例并输入：`调用第八个 Skill 执行`", readme)
 
     def test_only_five_packages_contain_renderer(self):
         manifest = load_manifest(ROOT)["skills"]
@@ -68,15 +83,52 @@ class ReadmeAndPackagesTest(unittest.TestCase):
         readme = (ROOT / "README.md").read_text(encoding="utf-8")
         source = (ROOT / "skill-sources/web-api-test-execution-evidence/Web-API测试用例自动执行与证据回填_Skill.md").read_text(encoding="utf-8")
         combined = readme + source
-        self.assertIn("自动下载", combined)
+        self.assertIn("GitHub Release 完整安装器", combined)
+        self.assertIn("不会下载、安装或修改运行时", combined)
         self.assertIn("无需 npm 账号", combined)
         self.assertNotIn("npm install --save-dev @saitamasans/testing-runner", combined)
         self.assertNotIn("npx @saitamasans/testing-runner", combined)
 
+    def test_readme_distinguishes_complete_release_from_source_zip(self):
+        readme = (ROOT / "README.md").read_text(encoding="utf-8")
+        install_section = readme.split('<a id="install"></a>', 1)[1].split(
+            '<a id="usage-guides"></a>', 1
+        )[0]
+        for phrase in [
+            "GitHub Release 完整安装器",
+            "Source ZIP",
+            "仅供开发者",
+            "不能执行 Web/API 自动化测试",
+            "安装完成，可以执行 Web/API 自动化测试",
+            "无需系统安装 Node.js、npm、Git、Chrome、Excel 或 Python",
+        ]:
+            self.assertIn(phrase, install_section)
+        self.assertNotIn("首次运行下载", install_section)
+
+    def test_readme_has_windows_x64_three_step_execution_delivery(self):
+        readme = (ROOT / "README.md").read_text(encoding="utf-8")
+        install_section = readme.split('<a id="install"></a>', 1)[1].split(
+            '<a id="usage-guides"></a>', 1
+        )[0]
+        for phrase in [
+            "Windows x64 三步使用",
+            "install-web-api-test-execution-evidence.cmd",
+            "web-api-test-execution-evidence-1.0.2-windows-x64.zip",
+            "SHA256SUMS.txt",
+            "重启 Codex",
+            "把该 ZIP 交给第八个 Skill 执行",
+            "-Repair",
+            r"%USERPROFILE%\.testing-skills\installations\web-api-test-execution-evidence.json",
+            r"%USERPROFILE%\.testing-skills\diagnostics\web-api-test-execution-evidence",
+            "正常执行阶段不会下载 Node、Runner、Playwright 或 Chromium",
+        ]:
+            with self.subTest(phrase=phrase):
+                self.assertIn(phrase, install_section)
+
     def test_first_seven_skill_usage_guides_are_complete(self):
         readme = (ROOT / "README.md").read_text(encoding="utf-8")
         start_marker = '<a id="usage-guides"></a>'
-        end_marker = '<a id="execution-guide"></a>'
+        end_marker = '<a id="compiler-guide"></a>'
         self.assertIn(start_marker, readme)
         self.assertIn(end_marker, readme)
         usage_guides = readme.split(start_marker, 1)[1].split(end_marker, 1)[0]
@@ -117,8 +169,8 @@ class ReadmeAndPackagesTest(unittest.TestCase):
 
     def test_multi_api_guide_separates_starting_input_from_formal_admission(self):
         readme = (ROOT / "README.md").read_text(encoding="utf-8")
-        start_heading = "### 3. 多接口链路测试（`multi-api-flow-test`）"
-        end_heading = "### 4. 需求测试工作台（`requirement-test-workbench`）"
+        start_heading = "### 3. 多接口链路用例生成（`multi-api-flow-test`）"
+        end_heading = "### 4. 需求澄清与用例生成skill-工作台（`requirement-test-workbench`）"
         self.assertIn(start_heading, readme)
         self.assertIn(end_heading, readme)
         multi_api_guide = readme.split(start_heading, 1)[1].split(

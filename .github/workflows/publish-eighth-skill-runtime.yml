@@ -1,0 +1,608 @@
+name: Publish verified eighth Skill runtime
+
+on:
+  push:
+    tags:
+      - "web-api-test-execution-evidence-v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing immutable runtime tag to publish
+        required: true
+        default: web-api-test-execution-evidence-v1.0.2
+        type: string
+      public_release_id:
+        description: Existing public Release ID for read-only verification recovery
+        required: false
+        default: ""
+        type: string
+
+concurrency:
+  group: eighth-runtime-${{ github.repository }}-${{ github.event.inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  EXPECTED_TAG: web-api-test-execution-evidence-v1.0.2
+
+jobs:
+  validate-tag:
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.tag.outputs.tag }}
+      commit: ${{ steps.tag.outputs.commit }}
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          fetch-depth: 0
+          clean: true
+      - id: tag
+        name: Verify tag, runtime lock, and workflow commit
+        env:
+          RECOVERY_RELEASE_ID: ${{ inputs.public_release_id }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag="${{ github.event.inputs.tag || github.ref_name }}"
+          locked_tag="$(node -p "require('./packages/testing-runner/release/windows-runtime-lock.json').release_tag")"
+          test "$tag" = "$EXPECTED_TAG"
+          test "$tag" = "$locked_tag"
+          if [[ -n "${RECOVERY_RELEASE_ID:-}" ]]; then
+            if [[ "$GITHUB_EVENT_NAME" != "workflow_dispatch" ]]; then
+              echo "public Release recovery is only allowed through workflow_dispatch" >&2
+              exit 1
+            fi
+            if [[ ! "$RECOVERY_RELEASE_ID" =~ ^[0-9]+$ ]]; then
+              echo "public Release recovery ID must be numeric" >&2
+              exit 1
+            fi
+          fi
+          git fetch --force origin "refs/tags/$tag:refs/tags/$tag"
+          commit="$(git rev-parse "refs/tags/$tag^{commit}")"
+          if [[ "$GITHUB_EVENT_NAME" == "push" ]]; then test "$commit" = "$GITHUB_SHA"; fi
+          git fetch --no-tags origin main
+          git merge-base --is-ancestor "$commit" "refs/remotes/origin/main"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "commit=$commit" >> "$GITHUB_OUTPUT"
+
+  build-x64:
+    needs: validate-tag
+    uses: ./.github/workflows/build-complete-windows-bundles.yml
+    with:
+      release_tag: ${{ needs.validate-tag.outputs.tag }}
+      architecture: x64
+      source_commit: ${{ needs.validate-tag.outputs.commit }}
+
+  validate-arm64:
+    needs: validate-tag
+    uses: ./.github/workflows/build-complete-windows-bundles.yml
+    with:
+      release_tag: ${{ needs.validate-tag.outputs.tag }}
+      architecture: arm64
+      source_commit: ${{ needs.validate-tag.outputs.commit }}
+      non_blocking: true
+
+  assemble-release:
+    needs: [validate-tag, build-x64]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          ref: ${{ needs.validate-tag.outputs.commit }}
+          clean: true
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: "22.23.1"
+          cache: npm
+      - name: Install renderer dependencies without lifecycle scripts
+        run: npm ci --ignore-scripts
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: complete-windows-bundle-x64
+          path: build/native/x64
+      - name: Render complete immutable asset chain
+        run: |
+          node packages/testing-runner/scripts/render-windows-installers.mjs \
+            --lock packages/testing-runner/release/windows-runtime-lock.json \
+            --x64-manifest build/native/x64/windows-bundles/web-api-test-execution-evidence-1.0.2-windows-x64.manifest.json \
+            --x64-bundle build/native/x64/windows-bundles/web-api-test-execution-evidence-1.0.2-windows-x64.zip \
+            --complete-template installers/templates/install-web-api-test-execution-evidence.ps1.in \
+            --cmd-template installers/templates/install-web-api-test-execution-evidence.cmd.in \
+            --generic-template scripts/install.ps1 \
+            --all-template installers/install-all.cmd \
+            --output build/release-assets
+      - name: Reject missing, duplicate, or unresolved release assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          expected=(
+            SHA256SUMS.txt
+            install-all.cmd
+            install-web-api-test-execution-evidence.cmd
+            install-web-api-test-execution-evidence.ps1
+            install.ps1
+            web-api-test-execution-evidence-1.0.2-windows-x64.manifest.json
+            web-api-test-execution-evidence-1.0.2-windows-x64.zip
+          )
+          mapfile -t actual < <(find build/release-assets -maxdepth 1 -type f -printf '%f\n' | sort)
+          test "${actual[*]}" = "${expected[*]}"
+          if grep -ER '__[A-Z0-9_]+__' build/release-assets --exclude='*.zip'; then
+            echo "unresolved placeholder in release asset" >&2
+            exit 1
+          fi
+          (cd build/release-assets && sha256sum -c SHA256SUMS.txt)
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: verified-eighth-runtime-release-assets
+          path: build/release-assets/*
+          if-no-files-found: error
+          retention-days: 14
+
+  attest-release-assets:
+    needs: post-publish-verify
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      attestations: write
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: verified-eighth-runtime-release-assets
+          path: build/release-assets
+      - name: Attest bundles, manifests, and installers
+        id: attest
+        continue-on-error: true
+        uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2
+        with:
+          subject-path: build/release-assets/*
+      - if: steps.attest.outcome != 'success'
+        run: echo "::warning::attestation creation failed for the published runtime assets"
+
+  clean-room-install-smoke:
+    needs: assemble-release
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-2025
+            arch: x64
+            bundle_artifact: complete-windows-bundle-x64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.12"
+          architecture: ${{ matrix.arch }}
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: verified-eighth-runtime-release-assets
+          path: build/release-assets
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: ${{ matrix.bundle_artifact }}
+          path: build/native-artifact
+      - name: Install rendered complete runtime in a clean room
+        shell: powershell
+        run: |
+          $ErrorActionPreference = "Stop"
+          if ($PSVersionTable.PSEdition -cne "Desktop" -or $PSVersionTable.PSVersion.Major -ne 5) {
+            throw "clean-room installer requires Windows PowerShell 5.1"
+          }
+          $releaseRoot = Join-Path $PWD "build/release-assets"
+          $bundleName = "web-api-test-execution-evidence-1.0.2-windows-${{ matrix.arch }}.zip"
+          $manifestName = "web-api-test-execution-evidence-1.0.2-windows-${{ matrix.arch }}.manifest.json"
+          $releaseBundle = Join-Path $releaseRoot $bundleName
+          $releaseManifest = Join-Path $releaseRoot $manifestName
+          $nativeBundle = @(Get-ChildItem -LiteralPath build/native-artifact -Recurse -File -Filter $bundleName)
+          $nativeManifest = @(Get-ChildItem -LiteralPath build/native-artifact -Recurse -File -Filter $manifestName)
+          if ($nativeBundle.Count -ne 1 -or $nativeManifest.Count -ne 1) { throw "native artifact is incomplete" }
+          if ((Get-FileHash $releaseBundle -Algorithm SHA256).Hash -cne (Get-FileHash $nativeBundle[0].FullName -Algorithm SHA256).Hash) {
+            throw "assembled bundle differs from native artifact"
+          }
+          if ((Get-FileHash $releaseManifest -Algorithm SHA256).Hash -cne (Get-FileHash $nativeManifest[0].FullName -Algorithm SHA256).Hash) {
+            throw "assembled companion manifest differs from native artifact"
+          }
+
+          $installer = Join-Path $releaseRoot "install-web-api-test-execution-evidence.ps1"
+          $launcher = Join-Path $releaseRoot "install-web-api-test-execution-evidence.cmd"
+          $installerSha = (Get-FileHash $installer -Algorithm SHA256).Hash.ToLowerInvariant()
+          if (-not (Get-Content -LiteralPath $launcher -Raw).Contains("INSTALLER_SHA256=$installerSha")) {
+            throw "public CMD does not authorize the rendered complete installer"
+          }
+          $releaseManifestSha = (Get-FileHash $releaseManifest -Algorithm SHA256).Hash.ToLowerInvariant()
+          if (-not (Get-Content -LiteralPath $installer -Raw -Encoding UTF8).Contains($releaseManifestSha)) {
+            throw "complete installer does not authorize the native companion manifest"
+          }
+
+          $volumeRoot = [IO.Path]::GetPathRoot($env:RUNNER_TEMP)
+          $cleanRoot = Join-Path $volumeRoot ("r-" + [Guid]::NewGuid().ToString("N").Substring(0, 8))
+          $servedRoot = Join-Path $cleanRoot "served"
+          $installRoot = Join-Path $cleanRoot "skills"
+          $stateRoot = Join-Path $cleanRoot "state"
+          $emptyPath = Join-Path $cleanRoot "empty-path"
+          New-Item -ItemType Directory -Path $servedRoot, $emptyPath -Force | Out-Null
+          Copy-Item -LiteralPath $releaseBundle -Destination (Join-Path $servedRoot $bundleName)
+
+          $portProbe = New-Object Net.Sockets.TcpListener([Net.IPAddress]::Loopback, 0)
+          $portProbe.Start()
+          $port = ([Net.IPEndPoint]$portProbe.LocalEndpoint).Port
+          $portProbe.Stop()
+          $localManifest = Get-Content -LiteralPath $releaseManifest -Raw -Encoding UTF8 | ConvertFrom-Json
+          $localManifest.archive.download_url = "http://127.0.0.1:$port/$bundleName"
+          $localManifestPath = Join-Path $servedRoot $manifestName
+          $localManifestJson = $localManifest | ConvertTo-Json -Depth 20
+          [IO.File]::WriteAllText(
+            $localManifestPath,
+            $localManifestJson,
+            (New-Object Text.UTF8Encoding($false))
+          )
+          $localManifestSha = (Get-FileHash $localManifestPath -Algorithm SHA256).Hash.ToLowerInvariant()
+
+          $python = (Get-Command python.exe -ErrorAction Stop).Source
+          $serverOut = Join-Path $cleanRoot "fixture-server.log"
+          $serverErr = Join-Path $cleanRoot "fixture-server-error.log"
+          $quotedServedRoot = '"' + $servedRoot + '"'
+          $server = Start-Process -FilePath $python -ArgumentList @(
+            "-m", "http.server", "$port", "--bind", "127.0.0.1", "--directory", $quotedServedRoot
+          ) -RedirectStandardOutput $serverOut -RedirectStandardError $serverErr -WindowStyle Hidden -PassThru
+          $originalPath = $env:PATH
+          try {
+            $ready = $false
+            foreach ($attempt in 1..30) {
+              try {
+                Invoke-WebRequest -UseBasicParsing -Uri "http://127.0.0.1:$port/$manifestName" | Out-Null
+                $ready = $true
+                break
+              } catch { Start-Sleep -Milliseconds 250 }
+            }
+            if (-not $ready) { throw "authorized local artifact server did not start" }
+            $env:PATH = $emptyPath
+            $powerShell51 = Join-Path $env:SystemRoot "System32\WindowsPowerShell\v1.0\powershell.exe"
+            & $powerShell51 -NoProfile -ExecutionPolicy Bypass -File $installer `
+              -Architecture "${{ matrix.arch }}" `
+              -ManifestUri "http://127.0.0.1:$port/$manifestName" `
+              -ManifestSha256 $localManifestSha `
+              -InstallRoot $installRoot `
+              -StateRoot $stateRoot `
+              -AllowLocalFixture `
+              -SafetyMarginBytes 0 `
+              -MaxRetries 0 `
+              -RetryDelayMilliseconds 0
+            if ($LASTEXITCODE -ne 0) { throw "rendered complete installer failed: $LASTEXITCODE" }
+          } finally {
+            $env:PATH = $originalPath
+            if ($server -and -not $server.HasExited) { Stop-Process -Id $server.Id -Force }
+          }
+
+          $installationReceipt = Join-Path $stateRoot "installations\web-api-test-execution-evidence.json"
+          if (-not (Test-Path -LiteralPath $installationReceipt -PathType Leaf)) { throw "installation-receipt is missing" }
+          $receipt = Get-Content -LiteralPath $installationReceipt -Raw -Encoding UTF8 | ConvertFrom-Json
+          $diagnostics = [string]$receipt.diagnostics_path
+          foreach ($pattern in @("*.png", "playwright-trace.zip", "*.xlsx", "*.html", "run-result.json", "*.jsonl")) {
+            if (-not (Get-ChildItem -LiteralPath $diagnostics -Recurse -File -Filter $pattern | Select-Object -First 1)) {
+              throw "installed smoke diagnostic is missing: $pattern"
+            }
+          }
+
+          $networkSentinel = New-Object Net.Sockets.TcpListener([Net.IPAddress]::Loopback, 0)
+          $networkSentinel.Start()
+          $proxyPort = ([Net.IPEndPoint]$networkSentinel.LocalEndpoint).Port
+          $connectionAttempt = $networkSentinel.AcceptTcpClientAsync()
+          $originalPath = $env:PATH
+          $env:PATH = $emptyPath
+          $env:HTTP_PROXY = "http://127.0.0.1:$proxyPort"
+          $env:HTTPS_PROXY = "http://127.0.0.1:$proxyPort"
+          $env:ALL_PROXY = "http://127.0.0.1:$proxyPort"
+          $env:TESTING_SKILLS_STATE_ROOT = $stateRoot
+          $env:TESTING_SKILLS_INSTALL_ROOT = $installRoot
+          try {
+            $installedLauncher = Join-Path $installRoot "web-api-test-execution-evidence\scripts\testing-runner.ps1"
+            & $installedLauncher --version
+            if ($LASTEXITCODE -ne 0) { throw "installed runner verification failed: $LASTEXITCODE" }
+            Start-Sleep -Milliseconds 500
+            if ($connectionAttempt.IsCompleted) { throw "installed Runner attempted dependency network access" }
+          } finally {
+            $networkSentinel.Stop()
+            $env:PATH = $originalPath
+            Remove-Item Env:HTTP_PROXY, Env:HTTPS_PROXY, Env:ALL_PROXY,
+              Env:TESTING_SKILLS_STATE_ROOT, Env:TESTING_SKILLS_INSTALL_ROOT -ErrorAction SilentlyContinue
+          }
+
+  immutable-release-advisory:
+    needs: validate-tag
+    runs-on: ubuntu-latest
+    steps:
+      - name: Report repository immutable-release configuration
+        env:
+          GH_TOKEN: ${{ secrets.IMMUTABLE_RELEASES_ADMIN_READ_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -z "${GH_TOKEN:-}" ]]; then
+            echo "::warning::immutable release settings admin-read token is not configured"
+            exit 0
+          fi
+          if ! enabled="$(gh api "repos/$GITHUB_REPOSITORY/immutable-releases" --jq .enabled)"; then
+            echo "::warning::immutable release settings could not be read"
+            exit 0
+          fi
+          if [[ "$enabled" != "true" ]]; then
+            echo "::warning::immutable releases are not enabled"
+            exit 0
+          fi
+          echo "Repository immutable releases are enabled."
+
+  create-draft:
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.public_release_id == '' }}
+    needs: [validate-tag, assemble-release, clean-room-install-smoke, immutable-release-advisory]
+    runs-on: ubuntu-latest
+    outputs:
+      release_id: ${{ steps.draft.outputs.release_id }}
+      release_url: ${{ steps.draft.outputs.release_url }}
+      created_or_reused: ${{ steps.draft.outputs.created_or_reused }}
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          ref: ${{ needs.validate-tag.outputs.commit }}
+          fetch-depth: 0
+          clean: true
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: verified-eighth-runtime-release-assets
+          path: build/release-assets
+      - id: draft
+        name: Discover or create one non-overwritable runtime draft
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ needs.validate-tag.outputs.tag }}
+          TAG_COMMIT: ${{ needs.validate-tag.outputs.commit }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          node packages/testing-runner/scripts/release-draft-lifecycle.mjs prepare \
+            --tag "$RELEASE_TAG" --target "$TAG_COMMIT" \
+            --title "Complete eighth Skill runtime 1.0.2" \
+            --assets-dir build/release-assets
+      - name: Verify draft release assets against trusted artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ needs.validate-tag.outputs.tag }}
+          TAG_COMMIT: ${{ needs.validate-tag.outputs.commit }}
+          RELEASE_ID: ${{ steps.draft.outputs.release_id }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf build/draft-verification
+          mkdir build/draft-verification
+          target_commitish="$(git rev-parse "refs/tags/$RELEASE_TAG^{commit}")"
+          test "$target_commitish" = "$TAG_COMMIT"
+          node packages/testing-runner/scripts/release-draft-lifecycle.mjs download \
+            --release-id "$RELEASE_ID" --tag "$RELEASE_TAG" --target "$TAG_COMMIT" \
+            --trusted-dir build/release-assets --output-dir build/draft-verification
+          (cd build/release-assets && sha256sum -c SHA256SUMS.txt)
+          (cd build/draft-verification && sha256sum -c SHA256SUMS.txt)
+          if ! diff --no-dereference --recursive build/release-assets build/draft-verification; then
+            echo "draft assets differ from verified artifact" >&2
+            exit 1
+          fi
+
+  publish-release:
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.public_release_id == '' }}
+    needs: [validate-tag, create-draft]
+    runs-on: ubuntu-latest
+    environment: release
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          ref: ${{ needs.validate-tag.outputs.commit }}
+          fetch-depth: 0
+          clean: true
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: verified-eighth-runtime-release-assets
+          path: build/release-assets
+      - name: Reverify trusted draft and publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ needs.validate-tag.outputs.tag }}
+          TAG_COMMIT: ${{ needs.validate-tag.outputs.commit }}
+          RELEASE_ID: ${{ needs.create-draft.outputs.release_id }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf build/draft-verification
+          mkdir -p build/draft-verification
+          target_commitish="$(git rev-parse "refs/tags/$RELEASE_TAG^{commit}")"
+          test "$target_commitish" = "$TAG_COMMIT"
+          node packages/testing-runner/scripts/release-draft-lifecycle.mjs download \
+            --release-id "$RELEASE_ID" --tag "$RELEASE_TAG" --target "$TAG_COMMIT" \
+            --trusted-dir build/release-assets --output-dir build/draft-verification
+          (cd build/release-assets && sha256sum -c SHA256SUMS.txt)
+          (cd build/draft-verification && sha256sum -c SHA256SUMS.txt)
+          if ! diff --no-dereference --recursive build/release-assets build/draft-verification; then
+            echo "draft assets differ from verified artifact" >&2
+            exit 1
+          fi
+          node packages/testing-runner/scripts/release-draft-lifecycle.mjs publish \
+            --release-id "$RELEASE_ID" --tag "$RELEASE_TAG" --target "$TAG_COMMIT" \
+            --trusted-dir build/release-assets
+
+  post-publish-verify:
+    needs: [validate-tag, assemble-release, clean-room-install-smoke, create-draft, publish-release]
+    if: >-
+      ${{
+        always() &&
+        needs.validate-tag.result == 'success' &&
+        needs.assemble-release.result == 'success' &&
+        needs.clean-room-install-smoke.result == 'success' &&
+        (
+          (inputs.public_release_id != '' &&
+           needs.create-draft.result == 'skipped' &&
+           needs.publish-release.result == 'skipped') ||
+          (inputs.public_release_id == '' &&
+           needs.create-draft.result == 'success' &&
+           needs.publish-release.result == 'success')
+        )
+      }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-2025
+            arch: x64
+    runs-on: ${{ matrix.os }}
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          ref: ${{ needs.validate-tag.outputs.commit }}
+          clean: true
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: "22.23.1"
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: verified-eighth-runtime-release-assets
+          path: build/trusted-release
+      - name: Post-publish immutable URL verification
+        shell: bash
+        env:
+          RELEASE_TAG: ${{ needs.validate-tag.outputs.tag }}
+          TAG_COMMIT: ${{ needs.validate-tag.outputs.commit }}
+          RELEASE_ID: ${{ inputs.public_release_id || needs.create-draft.outputs.release_id }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          tag="$RELEASE_TAG"
+          base="https://github.com/Saitamasans/testing-skills/releases/download/$tag"
+          test -n "$base"
+          rm -rf build/public-release
+          mkdir build/public-release
+          node packages/testing-runner/scripts/release-draft-lifecycle.mjs verify-public \
+            --release-id "$RELEASE_ID" --tag "$tag" --target "$TAG_COMMIT" \
+            --trusted-dir build/trusted-release --output-dir build/public-release
+          (cd build/public-release && sha256sum -c SHA256SUMS.txt)
+          if ! diff --no-dereference --recursive build/trusted-release build/public-release; then
+            echo "public immutable assets differ from trusted current-run artifact" >&2
+            exit 1
+          fi
+      - name: Install through the public CMD and execute offline formal smoke
+        shell: powershell
+        run: |
+          $ErrorActionPreference = "Stop"
+          $expectedArch = "${{ matrix.arch }}"
+          $runtimeArch = [Runtime.InteropServices.RuntimeInformation]::OSArchitecture.ToString().ToLowerInvariant()
+          Write-Output "PROCESSOR_ARCHITECTURE=$env:PROCESSOR_ARCHITECTURE RuntimeInformation=$runtimeArch"
+          if ($runtimeArch -cne $expectedArch) { throw "native host architecture mismatch" }
+
+          $volumeRoot = [IO.Path]::GetPathRoot($env:RUNNER_TEMP)
+          $isolated = Join-Path $volumeRoot ("r-" + [Guid]::NewGuid().ToString("N").Substring(0, 8))
+          $installRoot = Join-Path $isolated "skills"
+          $stateRoot = Join-Path $isolated "state"
+          $evidenceRoot = Join-Path $PWD "build/public-install-evidence-${{ matrix.arch }}"
+          $installationReceipt = $null
+          $diagnostics = $null
+          $offlineDiagnostics = $null
+          $dependencyNetworkAttempted = $null
+          New-Item -ItemType Directory -Path $evidenceRoot -Force | Out-Null
+          try {
+            New-Item -ItemType Directory -Path $installRoot, $stateRoot -Force | Out-Null
+            $env:TESTING_SKILLS_INSTALL_ROOT = $installRoot
+            $env:TESTING_SKILLS_STATE_ROOT = $stateRoot
+            $env:TESTING_SKILLS_NO_PAUSE = "1"
+            $publicCmd = Join-Path $PWD "build/public-release/install-web-api-test-execution-evidence.cmd"
+            & $env:ComSpec /d /c ('"' + $publicCmd + '"')
+            if ($LASTEXITCODE -ne 0) { throw "public CMD installation failed: $LASTEXITCODE" }
+
+            $installationReceipt = Join-Path $stateRoot "installations/web-api-test-execution-evidence.json"
+            if (-not (Test-Path -LiteralPath $installationReceipt -PathType Leaf)) { throw "installation-receipt is missing" }
+            $receipt = Get-Content -LiteralPath $installationReceipt -Raw -Encoding UTF8 | ConvertFrom-Json
+            $diagnostics = [string]$receipt.diagnostics_path
+            if (-not (Test-Path -LiteralPath (Join-Path $diagnostics "smoke-result.json") -PathType Leaf)) { throw "smoke-result.json is missing" }
+            foreach ($pattern in @("*.png", "playwright-trace.zip", "*.xlsx", "*.html", "run-result.json", "*.jsonl")) {
+              if (-not (Get-ChildItem -LiteralPath $diagnostics -Recurse -File -Filter $pattern | Select-Object -First 1)) {
+                throw "public installation diagnostic is missing: $pattern"
+              }
+            }
+
+            $networkSentinel = New-Object Net.Sockets.TcpListener([Net.IPAddress]::Loopback, 0)
+            $networkSentinel.Start()
+            $proxyPort = ([Net.IPEndPoint]$networkSentinel.LocalEndpoint).Port
+            $connectionAttempt = $networkSentinel.AcceptTcpClientAsync()
+            $env:HTTP_PROXY = "http://127.0.0.1:$proxyPort"
+            $env:HTTPS_PROXY = "http://127.0.0.1:$proxyPort"
+            $env:ALL_PROXY = "http://127.0.0.1:$proxyPort"
+            try {
+              $installedLauncher = Join-Path $installRoot "web-api-test-execution-evidence/scripts/testing-runner.ps1"
+              & $installedLauncher --version
+              if ($LASTEXITCODE -ne 0) { throw "installed launcher verification failed: $LASTEXITCODE" }
+              $runtimePath = [string]$receipt.runtime_path
+              $bundledNode = Join-Path $runtimePath "node/node.exe"
+              $smokeScript = Join-Path $runtimePath "smoke/installation-smoke-test.mjs"
+              $offlineDiagnostics = Join-Path $isolated "offline-formal-execution"
+              & $bundledNode $smokeScript $offlineDiagnostics
+              if ($LASTEXITCODE -ne 0) { throw "offline formal execution failed: $LASTEXITCODE" }
+              Start-Sleep -Milliseconds 500
+              $dependencyNetworkAttempted = [bool]$connectionAttempt.IsCompleted
+              if ($dependencyNetworkAttempted) { throw "offline formal execution attempted dependency network access" }
+              foreach ($pattern in @("*.png", "playwright-trace.zip", "*.xlsx", "*.html", "run-result.json", "*.jsonl")) {
+                if (-not (Get-ChildItem -LiteralPath $offlineDiagnostics -Recurse -File -Filter $pattern | Select-Object -First 1)) {
+                  throw "offline formal execution artifact is missing: $pattern"
+                }
+              }
+            } finally {
+              $networkSentinel.Stop()
+              Remove-Item Env:HTTP_PROXY, Env:HTTPS_PROXY, Env:ALL_PROXY -ErrorAction SilentlyContinue
+            }
+          } finally {
+            try {
+              $pathEvidence = [ordered]@{
+                schema_version = 1
+                runner_temp = $env:RUNNER_TEMP
+                volume_root = $volumeRoot
+                isolated_root = $isolated
+                isolated_root_length = $isolated.Length
+                install_root = $installRoot
+                state_root = $stateRoot
+                dependency_network_attempted = $dependencyNetworkAttempted
+              }
+              [IO.File]::WriteAllText(
+                (Join-Path $evidenceRoot "public-install-paths.json"),
+                ($pathEvidence | ConvertTo-Json -Depth 10),
+                (New-Object Text.UTF8Encoding($false))
+              )
+              if ($installationReceipt -and (Test-Path -LiteralPath $installationReceipt -PathType Leaf)) {
+                Copy-Item -LiteralPath $installationReceipt -Destination (Join-Path $evidenceRoot "installation-receipt.json") -Force
+              }
+              if ($diagnostics -and (Test-Path -LiteralPath $diagnostics -PathType Container)) {
+                Copy-Item -LiteralPath $diagnostics -Destination (Join-Path $evidenceRoot "install-diagnostics") -Recurse -Force
+              }
+              if ($offlineDiagnostics -and (Test-Path -LiteralPath $offlineDiagnostics -PathType Container)) {
+                Copy-Item -LiteralPath $offlineDiagnostics -Destination (Join-Path $evidenceRoot "offline-formal-execution") -Recurse -Force
+              }
+            } catch {
+              Write-Warning "could not preserve all public-install diagnostics: $($_.Exception.Message)"
+            }
+            Remove-Item Env:HTTP_PROXY, Env:HTTPS_PROXY, Env:ALL_PROXY,
+              Env:TESTING_SKILLS_INSTALL_ROOT, Env:TESTING_SKILLS_STATE_ROOT,
+              Env:TESTING_SKILLS_NO_PAUSE -ErrorAction SilentlyContinue
+            if (Test-Path -LiteralPath $isolated) {
+              Remove-Item -LiteralPath $isolated -Recurse -Force -ErrorAction SilentlyContinue
+            }
+          }
+      - name: Upload public installation verification evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: public-runtime-install-verification-${{ matrix.arch }}
+          path: build/public-install-evidence-${{ matrix.arch }}
+          if-no-files-found: warn
+          retention-days: 14
