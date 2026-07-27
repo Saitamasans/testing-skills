@@ -11,10 +11,10 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $script:Slug = 'multi-source-test-audit'
-$script:Version = '0.1.4'
-$script:ReleaseTag = 'multi-source-test-audit-v0.1.4'
-$script:InstallerVersion = '0.1.4'
-$script:ArchiveName = 'multi-source-test-audit-0.1.4-windows-x64.zip'
+$script:Version = '0.1.5'
+$script:ReleaseTag = 'multi-source-test-audit-v0.1.5'
+$script:InstallerVersion = '0.1.5'
+$script:ArchiveName = 'multi-source-test-audit-0.1.5-windows-x64.zip'
 $script:FixedReleaseUrl = "https://github.com/Saitamasans/testing-skills/releases/download/$script:ReleaseTag/$script:ArchiveName"
 $script:PublishedArchiveSha256 = '__ARCHIVE_SHA256__'
 
@@ -219,15 +219,53 @@ function Write-ReceiptAtomic {
     finally { Remove-Item -LiteralPath $temporary -Force -ErrorAction SilentlyContinue }
 }
 
+function Get-LocalizedText { param([Parameter(Mandatory = $true)][string]$Base64) return [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($Base64)) }
+
+function Test-ExistingInstallation {
+    param([Parameter(Mandatory = $true)][string]$Target, [Parameter(Mandatory = $true)][string]$ReceiptPath)
+    if (-not (Test-Path -LiteralPath $Target -PathType Container)) { return [pscustomobject]@{ Kind = 'missing' } }
+    $skillMarker = Test-Path -LiteralPath (Join-Path $Target 'SKILL.md') -PathType Leaf
+    $runtimeMarker = Test-Path -LiteralPath (Join-Path $Target 'runtime\runtime-manifest.json') -PathType Leaf
+    $bundleMarker = Test-Path -LiteralPath (Join-Path $Target 'bundle-manifest.json') -PathType Leaf
+    if (-not ($skillMarker -or $runtimeMarker -or $bundleMarker)) { return [pscustomobject]@{ Kind = 'conflict' } }
+    $versionPath = Join-Path $Target 'VERSION'
+    $version = if (Test-Path -LiteralPath $versionPath -PathType Leaf) { (Get-Content -LiteralPath $versionPath -Raw).Trim() } else { '' }
+    if ($version -and $version -cne $script:Version) { return [pscustomobject]@{ Kind = 'old'; Version = $version } }
+    try {
+        $receipt = Get-Json -Path $ReceiptPath
+        if ($receipt.slug -cne $script:Slug -or $receipt.version -cne $script:Version) { throw 'receipt identity mismatch' }
+        Assert-RuntimeManifest -BundleRoot $Target | Out-Null
+        Assert-BundleManifest -BundleRoot $Target | Out-Null
+        Invoke-Smoke -BundleRoot $Target
+        Invoke-InstalledSmoke -InstallationPath $Target
+        return [pscustomobject]@{ Kind = 'healthy'; Version = $version }
+    } catch { return [pscustomobject]@{ Kind = 'repair'; Detail = $_.Exception.Message } }
+}
+
 function Install-Release {
-    $configuration = Assert-ReleaseConfiguration -Url $ReleaseUrl -Sha256 $ReleaseSha256
     New-Directory -Path $InstallRoot
     New-Directory -Path $StateRoot
     $target = Join-Path $InstallRoot $script:Slug
     $receiptPath = Join-Path $StateRoot "installations\$script:Slug.json"
-    if ((Test-Path -LiteralPath $target) -and -not $Force -and -not $Repair) {
-        throw "installation_failed: existing installation requires -Force or -Repair: $target"
+    $existing = Test-ExistingInstallation -Target $target -ReceiptPath $receiptPath
+    if ($existing.Kind -eq 'conflict') { throw "installation_failed: existing directory is not a recognized multi-source-test-audit installation: $target" }
+    if (-not $Force -and -not $Repair -and $existing.Kind -eq 'healthy') {
+        Write-Output ("multi-source-test-audit " + (Get-LocalizedText '5bey5a6J6KOF77yM5peg6ZyA6YeN5aSN5a6J6KOF'))
+        Write-Output ((Get-LocalizedText '5b2T5YmN54mI5pys77ya') + $script:Version)
+        Write-Output ((Get-LocalizedText '5a6J6KOF55uu5b2V77ya') + $target)
+        Write-Output (Get-LocalizedText '6L+Q6KGM54q25oCB77ya5q2j5bi4')
+        Write-Output (Get-LocalizedText '6K+36YeN5ZCvIENvZGV4IOWQjuS9v+eUqCBtdWx0aS1zb3VyY2UtdGVzdC1hdWRpdOOAgg==')
+        return
     }
+    if (-not $Force -and -not $Repair -and $existing.Kind -eq 'repair') {
+        Write-Output (Get-LocalizedText '5qOA5rWL5Yiw546w5pyJ5a6J6KOF5LiN5a6M5pW077yM5q2j5Zyo6Ieq5Yqo5L+u5aSN4oCm4oCm')
+        $Repair = $true
+    }
+    if (-not $Force -and -not $Repair -and $existing.Kind -eq 'old') {
+        Write-Output ((Get-LocalizedText '5qOA5rWL5Yiw5bey5a6J6KOF54mI5pysIA==') + $existing.Version)
+        Write-Output ((Get-LocalizedText '5q2j5Zyo5a6J5YWo5Y2H57qn5YiwIA==') + $script:Version + (Get-LocalizedText '4oCm4oCm'))
+    }
+    $configuration = Assert-ReleaseConfiguration -Url $ReleaseUrl -Sha256 $ReleaseSha256
     $tempRoot = Join-Path ([IO.Path]::GetTempPath()) "${script:Slug}-$([Guid]::NewGuid().ToString('N'))"
     $archive = Join-Path $tempRoot $script:ArchiveName
     $extractRoot = Join-Path $tempRoot 'extract'
@@ -253,7 +291,12 @@ function Install-Release {
         Invoke-InstalledSmoke -InstallationPath $target
         Write-ReceiptAtomic -Path $receiptPath -InstallationPath $target -ArchiveSha256 $configuration.Sha256 -BundleManifestSha256 $bundleSha -Repaired:($Repair -or $Force)
         Remove-Item -LiteralPath $backup -Recurse -Force -ErrorAction SilentlyContinue
-        Write-Output "installed: $target"
+        if ($existing.Kind -eq 'repair') { Write-Output ("multi-source-test-audit " + $script:Version + (Get-LocalizedText '5L+u5aSN5oiQ5Yqf')) }
+        elseif ($existing.Kind -eq 'old') { Write-Output ("multi-source-test-audit " + (Get-LocalizedText '5bey5oiQ5Yqf5Y2H57qn5YiwIA==') + $script:Version) }
+        else { Write-Output ("multi-source-test-audit " + $script:Version + (Get-LocalizedText '5a6J6KOF5oiQ5Yqf')) }
+        Write-Output ((Get-LocalizedText '5a6J6KOF55uu5b2V77ya') + $target)
+        Write-Output (Get-LocalizedText '6L+Q6KGM54q25oCB77ya5q2j5bi4')
+        Write-Output (Get-LocalizedText '6K+36YeN5ZCvIENvZGV444CC')
     }
     catch {
         if ($activated -and (Test-Path -LiteralPath $target)) { Remove-Item -LiteralPath $target -Recurse -Force -ErrorAction SilentlyContinue }
