@@ -3,8 +3,8 @@ chcp 65001 >nul
 setlocal EnableExtensions DisableDelayedExpansion
 set "PSModulePath=%SystemRoot%\System32\WindowsPowerShell\v1.0\Modules"
 
-set "BOOTSTRAP_VERSION=0.1.5"
-set "PS1_URL=https://github.com/Saitamasans/testing-skills/releases/download/multi-source-test-audit-v0.1.5/install-multi-source-test-audit.ps1"
+set "BOOTSTRAP_VERSION=0.1.6"
+set "PS1_URL=https://github.com/Saitamasans/testing-skills/releases/download/multi-source-test-audit-v0.1.6/install-multi-source-test-audit.ps1"
 set "EXPECTED_PS1_SHA256=__INSTALLER_SHA256__"
 set "UNPUBLISHED_SENTINEL=__"
 set "UNPUBLISHED_SENTINEL=%UNPUBLISHED_SENTINEL%INSTALLER_SHA256__"
@@ -16,6 +16,12 @@ set "LOG_PATH=%TEMP%\multi-source-test-audit-bootstrap-%BOOTSTRAP_ID%.log"
 set "MSA_BOOTSTRAP_URL=%PS1_URL%"
 set "MSA_BOOTSTRAP_OUTPUT=%PS1_PATH%"
 set "EXIT_CODE=1"
+set "RESULT_COUNT=0"
+set "VERSION_COUNT=0"
+set "PATH_COUNT=0"
+set "RESULT_VALUE="
+set "VERSION_VALUE="
+set "INSTALL_PATH_VALUE="
 
 if not exist "%BOOTSTRAP_ROOT%" mkdir "%BOOTSTRAP_ROOT%" >nul 2>&1
 call :main %* >>"%LOG_PATH%" 2>&1
@@ -91,10 +97,66 @@ if not "%PS1_EXIT_CODE%"=="0" (
 exit /b 0
 
 :success
+for /f "usebackq tokens=1,* delims==" %%A in (`findstr /r /c:"^MSA_RESULT=.*" "%LOG_PATH%"`) do (
+    set /a RESULT_COUNT+=1
+    set "RESULT_VALUE=%%B"
+)
+for /f "usebackq tokens=1,* delims==" %%A in (`findstr /r /c:"^MSA_VERSION=.*" "%LOG_PATH%"`) do (
+    set /a VERSION_COUNT+=1
+    set "VERSION_VALUE=%%B"
+)
+for /f "usebackq tokens=1,* delims==" %%A in (`findstr /r /c:"^MSA_INSTALL_PATH=.*" "%LOG_PATH%"`) do (
+    set /a PATH_COUNT+=1
+    set "INSTALL_PATH_VALUE=%%B"
+)
+if not "%RESULT_COUNT%"=="1" goto :result_protocol_error
+if not "%VERSION_COUNT%"=="1" goto :result_protocol_error
+if not "%PATH_COUNT%"=="1" goto :result_protocol_error
+if not "%VERSION_VALUE%"=="%BOOTSTRAP_VERSION%" goto :result_protocol_error
+if not defined INSTALL_PATH_VALUE goto :result_protocol_error
+if /i "%RESULT_VALUE%"=="new_install" goto :success_new_install
+if /i "%RESULT_VALUE%"=="already_installed" goto :success_already_installed
+if /i "%RESULT_VALUE%"=="repaired" goto :success_repaired
+if /i "%RESULT_VALUE%"=="upgraded" goto :success_upgraded
+goto :result_protocol_error
+
+:success_new_install
 echo.
 echo multi-source-test-audit %BOOTSTRAP_VERSION% 安装成功
-for /f "delims=" %%L in ('findstr /b /c:"installed:" "%LOG_PATH%" 2^>nul') do echo 安装目录: %%L
+echo 安装目录：%INSTALL_PATH_VALUE%
 echo 请重启 Codex
+goto :finish
+
+:success_already_installed
+echo.
+echo multi-source-test-audit 已安装，无需重复安装
+echo 当前版本：%BOOTSTRAP_VERSION%
+echo 安装目录：%INSTALL_PATH_VALUE%
+echo 运行状态：正常
+echo 请重启 Codex 后使用 multi-source-test-audit
+goto :finish
+
+:success_repaired
+echo.
+echo multi-source-test-audit %BOOTSTRAP_VERSION% 修复成功
+echo 安装目录：%INSTALL_PATH_VALUE%
+echo 运行状态：正常
+echo 请重启 Codex
+goto :finish
+
+:success_upgraded
+echo.
+echo multi-source-test-audit 已成功升级到 %BOOTSTRAP_VERSION%
+echo 安装目录：%INSTALL_PATH_VALUE%
+echo 运行状态：正常
+echo 请重启 Codex
+goto :finish
+
+:result_protocol_error
+set "EXIT_CODE=15"
+echo.
+echo 结果协议异常
+echo 日志位置: %LOG_PATH%
 goto :finish
 
 :finish

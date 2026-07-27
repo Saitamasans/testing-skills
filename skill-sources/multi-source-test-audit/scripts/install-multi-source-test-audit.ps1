@@ -11,10 +11,10 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $script:Slug = 'multi-source-test-audit'
-$script:Version = '0.1.5'
-$script:ReleaseTag = 'multi-source-test-audit-v0.1.5'
-$script:InstallerVersion = '0.1.5'
-$script:ArchiveName = 'multi-source-test-audit-0.1.5-windows-x64.zip'
+$script:Version = '0.1.6'
+$script:ReleaseTag = 'multi-source-test-audit-v0.1.6'
+$script:InstallerVersion = '0.1.6'
+$script:ArchiveName = 'multi-source-test-audit-0.1.6-windows-x64.zip'
 $script:FixedReleaseUrl = "https://github.com/Saitamasans/testing-skills/releases/download/$script:ReleaseTag/$script:ArchiveName"
 $script:PublishedArchiveSha256 = '__ARCHIVE_SHA256__'
 
@@ -221,6 +221,16 @@ function Write-ReceiptAtomic {
 
 function Get-LocalizedText { param([Parameter(Mandatory = $true)][string]$Base64) return [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($Base64)) }
 
+function Write-ResultProtocol {
+    param(
+        [Parameter(Mandatory = $true)][ValidateSet('new_install', 'already_installed', 'repaired', 'upgraded')][string]$Result,
+        [Parameter(Mandatory = $true)][string]$InstallationPath
+    )
+    Write-Output "MSA_RESULT=$Result"
+    Write-Output "MSA_VERSION=$script:Version"
+    Write-Output "MSA_INSTALL_PATH=$([IO.Path]::GetFullPath($InstallationPath))"
+}
+
 function Test-ExistingInstallation {
     param([Parameter(Mandatory = $true)][string]$Target, [Parameter(Mandatory = $true)][string]$ReceiptPath)
     if (-not (Test-Path -LiteralPath $Target -PathType Container)) { return [pscustomobject]@{ Kind = 'missing' } }
@@ -255,6 +265,7 @@ function Install-Release {
         Write-Output ((Get-LocalizedText '5a6J6KOF55uu5b2V77ya') + $target)
         Write-Output (Get-LocalizedText '6L+Q6KGM54q25oCB77ya5q2j5bi4')
         Write-Output (Get-LocalizedText '6K+36YeN5ZCvIENvZGV4IOWQjuS9v+eUqCBtdWx0aS1zb3VyY2UtdGVzdC1hdWRpdOOAgg==')
+        Write-ResultProtocol -Result 'already_installed' -InstallationPath $target
         return
     }
     if (-not $Force -and -not $Repair -and $existing.Kind -eq 'repair') {
@@ -297,6 +308,8 @@ function Install-Release {
         Write-Output ((Get-LocalizedText '5a6J6KOF55uu5b2V77ya') + $target)
         Write-Output (Get-LocalizedText '6L+Q6KGM54q25oCB77ya5q2j5bi4')
         Write-Output (Get-LocalizedText '6K+36YeN5ZCvIENvZGV444CC')
+        $result = if ($existing.Kind -eq 'repair') { 'repaired' } elseif ($existing.Kind -eq 'old') { 'upgraded' } else { 'new_install' }
+        Write-ResultProtocol -Result $result -InstallationPath $target
     }
     catch {
         if ($activated -and (Test-Path -LiteralPath $target)) { Remove-Item -LiteralPath $target -Recurse -Force -ErrorAction SilentlyContinue }
