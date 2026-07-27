@@ -16,7 +16,7 @@
 | 需求测试工作台<br>`requirement-test-workbench` | 根据 PRD、用户故事或需求变更完成测试分析和用例设计。 | [![Install](https://img.shields.io/badge/Install-2ea44f)](https://github.com/Saitamasans/testing-skills/releases/download/skill-installers-v1/install-requirement-test-workbench.cmd) |
 | 正式服验证<br>`production-verification-test` | 为上线后、灰度或生产环境设计低影响验证和安全门禁。 | [![Install](https://img.shields.io/badge/Install-2ea44f)](https://github.com/Saitamasans/testing-skills/releases/download/skill-installers-v1/install-production-verification-test.cmd) |
 | 用例质量审计<br>`test-case-quality-audit` | 审计已有用例的可执行性、需求一致性、遗漏风险和冗余。 | [![Install](https://img.shields.io/badge/Install-2ea44f)](https://github.com/Saitamasans/testing-skills/releases/download/skill-installers-v1/install-test-case-quality-audit.cmd) |
-| 需求澄清<br>`requirement-clarification-test` | 在写用例前找出需求缺口并判断是否具备开测条件。 | [![Install](https://img.shields.io/badge/Install-2ea44f)](https://github.com/Saitamasans/testing-skills/releases/download/skill-installers-v1/install-requirement-clarification-test.cmd) |
+| 需求澄清<br>`requirement-clarification-test` | 在写用例前找出需求缺口、导出产品核对 Excel 并判断是否具备开测条件。 | [![Install](https://img.shields.io/badge/Install-2ea44f)](https://github.com/Saitamasans/testing-skills/releases/download/skill-installers-v1/install-requirement-clarification-test.cmd) |
 | 自动执行与证据回填<br>`web-api-test-execution-evidence` | 自动执行已有 Web/API 正式用例并回填 Excel、HTML 和证据。 | [![Install](https://img.shields.io/badge/Install-2ea44f)](https://github.com/Saitamasans/testing-skills/releases/download/web-api-test-execution-evidence-v1.0.2/install-web-api-test-execution-evidence.cmd) |
 | 测试用例可执行化编译<br>`test-case-execution-compiler` | 将已有 Web UI 人工用例编译为可审核、可追踪的 Execution Package。 | Runtime 1.0.3 发布后提供完整安装器。 |
 | 多源测试审计<br>`multi-source-test-audit` | 关联需求、接口文档、客户端、后端和 Admin 等多源材料，完成能力分级、候选业务链、静态审计线索和阶段 B 审批计划；v0.1 不执行接口或数据库。 | [![Install](https://img.shields.io/badge/Install-2ea44f)](https://github.com/Saitamasans/testing-skills/releases/download/multi-source-test-audit-v0.1.4/install-multi-source-test-audit.cmd) |
@@ -32,6 +32,8 @@
 适合普通功能测试人员。Windows 10/11 自带的 Windows PowerShell 即可，**无需管理员权限**。现有 Runtime 1.0.2 安装 8 个已发布 Skill 无需安装 Node.js、npm、npx 或 Git；包含第九个 Skill和 Compiler 1.0.0 的完整 Runtime 1.0.3 将作为新的不可变 Release 发布。前 7 个 Skill 可以用下方通用安装器安装；其中前 5 个用例生成 Skill 实际生成 `.xlsx` 和 `.html` 文件时，仍需要可用的 Node.js 运行环境。
 
 第 8 个 `web-api-test-execution-evidence` 的最终用户必须使用 GitHub Release 完整安装器。完整安装不提供轻量版、API-only 或可选浏览器模式，安装时已交付 portable Node 22.23.1、Runner 1.1.2、Playwright 1.61.1、Chromium 1228、headless shell 1228 和 FFmpeg 1011；无需系统安装 Node.js、npm、Git、Chrome、Excel 或 Python。安装器完成下载、SHA-256 校验、解压、bundle 清单校验和本地完整 smoke test 后才显示“安装完成，可以执行 Web/API 自动化测试”。
+
+第 7 个 `requirement-clarification-test` 实际生成需求澄清 `.xlsx` 文件时，需要可用的 Node.js 运行环境。
 
 发布状态说明：远端 tag `testing-runner-v1.1.1` 仅为未发布/作废发布目标，不对应可安全公开的 Runner Release，自动化不得再次尝试发布它，也不得删除或移动该 tag。首个可发布目标为 `testing-runner-v1.1.2`。
 
@@ -204,7 +206,7 @@ npx skills add Saitamasans/testing-skills@web-api-test-execution-evidence -g -y
 
 ### 7. 测试角度需求澄清skill（`requirement-clarification-test`）
 
-适合在写测试点或用例前找出需求缺口，并判断当前需求能否开测。
+适合在写测试点或用例前找出需求缺口，并判断当前需求能否开测。默认会输出开测准入总结、产品核对轻表、可直接复制给产品的问题，并在需要文件时生成可填写的 Excel。
 
 **最少准备：** PRD、用户故事、原型说明、验收标准、需求变更或口头需求中的一种，以及本轮澄清范围。
 
@@ -213,7 +215,7 @@ npx skills add Saitamasans/testing-skills@web-api-test-execution-evidence -g -y
 **调用示例：**
 
 ```text
-调用 `requirement-clarification-test`：先不要写测试点或用例，请从测试视角评审这份 PRD，列出 P0/P1/P2 问题并判断能否开测。
+调用 `requirement-clarification-test`：先不要写测试点或用例，请从测试视角评审这份 PRD，输出开测准入总结、产品核对轻表、可直接复制给产品的问题，并生成可填写 Excel。
 ```
 
 <a id="compiler-guide"></a>
@@ -336,6 +338,8 @@ ZIP 内包含原始用例、Execution Contract 1.0.0、映射、readiness、待�
 
 `requirement-test-workbench` 在实际产出统一十列用例时，默认生成并验证 `.xlsx` 和 `.html`；只有用户明确要求“不要文件”或“只在聊天中展示”时才跳过。
 
+`requirement-clarification-test` 在用户明确要求文件、Excel、xlsx、留档或发产品时，默认生成并验证可填写的 `.xlsx`；当前版本不生成 HTML。
+
 两类路径生成的文件使用相同格式：
 
 - `.xlsx`：兼容 Excel 2016+ 和主流 WPS 的可编辑执行版。
@@ -370,7 +374,7 @@ npm test --workspace @saitamasans/testing-runner
 node --test tests/test-case-renderer.test.mjs tests/html_behavior.test.mjs
 ```
 
-请不要直接编辑自动生成的 `skills/*/SKILL.md`；应修改对应源文件后运行 builder。原 7 个源文件在根目录，第 8、9 个源文件分别在 `skill-sources/web-api-test-execution-evidence/` 和 `skill-sources/test-case-execution-compiler/`。
+请不要直接编辑自动生成的 `skills/*/SKILL.md`；应修改对应源文件后运行 builder。前 6 个源文件在根目录，`requirement-clarification-test`、`web-api-test-execution-evidence`、`test-case-execution-compiler` 和 `multi-source-test-audit` 的源文件与资源在 `skill-sources/` 下。
 
 ## 许可协议
 

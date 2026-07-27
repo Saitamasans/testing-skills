@@ -181,6 +181,8 @@ class GitHubInstallReadmeTest(unittest.TestCase):
         )[0]
 
         for phrase in [
+            "第 7 个 `requirement-clarification-test` 实际生成需求澄清 `.xlsx` 文件时，"
+            "需要可用的 Node.js 运行环境",
             "前 7 个 Skill 可以用下方通用安装器安装",
             "第 8 个 `web-api-test-execution-evidence` 的最终用户必须使用 GitHub Release 完整安装器",
             "无需系统安装 Node.js、npm、Git、Chrome、Excel 或 Python",

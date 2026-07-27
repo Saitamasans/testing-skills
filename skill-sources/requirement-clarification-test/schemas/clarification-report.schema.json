@@ -1,0 +1,174 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "ClarificationReport",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "report_meta",
+    "admission",
+    "requirement_understanding",
+    "confirmed_items",
+    "excluded_items",
+    "questions"
+  ],
+  "properties": {
+    "report_meta": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["requirement_name", "source_name", "generated_at"],
+      "properties": {
+        "requirement_name": { "type": "string", "minLength": 1 },
+        "source_name": { "type": "string", "minLength": 1 },
+        "generated_at": { "type": "string", "minLength": 1 }
+      }
+    },
+    "admission": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["result", "can_generate_test_cases", "has_p0_blocking", "largest_risk"],
+      "properties": {
+        "result": {
+          "type": "string",
+          "enum": ["可开测", "有条件开测", "不建议开测", "不可开测"]
+        },
+        "can_generate_test_cases": { "type": "boolean" },
+        "has_p0_blocking": { "type": "boolean" },
+        "largest_risk": { "type": "string", "minLength": 1 }
+      }
+    },
+    "requirement_understanding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "business_goal",
+        "roles",
+        "entry_path",
+        "operation_object",
+        "main_flow",
+        "success_result",
+        "failure_result"
+      ],
+      "properties": {
+        "business_goal": { "type": "string" },
+        "roles": { "type": "string" },
+        "entry_path": { "type": "string" },
+        "operation_object": { "type": "string" },
+        "main_flow": { "type": "string" },
+        "success_result": { "type": "string" },
+        "failure_result": { "type": "string" }
+      }
+    },
+    "confirmed_items": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "content", "source", "scope", "note"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^C\\d{3}$" },
+          "content": { "type": "string" },
+          "source": { "type": "string" },
+          "scope": { "type": "string" },
+          "note": { "type": "string" }
+        }
+      }
+    },
+    "excluded_items": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "content", "reason", "follow_up"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^N\\d{3}$" },
+          "content": { "type": "string" },
+          "reason": { "type": "string" },
+          "follow_up": { "type": "string" }
+        }
+      }
+    },
+    "questions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "category",
+          "question",
+          "impact_scope",
+          "priority",
+          "blocking_status",
+          "product_answer",
+          "note"
+        ],
+        "properties": {
+          "id": { "type": "string", "pattern": "^Q\\d{3}$" },
+          "category": { "type": "string", "minLength": 1 },
+          "question": {
+            "type": "string",
+            "minLength": 4,
+            "not": {
+              "pattern": "^(请确认|规则不清|需要补充|待确认|麻烦确认|请补充)$"
+            }
+          },
+          "impact_scope": { "type": "string" },
+          "priority": { "type": "string", "enum": ["P0", "P1", "P2"] },
+          "blocking_status": { "type": "string", "enum": ["⛔ BLOCKING", "非阻断"] },
+          "product_answer": { "type": "string" },
+          "note": { "type": "string" }
+        },
+        "allOf": [
+          {
+            "if": {
+              "properties": { "priority": { "const": "P0" } },
+              "required": ["priority"]
+            },
+            "then": {
+              "properties": { "blocking_status": { "const": "⛔ BLOCKING" } }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "priority": { "enum": ["P1", "P2"] }
+              },
+              "required": ["priority"]
+            },
+            "then": {
+              "properties": { "blocking_status": { "const": "非阻断" } }
+            }
+          }
+        ]
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "questions": {
+            "contains": {
+              "type": "object",
+              "properties": { "priority": { "const": "P0" } },
+              "required": ["priority"]
+            }
+          }
+        },
+        "required": ["questions"]
+      },
+      "then": {
+        "properties": {
+          "admission": {
+            "properties": {
+              "has_p0_blocking": { "const": true },
+              "can_generate_test_cases": { "const": false },
+              "result": { "enum": ["不建议开测", "不可开测"] }
+            },
+            "required": ["has_p0_blocking", "can_generate_test_cases", "result"]
+          }
+        }
+      }
+    }
+  ]
+}

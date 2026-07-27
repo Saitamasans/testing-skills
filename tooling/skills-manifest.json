@@ -49,12 +49,13 @@
       "case_output": false
     },
     {
-      "source": "测试视角-需求澄清 Skill.md",
+      "source": "skill-sources/requirement-clarification-test/测试视角-需求澄清 Skill.md",
       "slug": "requirement-clarification-test",
-      "display_name": "测试视角需求澄清",
-      "short_description": "开测前识别需求歧义、缺失规则与待确认事项",
-      "default_prompt": "请从测试视角澄清这份需求，暂时不要生成用例。",
-      "case_output": false
+      "display_name": "需求澄清问题表",
+      "short_description": "开测前澄清需求并导出结构化产品核对 Excel",
+      "default_prompt": "请从测试视角澄清这份需求，输出开测准入总结、产品核对轻表、可直接复制给产品的问题，并生成可填写的需求澄清 Excel；暂时不要生成测试用例。",
+      "case_output": false,
+      "resource_dirs": ["scripts", "references", "schemas"]
     },
     {
       "source": "skill-sources/web-api-test-execution-evidence/Web-API测试用例自动执行与证据回填_Skill.md",

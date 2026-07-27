@@ -62,6 +62,23 @@ class ReadmeAndPackagesTest(unittest.TestCase):
             renderer = ROOT / "skills" / item["slug"] / "scripts/render-test-assets.mjs"
             self.assertEqual(bool(item["case_output"]), renderer.exists(), item["slug"])
 
+    def test_resource_directories_are_copied_recursively(self):
+        for item in load_manifest(ROOT)["skills"]:
+            source_root = (ROOT / item["source"]).parent
+            package_root = ROOT / "skills" / item["slug"]
+            for resource_dir in item.get("resource_dirs", []):
+                with self.subTest(slug=item["slug"], resource_dir=resource_dir):
+                    source_dir = source_root / resource_dir
+                    package_dir = package_root / resource_dir
+                    self.assertTrue(package_dir.exists(), f"missing {package_dir}")
+                    for source_file in source_dir.rglob("*"):
+                        if source_file.is_file():
+                            self.assertEqual(
+                                source_file.read_bytes(),
+                                (package_dir / source_file.relative_to(source_dir)).read_bytes(),
+                                source_file,
+                            )
+
     def test_public_execution_instructions_require_no_manual_runner_install(self):
         readme = (ROOT / "README.md").read_text(encoding="utf-8")
         source = (ROOT / "skill-sources/web-api-test-execution-evidence/Web-API测试用例自动执行与证据回填_Skill.md").read_text(encoding="utf-8")
@@ -192,6 +209,8 @@ class ReadmeAndPackagesTest(unittest.TestCase):
             "在用户明确请求文件时",
             "`requirement-test-workbench` 在实际产出统一十列用例时，"
             "默认生成并验证 `.xlsx` 和 `.html`",
+            "`requirement-clarification-test` 在用户明确要求文件、Excel、xlsx、留档或发产品时，"
+            "默认生成并验证可填写的 `.xlsx`",
             "只有用户明确要求“不要文件”或“只在聊天中展示”时才跳过",
         ]:
             with self.subTest(phrase=phrase):
