@@ -116,6 +116,8 @@ class GitHubInstallReadmeTest(unittest.TestCase):
             "安装 8 个 Skill 无需安装 Node.js、npm、npx 或 Git",
             "前 5 个用例生成 Skill 实际生成 `.xlsx` 和 `.html` 文件时，"
             "需要可用的 Node.js 运行环境",
+            "第 7 个 `requirement-clarification-test` 实际生成需求澄清 `.xlsx` 文件时，"
+            "需要可用的 Node.js 运行环境",
             "第 8 个 `web-api-test-execution-evidence` 的 Runner 真正执行 "
             "Web/API 用例时，需要 Node.js 20+",
         ]:

@@ -1,0 +1,124 @@
+{
+  "report_meta": {
+    "requirement_name": "工作台登录需求",
+    "source_name": "ui自动自动化登录需求文档.docx",
+    "generated_at": "2026-07-27T09:30:00+08:00"
+  },
+  "admission": {
+    "result": "不建议开测",
+    "can_generate_test_cases": false,
+    "has_p0_blocking": true,
+    "largest_risk": "next 合法范围、兜底页和登录态时长未形成可验收口径"
+  },
+  "requirement_understanding": {
+    "business_goal": "用户登录后回到原始访问路径，并进入工作台任务页。",
+    "roles": "普通登录用户、系统管理员。",
+    "entry_path": "/login?next=/tasks",
+    "operation_object": "登录账号、密码、next 跳转目标、记住我状态。",
+    "main_flow": "输入账号密码后登录成功，按 next 跳转到任务页；失败则提示错误并保留输入。",
+    "success_result": "登录成功后进入任务页或 next 指向页面。",
+    "failure_result": "账号或密码错误时提示失败，网络异常时提示重试。"
+  },
+  "confirmed_items": [
+    {
+      "id": "C001",
+      "content": "本次场景是工作台登录页，不是注册页或找回密码页。",
+      "source": "需求标题",
+      "scope": "页面入口",
+      "note": "仅覆盖登录相关交互。"
+    },
+    {
+      "id": "C002",
+      "content": "登录成功后需要回到 next 指向的原始路径。",
+      "source": "需求描述",
+      "scope": "跳转规则",
+      "note": "示例为 /tasks。"
+    }
+  ],
+  "excluded_items": [
+    {
+      "id": "N001",
+      "content": "注册、忘记密码、第三方登录不纳入本轮。",
+      "reason": "需求没有提到这些入口。",
+      "follow_up": "后续如需支持，请单独补充范围。"
+    },
+    {
+      "id": "N002",
+      "content": "多因素认证不纳入本轮。",
+      "reason": "当前需求未提及验证码或 MFA。",
+      "follow_up": "如需接入，请补充安全策略。"
+    }
+  ],
+  "questions": [
+    {
+      "id": "Q001",
+      "category": "跳转规则",
+      "question": "next 只允许站内路径，还是也允许带查询串、锚点和深链？",
+      "impact_scope": "决定登录成功后的跳转目标是否可验收。",
+      "priority": "P0",
+      "blocking_status": "⛔ BLOCKING",
+      "product_answer": "",
+      "note": "这是核心跳转口径。"
+    },
+    {
+      "id": "Q002",
+      "category": "登录态",
+      "question": "记住我开启后，登录状态要保持多久？",
+      "impact_scope": "影响登录保持和重复验证策略。",
+      "priority": "P0",
+      "blocking_status": "⛔ BLOCKING",
+      "product_answer": "",
+      "note": "请给出具体时长或范围。"
+    },
+    {
+      "id": "Q003",
+      "category": "兜底规则",
+      "question": "next 缺失、非法或已失效时，应该回任务页还是回首页？",
+      "impact_scope": "影响登录成功后的最终落点。",
+      "priority": "P0",
+      "blocking_status": "⛔ BLOCKING",
+      "product_answer": "",
+      "note": "需要一个固定兜底页。"
+    },
+    {
+      "id": "Q004",
+      "category": "错误提示",
+      "question": "账号不存在、密码错误和会话过期是否统一提示，还是要区分文案？",
+      "impact_scope": "影响失败提示和验收文案。",
+      "priority": "P0",
+      "blocking_status": "⛔ BLOCKING",
+      "product_answer": "",
+      "note": "请明确是否区分错误原因。"
+    },
+    {
+      "id": "Q005",
+      "category": "登录保护",
+      "question": "连续输错多少次后触发验证码、冻结或人工校验？",
+      "impact_scope": "影响异常分支和安全门禁。",
+      "priority": "P1",
+      "blocking_status": "非阻断",
+      "product_answer": "",
+      "note": "需要明确阈值。"
+    },
+    {
+      "id": "Q006",
+      "category": "异常恢复",
+      "question": "登录接口超时或服务异常时，是否保留已输入内容并允许重试？",
+      "impact_scope": "影响失败恢复和输入保持。",
+      "priority": "P1",
+      "blocking_status": "非阻断",
+      "product_answer": "",
+      "note": "建议明确前端行为。"
+    },
+    {
+      "id": "Q007",
+      "category": "显示细节",
+      "question": "错误提示是显示在表单下方、顶部 toast，还是弹窗？",
+      "impact_scope": "影响提示位置和验收检查。",
+      "priority": "P2",
+      "blocking_status": "非阻断",
+      "product_answer": "",
+      "note": "用于统一体验口径。"
+    }
+  ]
+}

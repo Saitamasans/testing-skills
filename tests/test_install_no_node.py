@@ -70,6 +70,19 @@ class NoNodeInstallerRuntimeTest(unittest.TestCase):
             self.assertEqual(["requirement-test-workbench"], [path.name for path in install_root.iterdir() if path.is_dir()])
             self.assertTrue((install_root / "requirement-test-workbench" / "SKILL.md").is_file())
 
+    def test_requirement_clarification_skill_installs_extra_resources(self):
+        with tempfile.TemporaryDirectory() as directory:
+            install_root = Path(directory) / "installed"
+            result = self.run_installer(install_root, "-Skill", "requirement-clarification-test")
+
+            self.assertEqual(0, result.returncode, result.stderr.decode(errors="replace"))
+            package = install_root / "requirement-clarification-test"
+            self.assertTrue((package / "SKILL.md").is_file())
+            self.assertTrue((package / "agents/openai.yaml").is_file())
+            self.assertTrue((package / "scripts/render-clarification-assets.mjs").is_file())
+            self.assertTrue((package / "references/output-contract.md").is_file())
+            self.assertTrue((package / "schemas/clarification-report.schema.json").is_file())
+
     def test_unknown_skill_fails_before_writing_any_package(self):
         with tempfile.TemporaryDirectory() as directory:
             install_root = Path(directory) / "installed"

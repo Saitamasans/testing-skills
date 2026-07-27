@@ -13,7 +13,7 @@ ORIGINAL_SEVEN = {
     "requirement-test-workbench": "\u6839\u636e\u9700\u6c42-\u7528\u4f8b\u751f\u6210_skill.md",
     "production-verification-test": "\u6b63\u5f0f\u670d\u9a8c\u8bc1-\u7528\u4f8b\u751f\u6210 Skill.md",
     "test-case-quality-audit": "\u6d4b\u8bd5\u7528\u4f8b-\u5ba1\u8ba1\u4e0e\u8bc4_Skill_V1.md",
-    "requirement-clarification-test": "\u6d4b\u8bd5\u89c6\u89d2-\u9700\u6c42\u6f84\u6e05 Skill.md",
+    "requirement-clarification-test": "skill-sources/requirement-clarification-test/\u6d4b\u8bd5\u89c6\u89d2-\u9700\u6c42\u6f84\u6e05 Skill.md",
 }
 
 
@@ -77,6 +77,21 @@ class BuildSkillsTest(unittest.TestCase):
                 for phrase in ["run-result.json 是唯一判定来源", "非标准 Excel 必须确认字段映射", "scripts/testing-runner.mjs run"]:
                     self.assertIn(phrase, combined)
                 self.assertLessEqual(len(generated.read_text(encoding="utf-8").splitlines()), 500)
+            elif item["slug"] == "requirement-clarification-test":
+                resources = [
+                    generated.parent / "scripts/render-clarification-assets.mjs",
+                    generated.parent / "references/output-contract.md",
+                    generated.parent / "schemas/clarification-report.schema.json",
+                ]
+                self.assertTrue(all(resource.exists() for resource in resources))
+                combined = generated_body + "".join(resource.read_text(encoding="utf-8") for resource in resources)
+                for phrase in [
+                    "clarification-report.json",
+                    "render-clarification-assets.mjs",
+                    "P0 ⛔ BLOCKING",
+                    "output-contract.md",
+                ]:
+                    self.assertIn(phrase, combined)
             else:
                 self.assertIn(source_body.strip(), generated_body)
             self.assertTrue((generated.parent / "agents/openai.yaml").exists())

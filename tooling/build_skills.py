@@ -93,8 +93,8 @@ def _openai_yaml(item: dict) -> str:
     )
 
 
-def _copy_resource_tree(source_root: Path, package: Path, desired: dict[Path, str | bytes]) -> None:
-    for directory in ("scripts", "assets"):
+def _copy_resource_dirs(source_root: Path, package: Path, desired: dict[Path, str | bytes], resource_dirs: list[str]) -> None:
+    for directory in resource_dirs:
         resource_root = source_root / directory
         if not resource_root.exists():
             continue
@@ -128,10 +128,11 @@ def build_all(root: Path = ROOT, check: bool = False) -> list[Path]:
             desired[package / "SKILL.md"] = _render_skill(compact, EXECUTION_BANNER)
             for relative, reference in references.items():
                 desired[package / relative] = reference
-            _copy_resource_tree(source.parent, package, desired)
         else:
             desired[package / "SKILL.md"] = _render_skill(text)
         desired[package / "agents/openai.yaml"] = _openai_yaml(item)
+        if item.get("resource_dirs"):
+            _copy_resource_dirs(source.parent, package, desired, list(item["resource_dirs"]))
         if item["case_output"]:
             renderer = root / "tooling/test-case-renderer.mjs"
             if renderer.exists():

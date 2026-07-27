@@ -16,7 +16,7 @@
 | 需求测试工作台<br>`requirement-test-workbench` | 根据 PRD、用户故事或需求变更完成测试分析和用例设计。 | [![Install](https://img.shields.io/badge/Install-2ea44f)](https://github.com/Saitamasans/testing-skills/releases/download/skill-installers-v1/install-requirement-test-workbench.cmd) |
 | 正式服验证<br>`production-verification-test` | 为上线后、灰度或生产环境设计低影响验证和安全门禁。 | [![Install](https://img.shields.io/badge/Install-2ea44f)](https://github.com/Saitamasans/testing-skills/releases/download/skill-installers-v1/install-production-verification-test.cmd) |
 | 用例质量审计<br>`test-case-quality-audit` | 审计已有用例的可执行性、需求一致性、遗漏风险和冗余。 | [![Install](https://img.shields.io/badge/Install-2ea44f)](https://github.com/Saitamasans/testing-skills/releases/download/skill-installers-v1/install-test-case-quality-audit.cmd) |
-| 需求澄清<br>`requirement-clarification-test` | 在写用例前找出需求缺口并判断是否具备开测条件。 | [![Install](https://img.shields.io/badge/Install-2ea44f)](https://github.com/Saitamasans/testing-skills/releases/download/skill-installers-v1/install-requirement-clarification-test.cmd) |
+| 需求澄清<br>`requirement-clarification-test` | 在写用例前找出需求缺口、导出产品核对 Excel 并判断是否具备开测条件。 | [![Install](https://img.shields.io/badge/Install-2ea44f)](https://github.com/Saitamasans/testing-skills/releases/download/skill-installers-v1/install-requirement-clarification-test.cmd) |
 | 自动执行与证据回填<br>`web-api-test-execution-evidence` | 自动执行已有 Web/API 正式用例并回填 Excel、HTML 和证据。 | [![Install](https://img.shields.io/badge/Install-2ea44f)](https://github.com/Saitamasans/testing-skills/releases/download/skill-installers-v1/install-web-api-test-execution-evidence.cmd) |
 
 选择时以当前交付目标为准：一个任务只选择一个主 Skill，最多建议一个辅助 Skill；调用辅助 Skill 前先说明分工并等待确认，最终只生成一套结果。
@@ -31,6 +31,7 @@
 
 - 安装 8 个 Skill 无需安装 Node.js、npm、npx 或 Git。
 - 前 5 个用例生成 Skill 实际生成 `.xlsx` 和 `.html` 文件时，需要可用的 Node.js 运行环境。
+- 第 7 个 `requirement-clarification-test` 实际生成需求澄清 `.xlsx` 文件时，需要可用的 Node.js 运行环境。
 - 第 8 个 `web-api-test-execution-evidence` 的 Runner 真正执行 Web/API 用例时，需要 Node.js 20+。
 
 [![Install All 8 Skills](https://img.shields.io/badge/Install-All_8_Skills-2ea44f?style=for-the-badge&logo=github)](https://github.com/Saitamasans/testing-skills/releases/download/skill-installers-v1/install-all.cmd)
@@ -184,7 +185,7 @@ npx skills add Saitamasans/testing-skills@web-api-test-execution-evidence -g -y
 
 ### 7. 需求澄清（`requirement-clarification-test`）
 
-适合在写测试点或用例前找出需求缺口，并判断当前需求能否开测。
+适合在写测试点或用例前找出需求缺口，并判断当前需求能否开测。默认会输出开测准入总结、产品核对轻表、可直接复制给产品的问题，并在需要文件时生成可填写的 Excel。
 
 **最少准备：** PRD、用户故事、原型说明、验收标准、需求变更或口头需求中的一种，以及本轮澄清范围。
 
@@ -193,7 +194,7 @@ npx skills add Saitamasans/testing-skills@web-api-test-execution-evidence -g -y
 **调用示例：**
 
 ```text
-调用 `requirement-clarification-test`：先不要写测试点或用例，请从测试视角评审这份 PRD，列出 P0/P1/P2 问题并判断能否开测。
+调用 `requirement-clarification-test`：先不要写测试点或用例，请从测试视角评审这份 PRD，输出开测准入总结、产品核对轻表、可直接复制给产品的问题，并生成可填写 Excel。
 ```
 
 <a id="execution-guide"></a>
@@ -262,6 +263,8 @@ npx skills add Saitamasans/testing-skills@web-api-test-execution-evidence -g -y
 
 `requirement-test-workbench` 在实际产出统一十列用例时，默认生成并验证 `.xlsx` 和 `.html`；只有用户明确要求“不要文件”或“只在聊天中展示”时才跳过。
 
+`requirement-clarification-test` 在用户明确要求文件、Excel、xlsx、留档或发产品时，默认生成并验证可填写的 `.xlsx`；当前版本不生成 HTML。
+
 两类路径生成的文件使用相同格式：
 
 - `.xlsx`：兼容 Excel 2016+ 和主流 WPS 的可编辑执行版。
@@ -294,7 +297,7 @@ npm test --workspace @saitamasans/testing-runner
 node --test tests/test-case-renderer.test.mjs tests/html_behavior.test.mjs
 ```
 
-请不要直接编辑自动生成的 `skills/*/SKILL.md`；应修改对应源文件后运行 builder。原 7 个源文件在根目录，第 8 个源文件在 `skill-sources/web-api-test-execution-evidence/`。
+请不要直接编辑自动生成的 `skills/*/SKILL.md`；应修改对应源文件后运行 builder。前 6 个源文件在根目录，`requirement-clarification-test` 和 `web-api-test-execution-evidence` 的源文件与资源在 `skill-sources/` 下。
 
 ## 许可协议
 

@@ -3,7 +3,6 @@ name: requirement-clarification-test
 description: "Use when 用户需要在开测前澄清需求、判断是否可开测、沉淀产品核对问题表并导出可填写 Excel，但暂时不要生成测试用例。"
 ---
 
-<!-- 此文件由根目录中文源文件自动生成，请勿直接编辑。 -->
 # 测试视角需求澄清 Skill（开测前需求补全分析）
 
 ## 1. Skill 定位
