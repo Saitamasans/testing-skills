@@ -20,6 +20,10 @@ MULTI_SOURCE_RUNTIME_RELEASE_BASE = (
     "https://github.com/Saitamasans/testing-skills/releases/download/"
     "multi-source-test-audit-v0.1.4/"
 )
+WORKBENCH_UI_ACCEPTANCE_RELEASE_BASE = (
+    "https://github.com/Saitamasans/testing-skills/releases/download/"
+    "workbench-ui-acceptance-execution-v0.1.0/"
+)
 RAW_INSTALLER = (
     "https://raw.githubusercontent.com/Saitamasans/testing-skills/"
     "main/scripts/install.ps1"
@@ -119,6 +123,10 @@ class GitHubInstallReadmeTest(unittest.TestCase):
                     asset_url = MULTI_SOURCE_RUNTIME_RELEASE_BASE + "install-multi-source-test-audit.cmd"
                     self.assertEqual(1, self.readme.count(asset_url))
                     continue
+                if slug == "workbench-ui-acceptance-execution":
+                    asset_url = WORKBENCH_UI_ACCEPTANCE_RELEASE_BASE + "install-workbench-ui-acceptance-execution.cmd"
+                    self.assertEqual(2, self.readme.count(asset_url))
+                    continue
                 base = (
                     RUNTIME_RELEASE_BASE
                     if slug == "web-api-test-execution-evidence"
@@ -165,10 +173,10 @@ class GitHubInstallReadmeTest(unittest.TestCase):
         for name in ["install-all.cmd", "install-web-api-test-execution-evidence.cmd"]:
             with self.subTest(name=name):
                 self.assertIn(RUNTIME_RELEASE_BASE + name, fallback)
-        self.assertEqual(2, fallback.count("TESTING_SKILLS_NO_PAUSE"))
-        self.assertEqual(2, fallback.count("$env:ComSpec"))
-        self.assertEqual(2, fallback.count("exit $exitCode"))
-        self.assertEqual(2, fallback.count("[guid]::NewGuid()"))
+        self.assertEqual(3, fallback.count("TESTING_SKILLS_NO_PAUSE"))
+        self.assertEqual(3, fallback.count("$env:ComSpec"))
+        self.assertEqual(3, fallback.count("exit $exitCode"))
+        self.assertEqual(3, fallback.count("[guid]::NewGuid()"))
 
     def test_readme_distinguishes_node_requirements_by_workflow(self):
         start_marker = '<a id="install"></a>'
@@ -230,8 +238,10 @@ class GitHubInstallReadmeTest(unittest.TestCase):
             "skills",
             "install",
             "usage-guides",
+            "workbench-ui-acceptance-guide",
             "compiler-guide",
             "execution-guide",
+            "multi-source-audit-guide",
             "outputs",
         ]
         skills_marker = '<a id="skills"></a>'
@@ -276,11 +286,12 @@ class GitHubInstallReadmeTest(unittest.TestCase):
             rows.append(line)
 
         skill_specs = [
-            ("单接口完整版", "single-api-test-full"),
-            ("单接口精炼版", "single-api-test-concise"),
-            ("多接口链路测试", "multi-api-flow-test"),
+            ("单接口用例生成-完整版", "single-api-test-full"),
+            ("单接口用例生成-精炼版", "single-api-test-concise"),
+            ("多接口链路用例生成", "multi-api-flow-test"),
             ("需求测试工作台", "requirement-test-workbench"),
-            ("正式服验证", "production-verification-test"),
+            ("测试工作台-用例执行", "workbench-ui-acceptance-execution"),
+            ("正式服-主流程用例生成", "production-verification-test"),
             ("用例质量审计", "test-case-quality-audit"),
             ("需求澄清", "requirement-clarification-test"),
             ("自动执行与证据回填", "web-api-test-execution-evidence"),
@@ -305,6 +316,16 @@ class GitHubInstallReadmeTest(unittest.TestCase):
                     continue
                 if slug == "multi-source-test-audit":
                     asset_url = MULTI_SOURCE_RUNTIME_RELEASE_BASE + "install-multi-source-test-audit.cmd"
+                    self.assertEqual(1, cells[2].count(asset_url))
+                    self.assertRegex(
+                        cells[2],
+                        rf"^\[!\[Install\]\([^)]+\)\]\({re.escape(asset_url)}\)$",
+                    )
+                    release_urls.append(asset_url)
+                    continue
+                if slug == "workbench-ui-acceptance-execution":
+                    asset_url = WORKBENCH_UI_ACCEPTANCE_RELEASE_BASE + "install-workbench-ui-acceptance-execution.cmd"
+                    self.assertEqual(2, self.readme.count(asset_url))
                     self.assertEqual(1, cells[2].count(asset_url))
                     self.assertRegex(
                         cells[2],
@@ -367,6 +388,7 @@ class GitHubInstallerReleaseWorkflowTest(unittest.TestCase):
         ]:
             self.assertIn(phrase, workflow)
         self.assertIn("! -name 'install-web-api-test-execution-evidence.cmd'", workflow)
+        self.assertIn("! -name 'install-workbench-ui-acceptance-execution.cmd'", workflow)
         for forbidden in [
             "contents: write",
             "gh release upload skill-installers-v1",

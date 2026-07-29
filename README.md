@@ -14,7 +14,7 @@
 | 单接口用例生成-精炼版<br>`single-api-test-concise` | 在明确要求精炼、快速或低上下文时提取单接口核心风险。 | [![Install](https://img.shields.io/badge/Install-2ea44f)](https://github.com/Saitamasans/testing-skills/releases/download/skill-installers-v1/install-single-api-test-concise.cmd) |
 | 多接口链路用例生成<br>`multi-api-flow-test` | 梳理多接口依赖、业务调用链、联合用例和回归范围。 | [![Install](https://img.shields.io/badge/Install-2ea44f)](https://github.com/Saitamasans/testing-skills/releases/download/skill-installers-v1/install-multi-api-flow-test.cmd) |
 | 需求测试工作台<br>`requirement-test-workbench` | 根据 PRD、用户故事或需求变更完成测试分析和用例设计。 | [![Install](https://img.shields.io/badge/Install-2ea44f)](https://github.com/Saitamasans/testing-skills/releases/download/skill-installers-v1/install-requirement-test-workbench.cmd) |
-| 需求工作台 UI 验收执行<br>`workbench-ui-acceptance-execution` | 执行需求工作台生成的浏览器 UI 用例，按 Playwright 风格半 UI 半元素验收、关键截图留证，并输出聊天结论与 HTML 报告。 | Release 安装器待发布；当前可从源码构建后安装。 |
+| 测试工作台-用例执行<br>`workbench-ui-acceptance-execution` | 执行测试工作台/需求工作台生成的浏览器 UI 用例，按 Playwright 风格半 UI 半元素验收、关键截图留证，并输出聊天结论与 HTML 报告。 | [![Install](https://img.shields.io/badge/Install-2ea44f)](https://github.com/Saitamasans/testing-skills/releases/download/workbench-ui-acceptance-execution-v0.1.0/install-workbench-ui-acceptance-execution.cmd) |
 | 正式服-主流程用例生成<br>`production-verification-test` | 为上线后、灰度或生产环境设计低影响验证和安全门禁。 | [![Install](https://img.shields.io/badge/Install-2ea44f)](https://github.com/Saitamasans/testing-skills/releases/download/skill-installers-v1/install-production-verification-test.cmd) |
 | 用例质量审计<br>`test-case-quality-audit` | 审计已有用例的可执行性、需求一致性、遗漏风险和冗余。 | [![Install](https://img.shields.io/badge/Install-2ea44f)](https://github.com/Saitamasans/testing-skills/releases/download/skill-installers-v1/install-test-case-quality-audit.cmd) |
 | 需求澄清<br>`requirement-clarification-test` | 在写用例前找出需求缺口、导出产品核对 Excel 并判断是否具备开测条件。 | [![Install](https://img.shields.io/badge/Install-2ea44f)](https://github.com/Saitamasans/testing-skills/releases/download/skill-installers-v1/install-requirement-clarification-test.cmd) |
@@ -35,6 +35,8 @@
 第 8 个 `web-api-test-execution-evidence` 的最终用户必须使用 GitHub Release 完整安装器。完整安装不提供轻量版、API-only 或可选浏览器模式，安装时已交付 portable Node 22.23.1、Runner 1.1.2、Playwright 1.61.1、Chromium 1228、headless shell 1228 和 FFmpeg 1011；无需系统安装 Node.js、npm、Git、Chrome、Excel 或 Python。安装器完成下载、SHA-256 校验、解压、bundle 清单校验和本地完整 smoke test 后才显示“安装完成，可以执行 Web/API 自动化测试”。
 
 第 7 个 `requirement-clarification-test` 实际生成需求澄清 `.xlsx` 文件时，需要可用的 Node.js 运行环境。
+
+第 11 个 `workbench-ui-acceptance-execution` 是浏览器 UI 验收执行 Skill，本身不内置独立 runner，不强制下载额外执行器或浏览器安装包；安装只复制 Skill 文件，执行时复用当前 AI 环境已有的浏览器控制能力。
 
 发布状态说明：远端 tag `testing-runner-v1.1.1` 仅为未发布/作废发布目标，不对应可安全公开的 Runner Release，自动化不得再次尝试发布它，也不得删除或移动该 tag。首个可发布目标为 `testing-runner-v1.1.2`。
 
@@ -76,6 +78,12 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "$url='https://github
 
 ```powershell
 powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "& ([scriptblock]::Create(([string]((Invoke-WebRequest -UseBasicParsing 'https://raw.githubusercontent.com/Saitamasans/testing-skills/main/scripts/install.ps1').Content)).TrimStart([char]0xFEFF))) -Skill 'requirement-test-workbench'"
+```
+
+只安装“测试工作台-用例执行”：
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "$url='https://github.com/Saitamasans/testing-skills/releases/download/workbench-ui-acceptance-execution-v0.1.0/install-workbench-ui-acceptance-execution.cmd'; $installer=Join-Path ([IO.Path]::GetTempPath()) ('testing-skills-'+[guid]::NewGuid().ToString('N')+'.cmd'); $exitCode=1; try { Invoke-WebRequest -UseBasicParsing -Uri $url -OutFile $installer; $env:TESTING_SKILLS_NO_PAUSE='1'; & $env:ComSpec /d /c ('call '+[char]34+$installer+[char]34); $exitCode=$LASTEXITCODE } finally { Remove-Item -LiteralPath $installer -Force -ErrorAction SilentlyContinue }; exit $exitCode"
 ```
 
 把命令末尾的名称换成总览中的 Package 即可安装前 7 个单个 Skill。`web-api-test-execution-evidence` 需要其专用 GitHub Release 完整安装器，通用安装器不提供执行所需的 Node、Runner 或 Chromium。
@@ -221,7 +229,7 @@ npx skills add Saitamasans/testing-skills@web-api-test-execution-evidence -g -y
 
 <a id="workbench-ui-acceptance-guide"></a>
 
-## 11. 需求工作台 UI 验收执行 即第 11 个 Skill 专项指南
+## 11. 测试工作台-用例执行 即第 11 个 Skill 专项指南
 
 对应 Package：`workbench-ui-acceptance-execution`。
 

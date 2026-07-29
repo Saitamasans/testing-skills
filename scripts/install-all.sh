@@ -8,6 +8,7 @@ for skill in \
   production-verification-test \
   test-case-quality-audit \
   requirement-clarification-test \
+  workbench-ui-acceptance-execution \
   web-api-test-execution-evidence \
   test-case-execution-compiler
 do

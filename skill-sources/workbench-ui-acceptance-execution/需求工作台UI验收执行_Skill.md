@@ -5,7 +5,7 @@ description: "Use when users want to execute demand-workbench-generated browser 
 
 <!-- This skill is Playwright-backed browser-control-first and does not require a standalone runner. -->
 
-# 需求工作台 UI 验收执行
+# 测试工作台-用例执行
 
 ## 1. 硬规则与定位
 

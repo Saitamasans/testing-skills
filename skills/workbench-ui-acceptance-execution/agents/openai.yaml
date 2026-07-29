@@ -1,4 +1,4 @@
 interface:
-  display_name: "需求工作台 UI 验收执行"
-  short_description: "按需求工作台用例执行 Playwright 风格浏览器 UI 验收，截图留证并输出聊天结论与 HTML 报告"
+  display_name: "测试工作台-用例执行"
+  short_description: "按测试工作台/需求工作台用例执行 Playwright 风格浏览器 UI 验收，截图留证并输出聊天结论与 HTML 报告"
   default_prompt: "请按照需求工作台生成的用例执行浏览器 UI 验收，先检查输入完整度、账号、权限、前置数据与截图要求，再用 DOM snapshot/ref、role/text/aria 和必要的 CSS/JS 辅助完成页面操作与结果核对；关键步骤截图留证，最后先给 WorkBuddy 风格聊天结论，再生成离线 HTML 验收报告。"
