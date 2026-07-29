@@ -45,7 +45,9 @@ jobs:
 
           mapfile -t ordinary < <(find installers -maxdepth 1 -type f -name 'install-*.cmd' \
             ! -name 'install-all.cmd' \
-            ! -name 'install-web-api-test-execution-evidence.cmd' | sort)
+            ! -name 'install-web-api-test-execution-evidence.cmd' \
+            ! -name 'install-test-case-execution-compiler.cmd' \
+            ! -name 'install-workbench-ui-acceptance-execution.cmd' | sort)
           test "${#ordinary[@]}" -eq 7
 
           mkdir -p build
