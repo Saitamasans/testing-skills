@@ -1,8 +1,8 @@
 # testing-skills
 
-面向中文功能测试用户的 10 个 Agent Skill，覆盖需求澄清、测试设计、用例审计、正式服验证、多源测试审计、人工 Web UI 用例的可执行化编译，以及已有 Web/API 用例的自动执行和证据回填。
+面向中文功能测试用户的 11 个 Agent Skill，覆盖需求澄清、测试设计、用例审计、正式服验证、多源测试审计、人工 Web UI 用例的可执行化编译、已有 Web/API 用例的自动执行和证据回填，以及需求工作台用例驱动的浏览器 UI 验收执行。
 
-[选择 Skill](#skills) · [安装](#install) · [第 1–7 个 Skill 使用指南](#usage-guides) · [第 9 个 Skill 专项指南](#compiler-guide) · [第 8 个 Skill 专项指南](#execution-guide) · [第 10 个 Skill 专项指南](#multi-source-audit-guide) · [输出文件](#outputs)
+[选择 Skill](#skills) · [安装](#install) · [第 1–7 个 Skill 使用指南](#usage-guides) · [第 11 个 Skill 专项指南](#workbench-ui-acceptance-guide) · [第 9 个 Skill 专项指南](#compiler-guide) · [第 8 个 Skill 专项指南](#execution-guide) · [第 10 个 Skill 专项指南](#multi-source-audit-guide) · [输出文件](#outputs)
 
 <a id="skills"></a>
 
@@ -14,6 +14,7 @@
 | 单接口用例生成-精炼版<br>`single-api-test-concise` | 在明确要求精炼、快速或低上下文时提取单接口核心风险。 | [![Install](https://img.shields.io/badge/Install-2ea44f)](https://github.com/Saitamasans/testing-skills/releases/download/skill-installers-v1/install-single-api-test-concise.cmd) |
 | 多接口链路用例生成<br>`multi-api-flow-test` | 梳理多接口依赖、业务调用链、联合用例和回归范围。 | [![Install](https://img.shields.io/badge/Install-2ea44f)](https://github.com/Saitamasans/testing-skills/releases/download/skill-installers-v1/install-multi-api-flow-test.cmd) |
 | 需求测试工作台<br>`requirement-test-workbench` | 根据 PRD、用户故事或需求变更完成测试分析和用例设计。 | [![Install](https://img.shields.io/badge/Install-2ea44f)](https://github.com/Saitamasans/testing-skills/releases/download/skill-installers-v1/install-requirement-test-workbench.cmd) |
+| 需求工作台 UI 验收执行<br>`workbench-ui-acceptance-execution` | 执行需求工作台生成的浏览器 UI 用例，按 Playwright 风格半 UI 半元素验收、关键截图留证，并输出聊天结论与 HTML 报告。 | Release 安装器待发布；当前可从源码构建后安装。 |
 | 正式服-主流程用例生成<br>`production-verification-test` | 为上线后、灰度或生产环境设计低影响验证和安全门禁。 | [![Install](https://img.shields.io/badge/Install-2ea44f)](https://github.com/Saitamasans/testing-skills/releases/download/skill-installers-v1/install-production-verification-test.cmd) |
 | 用例质量审计<br>`test-case-quality-audit` | 审计已有用例的可执行性、需求一致性、遗漏风险和冗余。 | [![Install](https://img.shields.io/badge/Install-2ea44f)](https://github.com/Saitamasans/testing-skills/releases/download/skill-installers-v1/install-test-case-quality-audit.cmd) |
 | 需求澄清<br>`requirement-clarification-test` | 在写用例前找出需求缺口、导出产品核对 Excel 并判断是否具备开测条件。 | [![Install](https://img.shields.io/badge/Install-2ea44f)](https://github.com/Saitamasans/testing-skills/releases/download/skill-installers-v1/install-requirement-clarification-test.cmd) |
@@ -114,7 +115,7 @@ npx skills add Saitamasans/testing-skills@web-api-test-execution-evidence -g -y
 
 - Codex：在 Skills 管理界面或 `$CODEX_HOME/skills` 下查看。
 - Claude Code：在 Skills 目录或技能列表中查看。
-- CC Switch：打开 Skills 管理页，读取各包的 `SKILL.md` 名称和 description，并分别管理 9 个 Skill。
+- CC Switch：打开 Skills 管理页，读取各包的 `SKILL.md` 名称和 description，并分别管理 11 个 Skill。
 
 <a id="usage-guides"></a>
 
@@ -216,6 +217,44 @@ npx skills add Saitamasans/testing-skills@web-api-test-execution-evidence -g -y
 
 ```text
 调用 `requirement-clarification-test`：先不要写测试点或用例，请从测试视角评审这份 PRD，输出开测准入总结、产品核对轻表、可直接复制给产品的问题，并生成可填写 Excel。
+```
+
+<a id="workbench-ui-acceptance-guide"></a>
+
+## 11. 需求工作台 UI 验收执行 即第 11 个 Skill 专项指南
+
+对应 Package：`workbench-ui-acceptance-execution`。
+
+### 什么时候使用
+
+适合已经有需求工作台生成的测试用例，需要 AI 直接打开浏览器执行 UI 验收、关键步骤截图、记录实际结果，并输出类似 WorkBuddy 的聊天结论和离线 HTML 验收报告。
+
+它走的是 Playwright 风格的浏览器控制思路：DOM snapshot/ref 优先，role、text、aria、CSS selector 和 JS eval 辅助；截图用于证据和关键视觉复核，不把 OCR、坐标点击或“看起来像”作为主要定位方式。
+
+### 什么时候不应使用
+
+不用于生成测试用例、需求澄清、纯后端接口黑盒验收、纯视觉设计稿比对，也不用于需要固定 Runner、CI 批量回放或 Execution Package 的场景。需要完整 Web/API Runner、Excel 回填和 `run-result.json` 门禁时，使用第 8 个 `web-api-test-execution-evidence`。
+
+### 最少准备
+
+- 需求工作台生成的测试用例。
+- 已确认的需求口径或验收口径。
+- 测试环境地址。
+- 用例需要登录态、角色态或特定数据时，提供账号、权限和前置数据；测试登录页、匿名页、注册页等场景时，账号不是硬性前置。
+- 关键步骤截图要求。
+
+### 执行与报告规则
+
+固定流程为：读取用例 → 判断前置 → 执行浏览器 UI 验收 → 关键节点截图 → 逐用例判定通过/不通过/待定/阻塞 → 先输出聊天结论 → 再生成离线 HTML 报告。
+
+聊天回复必须先给结论、统计、关键验证点和风险，不输出报告预览截图；HTML 报告必须包含任务信息、统计卡片、逐用例结果、阻塞/待定/不通过说明、截图证据区和最终结论。
+
+本 Skill 默认不内置独立 runner，不强制下载执行器，不要求额外浏览器安装包；优先复用当前 AI 环境已有的浏览器控制能力。遇到验证码、MFA、权限缺失、口径冲突、元素无法可靠定位或继续执行可能污染数据时，必须停止或标记阻塞，不能把阻塞写成通过。
+
+### 调用示例
+
+```text
+调用 `workbench-ui-acceptance-execution`：请按需求工作台生成的这批用例执行浏览器 UI 验收，关键步骤截图，最后先给 WorkBuddy 风格聊天结论，再生成离线 HTML 验收报告。
 ```
 
 <a id="compiler-guide"></a>
@@ -374,7 +413,7 @@ npm test --workspace @saitamasans/testing-runner
 node --test tests/test-case-renderer.test.mjs tests/html_behavior.test.mjs
 ```
 
-请不要直接编辑自动生成的 `skills/*/SKILL.md`；应修改对应源文件后运行 builder。前 6 个源文件在根目录，`requirement-clarification-test`、`web-api-test-execution-evidence`、`test-case-execution-compiler` 和 `multi-source-test-audit` 的源文件与资源在 `skill-sources/` 下。
+请不要直接编辑自动生成的 `skills/*/SKILL.md`；应修改对应源文件后运行 builder。前 6 个源文件在根目录，`requirement-clarification-test`、`workbench-ui-acceptance-execution`、`web-api-test-execution-evidence`、`test-case-execution-compiler` 和 `multi-source-test-audit` 的源文件与资源在 `skill-sources/` 下。
 
 ## 许可协议
 
