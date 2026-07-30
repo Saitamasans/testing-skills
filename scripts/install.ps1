@@ -145,7 +145,8 @@ try {
         $archiveUrl = "https://codeload.github.com/$Repository/zip/$escapedRef"
         Write-Output "正在从 GitHub 下载 $Repository（版本：$Ref）..."
         Invoke-WebRequest -UseBasicParsing -Uri $archiveUrl -OutFile $archivePath
-        Expand-Archive -LiteralPath $archivePath -DestinationPath $extractRoot -Force
+        Add-Type -AssemblyName System.IO.Compression.FileSystem
+        [IO.Compression.ZipFile]::ExtractToDirectory($archivePath, $extractRoot)
 
         $repositoryRoots = @(
             Get-ChildItem -LiteralPath $extractRoot -Directory |

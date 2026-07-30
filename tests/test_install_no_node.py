@@ -283,6 +283,11 @@ class NoNodeInstallerStaticTest(unittest.TestCase):
                 command,
             )
 
+    def test_repository_archive_extraction_does_not_render_progress_ui(self):
+        source = INSTALLER.read_text(encoding="utf-8-sig")
+        self.assertNotIn("Expand-Archive", source)
+        self.assertIn("[IO.Compression.ZipFile]::ExtractToDirectory", source)
+
     def test_readme_leads_with_zero_node_commands_for_all_and_one(self):
         readme = (ROOT / "README.md").read_text(encoding="utf-8")
         recommended = readme.split("### 高级方式：npx", 1)[0]
