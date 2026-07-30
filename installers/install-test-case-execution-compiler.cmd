@@ -18,7 +18,7 @@ exit /b 9009
 if defined TESTING_SKILLS_INSTALLER_SCRIPT (
   "%POWERSHELL_EXE%" -NoProfile -ExecutionPolicy Bypass -File "%TESTING_SKILLS_INSTALLER_SCRIPT%" %INSTALL_SELECTOR%
 ) else (
-  "%POWERSHELL_EXE%" -NoProfile -ExecutionPolicy Bypass -Command "& ([scriptblock]::Create(([string]((Invoke-WebRequest -UseBasicParsing 'https://raw.githubusercontent.com/Saitamasans/testing-skills/main/scripts/install.ps1').Content)).TrimStart([char]0xFEFF))) %INSTALL_SELECTOR%"
+  "%POWERSHELL_EXE%" -NoProfile -ExecutionPolicy Bypass -Command "$ProgressPreference='SilentlyContinue'; & ([scriptblock]::Create(([string]((Invoke-WebRequest -UseBasicParsing 'https://raw.githubusercontent.com/Saitamasans/testing-skills/main/scripts/install.ps1').Content)).TrimStart([char]0xFEFF))) %INSTALL_SELECTOR%"
 )
 set "INSTALL_EXIT_CODE=%ERRORLEVEL%"
 if not "%INSTALL_EXIT_CODE%"=="0" (

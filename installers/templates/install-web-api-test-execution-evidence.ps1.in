@@ -37,6 +37,7 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+$ProgressPreference = "SilentlyContinue"
 [Console]::OutputEncoding = New-Object System.Text.UTF8Encoding($false)
 
 $script:SkillName = "web-api-test-execution-evidence"
