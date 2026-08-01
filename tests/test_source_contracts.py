@@ -67,6 +67,48 @@ class SourceContractsTest(unittest.TestCase):
             for term in required:
                 self.assertIn(term, self.texts[slug], f"{slug}: {term}")
 
+    def test_requirement_clarification_has_false_positive_gates(self):
+        text = self.texts["requirement-clarification-test"]
+        required = [
+            "问题生成门禁",
+            "多个字段或指标各自的定义、阈值、分母或计算对象",
+            "不要把不同指标之间的差异本身当成冲突",
+            "按原文整体执行，不要把可由区间定义直接推出的边界拆成多个问题",
+            "宁可少问但问准",
+            "P0 必须满足",
+        ]
+        for phrase in required:
+            self.assertIn(phrase, text)
+
+    def test_requirement_clarification_is_domain_neutral_and_preserves_core_guards(self):
+        text = self.texts["requirement-clarification-test"]
+        forbidden_case_specific_terms = [
+            "历史日期是否仍按",
+            "仅支持单个",
+            "去重用户数",
+            "公屏欢迎语",
+            "上麦",
+            "房间",
+            "首充",
+            "流水",
+        ]
+        for term in forbidden_case_specific_terms:
+            self.assertNotIn(term, text, term)
+
+        core_guards = [
+            "不把合理假设当作已确认规则",
+            "不替产品编造金额、数量、时间、权限、状态、提示文案或业务规则",
+            "只要仍有 P0 未关闭",
+            "产品回答后要重新复审",
+            "只有所有 P0 关闭后",
+            "本 Skill 永远不生成测试用例",
+            "降噪规则不得覆盖核心风险",
+            "不能因为“可能复用”就跳过产品澄清",
+            "共享同一业务事件、对象、归属关系或数据源",
+        ]
+        for guard in core_guards:
+            self.assertIn(guard, text, guard)
+
     def test_requirement_workbench_emits_actual_results_and_independent_web_cases(self):
         text = self.texts["requirement-test-workbench"]
         columns = "用例 ID | 所属模块 | 用例标题 | 验证功能点 | 前置条件 | 测试步骤 | 预期结果 | 优先级 | 实际结果 | 执行结果"
