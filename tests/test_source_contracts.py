@@ -67,6 +67,19 @@ class SourceContractsTest(unittest.TestCase):
             for term in required:
                 self.assertIn(term, self.texts[slug], f"{slug}: {term}")
 
+    def test_requirement_clarification_has_false_positive_gates(self):
+        text = self.texts["requirement-clarification-test"]
+        required = [
+            "问题生成门禁",
+            "多个字段各自给出独立定义、阈值或分母",
+            "不要追问“是否分别独立”",
+            "按原文整体理解，不要人为拆成两种实现方案",
+            "宁可少问但问准",
+            "P0 必须满足",
+        ]
+        for phrase in required:
+            self.assertIn(phrase, text)
+
     def test_requirement_workbench_emits_actual_results_and_independent_web_cases(self):
         text = self.texts["requirement-test-workbench"]
         columns = "用例 ID | 所属模块 | 用例标题 | 验证功能点 | 前置条件 | 测试步骤 | 预期结果 | 优先级 | 实际结果 | 执行结果"
