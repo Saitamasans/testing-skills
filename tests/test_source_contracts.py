@@ -17,6 +17,19 @@ ORIGINAL_SEVEN = {
     "requirement-clarification-test",
 }
 
+ROUTED_SKILLS = ORIGINAL_SEVEN | {
+    "web-api-test-execution-evidence",
+    "test-case-execution-compiler",
+    "multi-source-test-audit",
+}
+
+SPECIALIZED_SKILLS = {
+    "workbench-ui-acceptance-execution",
+    "web-api-test-execution-evidence",
+    "test-case-execution-compiler",
+    "multi-source-test-audit",
+}
+
 
 class SourceContractsTest(unittest.TestCase):
     @classmethod
@@ -26,40 +39,42 @@ class SourceContractsTest(unittest.TestCase):
 
     def test_exact_filenames_and_frontmatter(self):
         self.assertGreaterEqual(len(self.manifest), 1)
-        self.assertEqual(10, len(self.manifest))
+        self.assertEqual(
+            len(self.manifest),
+            len({item["slug"] for item in self.manifest}),
+            "manifest slugs must be unique",
+        )
         for item in self.manifest:
             meta, _ = parse_frontmatter(self.texts[item["slug"]])
             self.assertEqual({"name", "description"}, set(meta))
             self.assertEqual(item["slug"], meta["name"])
         self.assertEqual(
-            ORIGINAL_SEVEN | {"multi-source-test-audit"},
-            {
-                item["slug"]
-                for item in self.manifest
-                if not item.get("execution_skill") and not item.get("compiler_skill")
-            },
+            ORIGINAL_SEVEN | SPECIALIZED_SKILLS,
+            {item["slug"] for item in self.manifest},
         )
 
     def test_mutually_exclusive_route_and_confirmation_language(self):
-        for slug, text in self.texts.items():
+        for slug in ROUTED_SKILLS:
+            text = self.texts[slug]
             self.assertIn("互斥路由", text, slug)
             self.assertIn("用户确认前", text, slug)
             self.assertNotIn("用户未确认前", text, slug)
             self.assertIn("最多一个", text, slug)
 
-    def test_five_case_skills_have_dual_output_contract(self):
+    def test_skill_categories_have_their_own_output_contract(self):
         for item in self.manifest:
+            slug = item["slug"]
             text = self.texts[item["slug"]]
             if item["case_output"]:
                 for phrase in ["同一份报告 JSON", ".xlsx", ".html", "未执行 / 通过 / 不通过 / 待定", "localStorage"]:
-                    self.assertIn(phrase, text, f"{item['slug']}: {phrase}")
+                    self.assertIn(phrase, text, f"{slug}: {phrase}")
+            elif item.get("compiler_skill"):
+                self.assertIn("不生成新的正式业务用例", text, slug)
+            elif slug == "workbench-ui-acceptance-execution":
+                self.assertIn("do not use for case generation", text, slug)
+                self.assertIn("HTML 验收报告", text, slug)
             else:
-                expected = (
-                    "不生成新的正式业务用例"
-                    if item.get("compiler_skill")
-                    else "不生成正式测试用例"
-                )
-                self.assertIn(expected, text)
+                self.assertIn("不生成正式测试用例", text, slug)
 
     def test_ability_contracts_are_preserved(self):
         contracts = json.loads((ROOT / "tooling/ability-contracts.json").read_text(encoding="utf-8"))

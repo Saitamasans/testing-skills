@@ -1,0 +1,119 @@
+name: Update Playwright MCP lock
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "17 3 * * 1"
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      changed: ${{ steps.inspect.outputs.changed }}
+      current: ${{ steps.inspect.outputs.current }}
+      latest: ${{ steps.inspect.outputs.latest }}
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@49933ea5288caeca8642ad1e84afbd3f7d6820020 # v4
+        with:
+          node-version: "22.23.1"
+
+      - name: Inspect registry metadata
+        id: inspect
+        shell: bash
+        run: |
+          set -euo pipefail
+          MCP_FILE="plugins/reverse-test-workbench/.mcp.json"
+          CURRENT="$(node -e "const c=require('./${MCP_FILE}'); const a=c.mcpServers.playwright.args.find(x=>x.startsWith('@playwright/mcp@')); process.stdout.write(a.split('@').pop())")"
+          LATEST="$(npm view @playwright/mcp version --ignore-scripts)"
+          if [[ ! "$CURRENT" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ || ! "$LATEST" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Playwright MCP versions must be stable strict semver" >&2
+            exit 1
+          fi
+
+          if [ "$CURRENT" = "$LATEST" ]; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+          echo "current=$CURRENT" >> "$GITHUB_OUTPUT"
+          echo "latest=$LATEST" >> "$GITHUB_OUTPUT"
+
+  update:
+    needs: inspect
+    if: needs.inspect.outputs.changed == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      BASE_BRANCH: ${{ github.event.repository.default_branch }}
+      CURRENT: ${{ needs.inspect.outputs.current }}
+      LATEST: ${{ needs.inspect.outputs.latest }}
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@49933ea5288caeca8642ad1e84afbd3f7d6820020 # v4
+        with:
+          node-version: "22.23.1"
+
+      - name: Update locked metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+          MCP_FILE="plugins/reverse-test-workbench/.mcp.json"
+          PLUGIN_FILE="plugins/reverse-test-workbench/.codex-plugin/plugin.json"
+
+          CURRENT="$CURRENT" LATEST="$LATEST" MCP_FILE="$MCP_FILE" PLUGIN_FILE="$PLUGIN_FILE" node <<'NODE'
+          const fs = require('fs');
+          const mcpPath = process.env.MCP_FILE;
+          const pluginPath = process.env.PLUGIN_FILE;
+          const current = process.env.CURRENT;
+          const latest = process.env.LATEST;
+
+          const mcp = JSON.parse(fs.readFileSync(mcpPath, 'utf8'));
+          const args = mcp.mcpServers.playwright.args;
+          const index = args.findIndex(value => value === `@playwright/mcp@${current}`);
+          if (index < 0) throw new Error('Locked Playwright MCP argument not found');
+          args[index] = `@playwright/mcp@${latest}`;
+          fs.writeFileSync(mcpPath, JSON.stringify(mcp, null, 2) + '\n');
+
+          const plugin = JSON.parse(fs.readFileSync(pluginPath, 'utf8'));
+          const baseVersion = plugin.version.split('+', 1)[0];
+          const parts = baseVersion.split('.').map(Number);
+          if (parts.length !== 3 || parts.some(Number.isNaN)) throw new Error('Plugin version is not strict semver');
+          parts[2] += 1;
+          plugin.version = parts.join('.');
+          fs.writeFileSync(pluginPath, JSON.stringify(plugin, null, 2) + '\n');
+          NODE
+
+      - name: Open update pull request
+        shell: bash
+        run: |
+          set -euo pipefail
+          BRANCH="deps/playwright-mcp-${LATEST}"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git switch -C "$BRANCH"
+          git add plugins/reverse-test-workbench/.mcp.json plugins/reverse-test-workbench/.codex-plugin/plugin.json
+          git commit -m "chore: update Playwright MCP to ${LATEST}"
+          gh auth setup-git
+          git push --force-with-lease origin "$BRANCH"
+
+          if gh pr view "$BRANCH" --json number >/dev/null 2>&1; then
+            exit 0
+          fi
+
+          gh pr create \
+            --base "$BASE_BRANCH" \
+            --head "$BRANCH" \
+            --title "chore: update Playwright MCP to ${LATEST}" \
+            --body "Updates the locked official Playwright MCP from ${CURRENT} to ${LATEST}. Registry metadata was checked in a read-only job; review and run the forward UI smoke test before merging."

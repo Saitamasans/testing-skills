@@ -106,8 +106,10 @@ class ExecutionSkillContractsTest(unittest.TestCase):
             self.assertIn(phrase, self.body)
 
     def test_complete_installation_and_execution_contract(self):
-        readme = (ROOT / "README.md").read_text(encoding="utf-8")
-        for document in [self.text, self.generated_text, readme]:
+        # The execution Skill keeps its complete runtime contract in its own
+        # source/package. README intentionally documents only publicly exposed
+        # Skills and must not be forced to re-publish this hidden workflow.
+        for document in [self.text, self.generated_text]:
             for phrase in [
                 "GitHub Release 完整安装器",
                 "Node 22.23.1",

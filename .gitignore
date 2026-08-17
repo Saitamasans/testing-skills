@@ -4,3 +4,13 @@ packages/testing-runner/dist/
 *.tmp
 __pycache__/
 .worktrees/
+.playwright-mcp/
+.release-validation/
+outputs/
+artifact_build/
+*_无需求UI逆向测试/
+*.py[cod]
+.pytest_cache/
+.DS_Store
+Thumbs.db
+*.log

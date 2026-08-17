@@ -19,12 +19,24 @@
 | 用例质量审计<br>`test-case-quality-audit` | 审计已有用例的可执行性、需求一致性、遗漏风险和冗余。 | [![Install](https://img.shields.io/badge/Install-2ea44f)](https://github.com/Saitamasans/testing-skills/releases/download/skill-installers-v1/install-test-case-quality-audit.cmd) |
 | 需求澄清-需求评审<br>`requirement-clarification-test` | 在写用例前找出需求缺口、导出产品核对 Excel 并判断是否具备开测条件。 | [![Install](https://img.shields.io/badge/Install-2ea44f)](https://github.com/Saitamasans/testing-skills/releases/download/skill-installers-v1/install-requirement-clarification-test.cmd) |
 | 多源测试-审计<br>`multi-source-test-audit` | 关联需求、接口文档、客户端、后端和 Admin 等多源材料，完成能力分级、候选业务链、静态审计线索和阶段 B 审批计划；v0.1 不执行接口或数据库。 | [![Install](https://img.shields.io/badge/Install-2ea44f)](https://github.com/Saitamasans/testing-skills/releases/download/multi-source-test-audit-v0.1.4/install-multi-source-test-audit.cmd) |
+| 无需求-UI逆向测试工作台<br>`reverse-test-workbench` | 只有可访问 Web UI、缺少需求与源码时，使用官方 Playwright MCP 做批次化黑盒探索、证据留存和测试资产沉淀。 | Codex Plugin，见下方安装命令。 |
 
 选择时以当前交付目标为准：一个任务只选择一个主 Skill，最多建议一个辅助 Skill；调用辅助 Skill 前先说明分工并等待确认，最终只生成一套结果。
 
 <a id="install"></a>
 
 ## 安装
+
+### Codex Plugin：无需求-UI逆向测试工作台
+
+`reverse-test-workbench` 以 Codex Plugin 形式发布，Skill 与锁定版本的官方 Playwright MCP 一起安装。用户不需要预先配置 Chrome 调试端口、浏览器扩展、Selenium 或 Playwright 脚本。
+
+```powershell
+codex plugin marketplace add Saitamasans/testing-skills --ref main
+codex plugin add reverse-test-workbench@reverse-test-workbench
+```
+
+安装完成后请**新建任务**，再提供目标 URL 开始探索。首次运行时，Plugin 会通过 Codex 自带的 `pnpm` 从 npm 获取锁定版本的官方 Playwright MCP；仓库不保存浏览器执行器安装包。详细说明见 [`plugins/reverse-test-workbench/README.md`](plugins/reverse-test-workbench/README.md)。
 
 ### 推荐方式：Windows 安装按钮
 

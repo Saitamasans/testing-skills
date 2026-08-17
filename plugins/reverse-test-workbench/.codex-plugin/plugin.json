@@ -1,0 +1,33 @@
+{
+  "name": "reverse-test-workbench",
+  "version": "0.1.0+codex.20260815094916",
+  "description": "\u65e0\u9700\u6c42\u6216\u5f31\u9700\u6c42\u573a\u666f\u4e0b\uff0c\u4f7f\u7528\u5b98\u65b9 Playwright MCP \u6267\u884c\u9ed1\u76d2 UI \u9006\u5411\u63a2\u7d22\u3001\u8bc1\u636e\u7559\u5b58\u548c\u6d4b\u8bd5\u8d44\u4ea7\u6c89\u6dc0\u3002",
+  "author": {
+    "name": "Reverse Test Workbench"
+  },
+  "keywords": [
+    "testing",
+    "exploratory-testing",
+    "playwright",
+    "ui-testing"
+  ],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "\u65e0\u9700\u6c42-UI\u9006\u5411\u6d4b\u8bd5\u5de5\u4f5c\u53f0",
+    "shortDescription": "\u7528 Playwright MCP \u4ece\u96f6\u63a2\u7d22\u672a\u77e5 Web \u7cfb\u7edf",
+    "longDescription": "\u9762\u5411\u53ea\u6709\u53ef\u8bbf\u95ee UI\u3001\u7f3a\u5c11\u9700\u6c42\u6587\u6863\u548c\u53ef\u9760\u9884\u671f\u7684\u573a\u666f\uff0c\u6279\u6b21\u5316\u6267\u884c\u9ed1\u76d2\u63a2\u7d22\u6d4b\u8bd5\uff0c\u5efa\u7acb\u5bfc\u822a\u5730\u56fe\u3001\u884c\u4e3a\u5730\u56fe\u3001\u8bc1\u636e\u3001\u95ee\u9898\u3001\u98ce\u9669\u548c\u53ef\u7eed\u8dd1\u6d4b\u8bd5\u8d44\u4ea7\u3002",
+    "developerName": "Reverse Test Workbench",
+    "category": "Productivity",
+    "capabilities": [
+      "Interactive",
+      "Browser automation",
+      "Document generation"
+    ],
+    "defaultPrompt": [
+      "\u4f7f\u7528\u65e0\u9700\u6c42-UI\u9006\u5411\u6d4b\u8bd5\u5de5\u4f5c\u53f0\u63a2\u7d22\u8fd9\u4e2a Web \u7cfb\u7edf\u3002",
+      "\u4ece\u8fd9\u4e2a URL \u5f00\u59cb\u505a\u4ee3\u8868\u6027\u63a2\u7d22\u6d4b\u8bd5\u5e76\u7559\u5b58\u8bc1\u636e\u3002",
+      "\u7ee7\u7eed\u4e0a\u6b21\u7684\u63a2\u7d22\u6279\u6b21\u5e76\u66f4\u65b0\u6d4b\u8bd5\u8d44\u4ea7\u3002"
+    ]
+  },
+  "mcpServers": "./.mcp.json"
+}
