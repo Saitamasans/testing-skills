@@ -1,0 +1,276 @@
+{
+  "schema_version": "1.0",
+  "run": {
+    "run_id": "fixture-run-001",
+    "system_name": "样例后台",
+    "target_url": "https://example.test/admin",
+    "status": "formal_pause",
+    "generated_at": "2026-08-15T12:00:00+08:00",
+    "run_positioning": ["阶段探索"],
+    "scope_boundary": "当前账号可见系统",
+    "coverage_commitment": "代表性价值探索",
+    "exploration_focus": ["综合探索", "数据一致性"],
+    "run_budget": "15 分钟端到端预算",
+    "budget_control": {
+      "mode": "time",
+      "started_at": "2026-08-15T11:30:00+08:00",
+      "closeout_at": "2026-08-15T11:42:00+08:00",
+      "deadline_at": "2026-08-15T11:45:00+08:00",
+      "last_checked_at": "2026-08-15T11:42:00+08:00",
+      "status": "closing",
+      "overrun_ms": 0
+    },
+    "account_context": "测试账号 / 普通管理员",
+    "executor": {
+      "protocol": "official-playwright-mcp",
+      "version": "0.0.79",
+      "browser_channel": "chrome",
+      "session_mode": "managed",
+      "model_vision_capability": "available",
+      "capability_state": "READY_DOM_VISUAL"
+    },
+    "artifact_preflight": {
+      "checked_at": "2026-08-15T11:30:00+08:00",
+      "docx_generation": "available",
+      "xlsx_generation": "available",
+      "libreoffice": "unavailable",
+      "table_validation": "available",
+      "image_validation": "available",
+      "visual_render_unavailable": true,
+      "fallback": "structure_check",
+      "notes": "样例运行使用结构检查。"
+    },
+    "timing": {
+      "time_basis": "wall_clock",
+      "executor_gate": {"started_at": "2026-08-15T11:30:00+08:00", "ended_at": "2026-08-15T11:30:05+08:00", "duration_ms": 5000, "status": "completed"},
+      "entry": {"started_at": "2026-08-15T11:30:05+08:00", "ended_at": "2026-08-15T11:30:12+08:00", "duration_ms": 7000, "status": "completed"},
+      "b00": {"started_at": "", "ended_at": "", "duration_ms": 0, "status": "not_started"},
+      "b01_quick_map": {"started_at": "2026-08-15T11:30:12+08:00", "ended_at": "2026-08-15T11:32:00+08:00", "duration_ms": 108000, "status": "completed"},
+      "first_business_interaction": {"started_at": "2026-08-15T11:32:00+08:00", "ended_at": "2026-08-15T11:35:00+08:00", "duration_ms": 180000, "status": "completed"},
+      "b01_navigation_ledger": {"started_at": "", "ended_at": "", "duration_ms": 0, "status": "not_started"},
+      "business_batches": {"started_at": "2026-08-15T11:32:00+08:00", "ended_at": "2026-08-15T11:45:00+08:00", "duration_ms": 780000, "status": "completed"},
+      "waiting_user": {"started_at": "", "ended_at": "", "duration_ms": 0, "status": "not_started"},
+      "artifact_generation": {"started_at": "", "ended_at": "", "duration_ms": 0, "status": "not_started"},
+      "artifact_validation": {"started_at": "", "ended_at": "", "duration_ms": 0, "status": "not_started"},
+      "total": {"started_at": "2026-08-15T11:30:00+08:00", "ended_at": "2026-08-15T11:45:00+08:00", "duration_ms": 900000, "status": "formal_pause"}
+    },
+    "resume": {
+      "current_batch": "B03",
+      "navigation_cursor": "用户/用户列表",
+      "return_cursor": "用户/用户列表",
+      "active_inserted_path": null,
+      "backlog": ["核对详情与列表状态一致性"],
+      "last_known_good_page": {"name": "用户列表", "url": "https://example.test/admin/users"},
+      "blockers": [],
+      "next_action": "从用户详情继续验证状态关系"
+    }
+  },
+  "summary": {
+    "one_line_conclusion": "本轮确认用户查询采用精确匹配，并发现列表与详情状态仍需继续核对。",
+    "answered_questions": ["用户编号查询是否返回唯一结果"],
+    "unanswered_questions": [{"question": "列表状态是否与详情一致", "impact": "影响后续状态流转判断"}],
+    "key_findings": [
+      {
+        "finding_id": "F001",
+        "title": "用户编号查询表现为精确匹配",
+        "category": "行为基线",
+        "priority": "中",
+        "fact": "输入完整用户编号后列表由 2881 条收敛为 1 条。",
+        "judgment": "当前证据支持该筛选项按完整编号匹配。",
+        "basis": "查询前后数量变化及结果行编号一致。",
+        "impact": "可作为后续查询回归和异常输入设计基线。",
+        "action": "补测不存在编号、空格和刷新后的条件保持。",
+        "confidence": "中"
+      }
+    ],
+    "recommendations": ["优先继续用户详情与列表状态一致性路径。"],
+    "conclusion_boundary": "结论仅适用于样例账号、已执行批次和已留证范围，不代表系统全量测试完成。"
+  },
+  "coverage": {
+    "identified_entries": 16,
+    "reached_surfaces": 2,
+    "initially_explored": 1,
+    "effectively_explored": 1,
+    "closed_paths": 0,
+    "initial_batches": 2,
+    "dynamic_batches": 0,
+    "completed_batches": 1,
+    "disposed_batches": 2,
+    "backlog_count": 1,
+    "uncovered_scope": ["用户详情状态", "其他业务模块"]
+  },
+  "batches": [
+    {
+      "batch_id": "B02",
+      "batch_name": "用户列表代表页探索",
+      "batch_type": "核心模块",
+      "exploration_question": "用户编号查询规则是什么",
+      "value_level": "有效探索",
+      "information_gain_summary": "形成用户编号精确匹配的当前行为基线。",
+      "answered_questions": "用户编号查询是否返回唯一结果",
+      "unanswered_questions": "列表与详情状态是否一致",
+      "conclusion_use": "当前行为基线",
+      "plan_source": "初始计划",
+      "in_current_plan": "是",
+      "status": "已完成（批次目标）",
+      "is_complete": "是",
+      "is_disposed": "是",
+      "priority_reason": "高频核心对象",
+      "estimated_visits": 1,
+      "actual_surfaces": 1,
+      "initial_exploration_count": 1,
+      "effective_exploration_count": 1,
+      "closed_path_count": 0,
+      "navigation_cursor": "用户/用户列表",
+      "return_cursor": "用户/用户列表",
+      "dynamic_reason": "",
+      "uncovered_scope": "用户详情状态",
+      "exploration_debt": "异常输入与状态关联",
+      "started_at": "2026-08-15T11:32:00+08:00",
+      "ended_at": "2026-08-15T11:35:00+08:00",
+      "duration_ms": 180000,
+      "timing_summary": "业务交互 3 分钟",
+      "blocker_reason": "",
+      "next_action": "进入用户详情",
+      "report_section": "用户列表代表页探索",
+      "evidence_dir": "evidence/batch-02"
+    }
+  ],
+  "navigation": [
+    {
+      "entry_id": "NAV001",
+      "level": 1,
+      "level_1": "用户",
+      "level_2": "",
+      "level_3": "",
+      "entry_name": "用户",
+      "entry_type": "菜单",
+      "parent_entry": "",
+      "visible_account": "普通管理员",
+      "locator": "role=menuitem[name=用户]",
+      "normalized_surface": "用户模块",
+      "entry_category": "可见可达",
+      "inventory_completeness": "已识别",
+      "disposition_status": "已到达",
+      "covered_this_run": "是",
+      "sampling_basis": "",
+      "uncovered_reason": "",
+      "backlog_batch": "",
+      "main_capability": "管理用户对象",
+      "notes": ""
+    }
+  ],
+  "page_inventory": [
+    {
+      "surface_id": "SURF001",
+      "surface_name": "用户列表",
+      "entry_name": "用户列表",
+      "core_object": "用户",
+      "region": "查询区",
+      "control_name": "Number",
+      "control_type": "输入框",
+      "primary_action": "查询",
+      "key_state": "结果数量",
+      "visibility_condition": "已登录",
+      "behavior_fingerprint": "编号筛选后列表收敛",
+      "observation_source": "真实 UI",
+      "notes": ""
+    }
+  ],
+  "paths": [
+    {
+      "path_id": "PATH001",
+      "batch_id": "B02",
+      "path_name": "用户编号查询",
+      "path_type": "主路径",
+      "flow_status": "部分执行",
+      "exploration_question": "编号查询是否精确匹配",
+      "relationship_evidence": "结果数量与行编号",
+      "preconditions": "已登录并进入用户列表",
+      "steps_summary": "记录基线数量，输入已有编号并查询",
+      "input_data": "已有用户编号",
+      "state_before": "2881 条",
+      "state_after": "1 条",
+      "observed_result": "结果行编号与输入一致",
+      "assertion_strength": "弱断言",
+      "conclusion_type": "基线",
+      "blocker": "详情尚未核对",
+      "return_cursor": "用户/用户列表",
+      "evidence_ids": "EV001"
+    }
+  ],
+  "test_cases": [
+    {
+      "case_id": "TC001",
+      "batch_id": "B02",
+      "surface": "用户列表",
+      "title": "按完整用户编号查询",
+      "exploration_question": "编号查询是否精确匹配",
+      "preconditions": "存在目标用户",
+      "steps": "输入完整编号并查询",
+      "test_input": "已有用户编号",
+      "expected_basis": "输入与结果行编号自洽",
+      "assertion_strength": "弱断言",
+      "expected_source": "系统内生关系",
+      "actual_result": "返回唯一匹配行",
+      "conclusion": "通过（当前基线）",
+      "evidence_ids": "EV001",
+      "automation_candidate": "是"
+    }
+  ],
+  "issues": [],
+  "risks": [
+    {
+      "risk_id": "R001",
+      "batch_id": "B02",
+      "surface": "用户列表",
+      "type": "探索债务",
+      "priority": "后续优先",
+      "title": "列表与详情状态尚未核对",
+      "description": "当前只验证了列表筛选。",
+      "reason": "批次预算结束",
+      "impact_scope": "用户状态相关结论",
+      "related_assets": "PATH001",
+      "recommendation": "下一批次进入详情核对",
+      "backlog_reason": "需要关联页面证据",
+      "status": "待处理"
+    }
+  ],
+  "test_data": [],
+  "evidence": [
+    {
+      "evidence_id": "EV001",
+      "batch_id": "B02",
+      "type": "路径/状态截图",
+      "related_object": "PATH001",
+      "file_path": "evidence/batch-02/B02_P001_查询结果.png",
+      "caption": "完整编号查询后列表收敛为一条",
+      "captured_at": "2026-08-15T11:34:00+08:00",
+      "location": "用户列表",
+      "proves": "查询结果数量和编号一致",
+      "reused": "否",
+      "include_in_report": false,
+      "notes": "样例不附带实际图片文件。"
+    }
+  ],
+  "knowledge": [
+    {
+      "knowledge_id": "K001",
+      "batch_id": "B02",
+      "knowledge_type": "基线",
+      "content": "完整用户编号查询当前返回唯一匹配行。",
+      "source": "PATH001",
+      "confidence": "中",
+      "can_assert": "是",
+      "status": "有效",
+      "replacement": "",
+      "affected_assets": "TC001",
+      "related_surface_path": "用户列表 / PATH001",
+      "confirmation_question": "是否允许前导或后缀空格",
+      "impact": "可作为查询回归基线",
+      "action": "补测异常输入",
+      "conclusion_use": "自动化回归候选",
+      "change_log": "首次建立"
+    }
+  ]
+}

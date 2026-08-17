@@ -1,0 +1,20 @@
+{
+  "name": "reverse-test-workbench",
+  "interface": {
+    "displayName": "Reverse Test Workbench"
+  },
+  "plugins": [
+    {
+      "name": "reverse-test-workbench",
+      "source": {
+        "source": "local",
+        "path": "./plugins/reverse-test-workbench"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    }
+  ]
+}

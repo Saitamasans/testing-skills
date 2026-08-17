@@ -1,0 +1,7 @@
+interface:
+  display_name: "无需求-UI逆向测试工作台"
+  short_description: "使用官方Playwright MCP做无需求UI逆向探索与留证"
+  default_prompt: "使用 $reverse-test-workbench 通过官方 Playwright MCP 打开我提供的系统 URL，从零执行自适应无需求 UI 探索测试；无视觉能力时自动降级为 DOM/ARIA 模式，并沉淀图文证据和测试资产。"
+
+policy:
+  allow_implicit_invocation: true
