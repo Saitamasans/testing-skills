@@ -9,13 +9,13 @@ from openpyxl import load_workbook
 
 
 ROOT = Path(__file__).resolve().parents[2]
-PLUGIN = ROOT / "plugins/reverse-test-workbench"
-SCHEMA = PLUGIN / "assets/run-data.schema.json"
-CONTRACT = PLUGIN / "skills/reverse-test-workbench/references/run-data-contract.md"
-VALIDATOR = PLUGIN / "scripts/validate_run_data.py"
-BUILDER = PLUGIN / "scripts/build_artifacts.py"
-INITIALIZER = PLUGIN / "scripts/init_run_data.py"
-CONSISTENCY = PLUGIN / "scripts/check_artifact_consistency.py"
+SKILL = ROOT / "skills/reverse-test-workbench"
+SCHEMA = SKILL / "assets/run-data.schema.json"
+CONTRACT = SKILL / "references/run-data-contract.md"
+VALIDATOR = SKILL / "scripts/validate_run_data.py"
+BUILDER = SKILL / "scripts/build_artifacts.py"
+INITIALIZER = SKILL / "scripts/init_run_data.py"
+CONSISTENCY = SKILL / "scripts/check_artifact_consistency.py"
 FIXTURE = ROOT / "evals/reverse-test-workbench/fixtures/minimal-run-data.json"
 
 EXPECTED_SHEETS = [
@@ -63,8 +63,8 @@ with tempfile.TemporaryDirectory() as temp_dir:
             "初始化样例",
             "--target-url",
             "https://example.test/admin",
-            "--plugin-version",
-            "0.1.0+codex.test",
+            "--skill-version",
+            "0.1.0",
             "--executor-version",
             "0.0.79",
             "--started-at",

@@ -74,8 +74,8 @@ def build_data(args: argparse.Namespace) -> dict[str, object]:
             "system_name": args.system_name,
             "target_url": args.target_url,
             "status": "running",
-            "plugin_version": args.plugin_version,
-            "run_positioning": ["执行器/Plugin验证", "初始侦察"],
+            "skill_version": args.skill_version,
+            "run_positioning": ["执行器/集成验证", "初始侦察"],
             "scope_boundary": "当前授权目标与账号可见范围；默认仅执行L0只读操作",
             "coverage_commitment": "代表性价值探索",
             "exploration_focus": ["入口判定", "B01快速地图", "安全的高价值未知"],
@@ -169,7 +169,7 @@ def main() -> int:
     parser.add_argument("--run-id", required=True)
     parser.add_argument("--system-name", required=True)
     parser.add_argument("--target-url", required=True)
-    parser.add_argument("--plugin-version", required=True)
+    parser.add_argument("--skill-version", required=True)
     parser.add_argument("--executor-version", required=True)
     parser.add_argument("--started-at", required=True)
     parser.add_argument("--budget-minutes", required=True, type=float)

@@ -1,0 +1,2 @@
+python-docx==1.2.0
+openpyxl==3.1.5

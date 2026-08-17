@@ -191,7 +191,7 @@ class GitHubInstallReadmeTest(unittest.TestCase):
             "仍需要可用的 Node.js 运行环境",
             "不内置独立 runner",
             "执行时复用当前 AI 环境已有的浏览器控制能力",
-            "Plugin 会通过 Codex 自带的 `pnpm` 从 npm 获取锁定版本的官方 Playwright MCP",
+            "Codex 按适配器配置获取锁定版本的官方 Playwright MCP",
         ]:
             with self.subTest(phrase=phrase):
                 self.assertIn(phrase, install_guide)
@@ -298,7 +298,11 @@ class GitHubInstallReadmeTest(unittest.TestCase):
                     cells[1],
                 )
                 if slug == "reverse-test-workbench":
-                    self.assertEqual("Codex Plugin，见下方安装命令。", cells[2])
+                    self.assertIn(
+                        "npx skills add Saitamasans/testing-skills@reverse-test-workbench -g -y",
+                        cells[2],
+                    )
+                    self.assertIn("Codex 可选适配器", cells[2])
                     continue
                 if slug == "multi-source-test-audit":
                     asset_url = MULTI_SOURCE_RUNTIME_RELEASE_BASE + "install-multi-source-test-audit.cmd"

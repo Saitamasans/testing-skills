@@ -50,14 +50,15 @@ class ReadmeAndPackagesTest(unittest.TestCase):
         for slug in HIDDEN_README_SKILLS:
             self.assertNotIn(slug, readme)
 
-    def test_readme_documents_reverse_test_workbench_plugin_workflow(self):
+    def test_readme_documents_reverse_test_workbench_distribution(self):
         readme = (ROOT / "README.md").read_text(encoding="utf-8")
         for phrase in [
             "reverse-test-workbench",
             "官方 Playwright MCP",
-            "Codex Plugin",
+            "可选 Codex 适配器",
+            "跨宿主、跨 Windows/macOS/Linux",
             "新建任务",
-            "不需要预先配置 Chrome 调试端口",
+            "不要求使用 Codex、Claude Code、Cursor",
         ]:
             self.assertIn(phrase, readme)
 
@@ -83,6 +84,12 @@ class ReadmeAndPackagesTest(unittest.TestCase):
                                 (package_dir / source_file.relative_to(source_dir)).read_bytes(),
                                 source_file,
                             )
+            for relative in item.get("root_files", []):
+                with self.subTest(slug=item["slug"], root_file=relative):
+                    self.assertEqual(
+                        (source_root / relative).read_bytes(),
+                        (package_root / relative).read_bytes(),
+                    )
 
     def test_public_execution_instructions_require_no_manual_runner_install(self):
         readme = (ROOT / "README.md").read_text(encoding="utf-8")
@@ -94,13 +101,14 @@ class ReadmeAndPackagesTest(unittest.TestCase):
         self.assertNotIn("npm install --save-dev @saitamasans/testing-runner", combined)
         self.assertNotIn("npx @saitamasans/testing-runner", combined)
 
-    def test_readme_distinguishes_plugin_and_public_skill_install_paths(self):
+    def test_readme_distinguishes_public_skill_and_optional_adapter_paths(self):
         readme = (ROOT / "README.md").read_text(encoding="utf-8")
         install_section = readme.split('<a id="install"></a>', 1)[1].split(
             '<a id="usage-guides"></a>', 1
         )[0]
         for phrase in [
-            "Codex Plugin：无需求-UI逆向测试工作台",
+            "通用 Skill：无需求-UI逆向测试工作台",
+            "可选 Codex 适配器",
             "codex plugin marketplace add",
             "codex plugin add reverse-test-workbench@reverse-test-workbench",
             "Windows 安装按钮",

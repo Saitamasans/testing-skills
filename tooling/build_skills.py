@@ -140,6 +140,11 @@ def build_all(root: Path = ROOT, check: bool = False) -> list[Path]:
             resource_dirs = tuple(item.get("resource_dirs", []))
             if resource_dirs:
                 _copy_resource_tree(source.parent, package, desired, resource_dirs)
+        for relative in item.get("root_files", []):
+            source_file = source.parent / relative
+            if not source_file.is_file():
+                raise ValueError(f"manifest root_file 不存在: {source_file}")
+            desired[package / relative] = source_file.read_bytes()
         desired[package / "agents/openai.yaml"] = _openai_yaml(item)
         if item["case_output"]:
             renderer = root / "tooling/test-case-renderer.mjs"

@@ -10,7 +10,8 @@ for skill in \
   requirement-clarification-test \
   workbench-ui-acceptance-execution \
   web-api-test-execution-evidence \
-  test-case-execution-compiler
+  test-case-execution-compiler \
+  reverse-test-workbench
 do
   npx skills add "Saitamasans/testing-skills@$skill" -g -y
 done

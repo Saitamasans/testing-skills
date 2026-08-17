@@ -22,5 +22,6 @@ jobs:
         run: |
           python tooling/validate_skills.py
           python tooling/build_skills.py --check
+          python tooling/sync_reverse_test_workbench.py --check
           python -m unittest discover -s tests -p "test_*.py" -v
           git diff --check

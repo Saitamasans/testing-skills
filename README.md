@@ -19,7 +19,7 @@
 | 用例质量审计<br>`test-case-quality-audit` | 审计已有用例的可执行性、需求一致性、遗漏风险和冗余。 | [![Install](https://img.shields.io/badge/Install-2ea44f)](https://github.com/Saitamasans/testing-skills/releases/download/skill-installers-v1/install-test-case-quality-audit.cmd) |
 | 需求澄清-需求评审<br>`requirement-clarification-test` | 在写用例前找出需求缺口、导出产品核对 Excel 并判断是否具备开测条件。 | [![Install](https://img.shields.io/badge/Install-2ea44f)](https://github.com/Saitamasans/testing-skills/releases/download/skill-installers-v1/install-requirement-clarification-test.cmd) |
 | 多源测试-审计<br>`multi-source-test-audit` | 关联需求、接口文档、客户端、后端和 Admin 等多源材料，完成能力分级、候选业务链、静态审计线索和阶段 B 审批计划；v0.1 不执行接口或数据库。 | [![Install](https://img.shields.io/badge/Install-2ea44f)](https://github.com/Saitamasans/testing-skills/releases/download/multi-source-test-audit-v0.1.4/install-multi-source-test-audit.cmd) |
-| 无需求-UI逆向测试工作台<br>`reverse-test-workbench` | 只有可访问 Web UI、缺少需求与源码时，使用官方 Playwright MCP 做批次化黑盒探索、证据留存和测试资产沉淀。 | Codex Plugin，见下方安装命令。 |
+| 无需求-UI逆向测试工作台<br>`reverse-test-workbench` | 只有可访问 Web UI、缺少需求与源码时，使用官方 Playwright MCP 做批次化黑盒探索、证据留存和测试资产沉淀。 | [![Install](https://img.shields.io/badge/Windows-Install-2ea44f)](https://github.com/Saitamasans/testing-skills/releases/download/skill-installers-v1/install-reverse-test-workbench.cmd)<br>`npx skills add Saitamasans/testing-skills@reverse-test-workbench -g -y`；Codex 可选适配器见下方。 |
 
 选择时以当前交付目标为准：一个任务只选择一个主 Skill，最多建议一个辅助 Skill；调用辅助 Skill 前先说明分工并等待确认，最终只生成一套结果。
 
@@ -27,16 +27,45 @@
 
 ## 安装
 
-### Codex Plugin：无需求-UI逆向测试工作台
+### 通用 Skill：无需求-UI逆向测试工作台
 
-`reverse-test-workbench` 以 Codex Plugin 形式发布，Skill 与锁定版本的官方 Playwright MCP 一起安装。用户不需要预先配置 Chrome 调试端口、浏览器扩展、Selenium 或 Playwright 脚本。
+`reverse-test-workbench` 的主产品是跨宿主、跨 Windows/macOS/Linux 的公共 Skill。适用于能够加载 Skill 风格指令并提供 MCP/浏览器工具的 Agent；不要求使用 Codex、Claude Code、Cursor 或其他指定产品。
+
+已有 Node.js/Skills CLI 时，直接安装单个公共 Skill：
+
+```text
+npx skills add Saitamasans/testing-skills@reverse-test-workbench -g -y
+```
+
+也可以把仓库中的 `skills/reverse-test-workbench` 目录放入当前宿主支持的 Skill 目录。不同宿主的目录和安装命令可能不同，但核心文件、执行规则和资源不变。
+
+浏览器执行首选官方 `@playwright/mcp`。如果宿主已经提供该 MCP，Skill 直接进行能力门禁并使用；如果没有，由宿主的插件、扩展或 MCP 管理界面完成一次性连接。宿主无法提供官方 Playwright MCP 时，Skill 会明确停在执行器门禁并给出一个最小恢复动作，不会静默换成 Selenium、桌面控制或不可靠的点击方式。
+
+宿主支持自定义 MCP 配置时，可参考下面的语义配置；命令、传输和安装方式由宿主决定，不要把这段示例当作核心 Skill 的固定启动脚本：
+
+```json
+{
+  "playwright": {
+    "command": "npx",
+    "args": ["-y", "@playwright/mcp@0.0.79", "--browser", "chrome", "--isolated"]
+  }
+}
+```
+
+多模态视觉不是硬依赖。模型支持图像时补充布局、图表、Canvas 和遮挡判断；不支持时继续 DOM/ARIA 探索，并把视觉范围列为未覆盖。
+
+> 互操作边界：完全不支持 Skill 指令、MCP 或等价浏览器能力的普通聊天产品，无法执行这个交互式测试 Skill。这是宿主能力边界，不是操作系统限制。
+
+### 可选 Codex 适配器
+
+Codex 用户可以安装可选适配器，一次获得同一份公共 Skill 和锁定版本的官方 Playwright MCP 配置。适配器只负责宿主接线，不拥有独立测试规则。
 
 ```powershell
 codex plugin marketplace add Saitamasans/testing-skills --ref main
 codex plugin add reverse-test-workbench@reverse-test-workbench
 ```
 
-安装完成后请**新建任务**，再提供目标 URL 开始探索。首次运行时，Plugin 会通过 Codex 自带的 `pnpm` 从 npm 获取锁定版本的官方 Playwright MCP；仓库不保存浏览器执行器安装包。详细说明见 [`plugins/reverse-test-workbench/README.md`](plugins/reverse-test-workbench/README.md)。
+安装完成后请**新建任务**，再提供目标 URL 开始探索。首次运行时，Codex 按适配器配置获取锁定版本的官方 Playwright MCP；仓库不保存浏览器执行器安装包。详细说明见 [`plugins/reverse-test-workbench/README.md`](plugins/reverse-test-workbench/README.md)。
 
 ### 推荐方式：Windows 安装按钮
 
