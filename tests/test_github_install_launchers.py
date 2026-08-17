@@ -31,6 +31,10 @@ RAW_INSTALLER = (
 NO_PUBLIC_INSTALLER_SKILLS = {
     "multi-source-test-audit",
 }
+HIDDEN_README_SKILLS = {
+    "web-api-test-execution-evidence",
+    "test-case-execution-compiler",
+}
 
 
 class GitHubInstallLauncherTest(unittest.TestCase):
@@ -109,15 +113,13 @@ class GitHubInstallReadmeTest(unittest.TestCase):
         cls.readme = (ROOT / "README.md").read_text(encoding="utf-8")
         cls.slugs = [item["slug"] for item in load_manifest(ROOT)["skills"]]
 
-    def test_readme_links_one_all_button_and_one_button_per_skill(self):
-        all_url = RUNTIME_RELEASE_BASE + "install-all.cmd"
-        self.assertEqual(2, self.readme.count(all_url))
-        self.assertNotIn(RELEASE_BASE + "install-all.cmd", self.readme)
-        self.assertIn("Install All 8 Skills", self.readme)
+    def test_readme_links_one_button_per_public_skill(self):
+        self.assertNotIn(RUNTIME_RELEASE_BASE + "install-all.cmd", self.readme)
+        self.assertNotIn("Install All 8 Skills", self.readme)
         for slug in self.slugs:
             with self.subTest(slug=slug):
-                if slug == "test-case-execution-compiler":
-                    self.assertIn("Runtime 1.0.3 发布后提供完整安装器", self.readme)
+                if slug in HIDDEN_README_SKILLS:
+                    self.assertNotIn(slug, self.readme)
                     continue
                 if slug in NO_PUBLIC_INSTALLER_SKILLS:
                     asset_url = MULTI_SOURCE_RUNTIME_RELEASE_BASE + "install-multi-source-test-audit.cmd"
@@ -127,14 +129,8 @@ class GitHubInstallReadmeTest(unittest.TestCase):
                     asset_url = WORKBENCH_UI_ACCEPTANCE_RELEASE_BASE + "install-workbench-ui-acceptance-execution.cmd"
                     self.assertEqual(2, self.readme.count(asset_url))
                     continue
-                base = (
-                    RUNTIME_RELEASE_BASE
-                    if slug == "web-api-test-execution-evidence"
-                    else RELEASE_BASE
-                )
-                asset_url = base + f"install-{slug}.cmd"
-                expected_count = 3 if slug == "web-api-test-execution-evidence" else 1
-                self.assertEqual(expected_count, self.readme.count(asset_url))
+                asset_url = RELEASE_BASE + f"install-{slug}.cmd"
+                self.assertEqual(1, self.readme.count(asset_url))
         self.assertNotIn(
             RELEASE_BASE + "install-web-api-test-execution-evidence.cmd",
             self.readme,
@@ -157,26 +153,26 @@ class GitHubInstallReadmeTest(unittest.TestCase):
         self.assertIn("scripts/install.ps1", self.readme)
         self.assertIn("-All", self.readme)
         self.assertIn("-Skill 'requirement-test-workbench'", self.readme)
-        self.assertIn(
-            "前 7 个独立安装按钮来自固定且不可变的 `skill-installers-v1` Release；"
-            "全部 8 个 Skill 和第 8 个执行就绪按钮只从不可变的 "
-            "`web-api-test-execution-evidence-v1.0.2` Release 提供",
-            self.readme,
-        )
-        self.assertNotIn("前 7 个和全部安装按钮从固定的", self.readme)
+        self.assertIn("启动器只读取本仓库的 HTTPS 安装脚本", self.readme)
+        for slug in HIDDEN_README_SKILLS:
+            self.assertNotIn(slug, self.readme)
 
-    def test_complete_fallbacks_run_immutable_cmds_without_pausing_and_preserve_exit_code(self):
+    def test_public_fallback_runs_immutable_cmd_without_pausing_and_preserves_exit_code(self):
         fallback = self.readme.split("### 命令兜底：Windows 零 Node 安装", 1)[1].split(
             "### 高级方式：npx",
             1,
         )[0]
-        for name in ["install-all.cmd", "install-web-api-test-execution-evidence.cmd"]:
-            with self.subTest(name=name):
-                self.assertIn(RUNTIME_RELEASE_BASE + name, fallback)
-        self.assertEqual(3, fallback.count("TESTING_SKILLS_NO_PAUSE"))
-        self.assertEqual(3, fallback.count("$env:ComSpec"))
-        self.assertEqual(3, fallback.count("exit $exitCode"))
-        self.assertEqual(3, fallback.count("[guid]::NewGuid()"))
+        self.assertIn(
+            WORKBENCH_UI_ACCEPTANCE_RELEASE_BASE
+            + "install-workbench-ui-acceptance-execution.cmd",
+            fallback,
+        )
+        self.assertEqual(1, fallback.count("TESTING_SKILLS_NO_PAUSE"))
+        self.assertEqual(1, fallback.count("$env:ComSpec"))
+        self.assertEqual(1, fallback.count("exit $exitCode"))
+        self.assertEqual(1, fallback.count("[guid]::NewGuid()"))
+        self.assertIn("scripts/install.ps1", fallback)
+        self.assertIn("-Skill 'requirement-test-workbench'", fallback)
 
     def test_readme_distinguishes_node_requirements_by_workflow(self):
         start_marker = '<a id="install"></a>'
@@ -191,17 +187,20 @@ class GitHubInstallReadmeTest(unittest.TestCase):
         for phrase in [
             "第 7 个 `requirement-clarification-test` 实际生成需求澄清 `.xlsx` 文件时，"
             "需要可用的 Node.js 运行环境",
-            "前 7 个 Skill 可以用下方通用安装器安装",
-            "第 8 个 `web-api-test-execution-evidence` 的最终用户必须使用 GitHub Release 完整安装器",
-            "无需系统安装 Node.js、npm、Git、Chrome、Excel 或 Python",
+            "前 5 个用例生成 Skill 实际生成 `.xlsx` 和 `.html` 文件时，"
+            "仍需要可用的 Node.js 运行环境",
+            "不内置独立 runner",
+            "执行时复用当前 AI 环境已有的浏览器控制能力",
+            "Plugin 会通过 Codex 自带的 `pnpm` 从 npm 获取锁定版本的官方 Playwright MCP",
         ]:
             with self.subTest(phrase=phrase):
                 self.assertIn(phrase, install_guide)
-        self.assertNotIn("只有第 8 个", install_guide)
+        for slug in HIDDEN_README_SKILLS:
+            self.assertNotIn(slug, install_guide)
 
-    def test_readme_eighth_skill_guide_contains_required_materials(self):
-        start_marker = '<a id="execution-guide"></a>'
-        end_marker = '<a id="outputs"></a>'
+    def test_readme_workbench_execution_guide_contains_required_materials(self):
+        start_marker = '<a id="workbench-ui-acceptance-guide"></a>'
+        end_marker = '<a id="multi-source-audit-guide"></a>'
         self.assertIn(start_marker, self.readme)
         self.assertIn(end_marker, self.readme)
         execution_guide = self.readme.split(start_marker, 1)[1].split(
@@ -210,28 +209,18 @@ class GitHubInstallReadmeTest(unittest.TestCase):
         )[0]
 
         for phrase in [
-            "第 8 个 Skill 专项指南",
+            "测试工作台-用例执行专项指南",
             "什么时候使用",
             "什么时候不应使用",
-            "每次执行都要准备",
-            "按场景补充",
-            "可选参考",
-            "正式测试用例",
-            "目标 Web/API 地址",
-            "环境性质和执行授权",
-            "测试账号或凭据来源",
-            "接口文档",
-            "测试数据和清理方案",
-            "前后端源码",
-            "执行前确认",
-            "不需要系统 Node.js",
-            "需求文档、需求截图、原型和流程图不能代替正式测试用例",
-            "requirement-test-workbench",
+            "最少准备",
+            "执行与报告规则",
+            "测试环境地址",
+            "账号、权限和前置数据",
+            "关键步骤截图",
+            "workbench-ui-acceptance-execution",
         ]:
             with self.subTest(phrase=phrase):
                 self.assertIn(phrase, execution_guide)
-        self.assertNotIn("条件强制资料", self.readme)
-        self.assertNotIn("Runner 仍需要 Node.js 20+ 和 npm", self.readme)
 
     def test_readme_has_stable_navigation_anchors(self):
         anchors = [
@@ -239,8 +228,6 @@ class GitHubInstallReadmeTest(unittest.TestCase):
             "install",
             "usage-guides",
             "workbench-ui-acceptance-guide",
-            "compiler-guide",
-            "execution-guide",
             "multi-source-audit-guide",
             "outputs",
         ]
@@ -289,14 +276,13 @@ class GitHubInstallReadmeTest(unittest.TestCase):
             ("单接口用例生成-完整版", "single-api-test-full"),
             ("单接口用例生成-精炼版", "single-api-test-concise"),
             ("多接口链路用例生成", "multi-api-flow-test"),
-            ("需求测试工作台", "requirement-test-workbench"),
+            ("测试工作台-生成用例", "requirement-test-workbench"),
             ("测试工作台-用例执行", "workbench-ui-acceptance-execution"),
             ("正式服-主流程用例生成", "production-verification-test"),
             ("用例质量审计", "test-case-quality-audit"),
             ("需求澄清", "requirement-clarification-test"),
-            ("自动执行与证据回填", "web-api-test-execution-evidence"),
-            ("测试用例可执行化编译", "test-case-execution-compiler"),
-            ("多源测试审计", "multi-source-test-audit"),
+            ("多源测试-审计", "multi-source-test-audit"),
+            ("无需求-UI逆向测试工作台", "reverse-test-workbench"),
         ]
         self.assertEqual(len(skill_specs), len(rows))
         release_urls = []
@@ -311,8 +297,8 @@ class GitHubInstallReadmeTest(unittest.TestCase):
                     re.fullmatch(r"[^。！？]+[。！？]", cells[1]),
                     cells[1],
                 )
-                if slug == "test-case-execution-compiler":
-                    self.assertEqual("Runtime 1.0.3 发布后提供完整安装器。", cells[2])
+                if slug == "reverse-test-workbench":
+                    self.assertEqual("Codex Plugin，见下方安装命令。", cells[2])
                     continue
                 if slug == "multi-source-test-audit":
                     asset_url = MULTI_SOURCE_RUNTIME_RELEASE_BASE + "install-multi-source-test-audit.cmd"
@@ -333,14 +319,8 @@ class GitHubInstallReadmeTest(unittest.TestCase):
                     )
                     release_urls.append(asset_url)
                     continue
-                base = (
-                    RUNTIME_RELEASE_BASE
-                    if slug == "web-api-test-execution-evidence"
-                    else RELEASE_BASE
-                )
-                asset_url = base + f"install-{slug}.cmd"
-                expected_count = 3 if slug == "web-api-test-execution-evidence" else 1
-                self.assertEqual(expected_count, self.readme.count(asset_url))
+                asset_url = RELEASE_BASE + f"install-{slug}.cmd"
+                self.assertEqual(1, self.readme.count(asset_url))
                 self.assertEqual(1, cells[2].count(asset_url))
                 self.assertRegex(
                     cells[2],

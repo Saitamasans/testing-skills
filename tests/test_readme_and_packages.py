@@ -7,6 +7,11 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tooling"))
 from build_skills import load_manifest
 
+HIDDEN_README_SKILLS = {
+    "web-api-test-execution-evidence",
+    "test-case-execution-compiler",
+}
+
 
 class ReadmeAndPackagesTest(unittest.TestCase):
     def test_readme_paths_exist_and_install_commands_are_complete(self):
@@ -20,7 +25,10 @@ class ReadmeAndPackagesTest(unittest.TestCase):
             package = ROOT / "skills" / item["slug"]
             self.assertTrue((package / "SKILL.md").exists())
             self.assertTrue((package / "agents/openai.yaml").exists())
-            self.assertIn(item["slug"], readme)
+            if item["slug"] in HIDDEN_README_SKILLS:
+                self.assertNotIn(item["slug"], readme)
+            else:
+                self.assertIn(item["slug"], readme)
             if item["slug"] != "multi-source-test-audit":
                 self.assertIn(item["slug"], installers[2])
         self.assertIn('Join-Path $PSScriptRoot "install.ps1"', installers[1])
@@ -33,28 +41,25 @@ class ReadmeAndPackagesTest(unittest.TestCase):
         self.assertIn("CC Switch", readme)
         self.assertTrue((ROOT / "LICENSE").read_text(encoding="utf-8").startswith("MIT License"))
 
-    def test_single_skill_commands_use_supported_selector(self):
+    def test_public_install_commands_use_supported_selectors(self):
         readme = (ROOT / "README.md").read_text(encoding="utf-8")
         self.assertNotIn("--path", readme)
-        self.assertIn(
-            "npx skills add Saitamasans/testing-skills@web-api-test-execution-evidence -g -y",
-            readme,
-        )
-        self.assertNotIn("-Skill 'web-api-test-execution-evidence'", readme)
-        self.assertIn(
-            "web-api-test-execution-evidence-v1.0.2/"
-            "install-web-api-test-execution-evidence.cmd",
-            readme,
-        )
+        self.assertIn("npx skills add Saitamasans/testing-skills", readme)
+        self.assertIn("codex plugin marketplace add Saitamasans/testing-skills --ref main", readme)
+        self.assertIn("codex plugin add reverse-test-workbench@reverse-test-workbench", readme)
+        for slug in HIDDEN_README_SKILLS:
+            self.assertNotIn(slug, readme)
 
-    def test_readme_documents_package_first_execution_workflow(self):
+    def test_readme_documents_reverse_test_workbench_plugin_workflow(self):
         readme = (ROOT / "README.md").read_text(encoding="utf-8")
-        self.assertIn(f"{len(load_manifest(ROOT)['skills'])} 个 Agent Skill", readme)
-        self.assertIn("人工测试用例.xlsx", readme)
-        self.assertIn("test-case-execution-compiler", readme)
-        self.assertIn("*.execution-package.zip", readme)
-        self.assertIn("execution_contract_required", readme)
-        self.assertNotIn("上传十列 Excel 测试用例并输入：`调用第八个 Skill 执行`", readme)
+        for phrase in [
+            "reverse-test-workbench",
+            "官方 Playwright MCP",
+            "Codex Plugin",
+            "新建任务",
+            "不需要预先配置 Chrome 调试端口",
+        ]:
+            self.assertIn(phrase, readme)
 
     def test_only_five_packages_contain_renderer(self):
         manifest = load_manifest(ROOT)["skills"]
@@ -89,38 +94,33 @@ class ReadmeAndPackagesTest(unittest.TestCase):
         self.assertNotIn("npm install --save-dev @saitamasans/testing-runner", combined)
         self.assertNotIn("npx @saitamasans/testing-runner", combined)
 
-    def test_readme_distinguishes_complete_release_from_source_zip(self):
+    def test_readme_distinguishes_plugin_and_public_skill_install_paths(self):
         readme = (ROOT / "README.md").read_text(encoding="utf-8")
         install_section = readme.split('<a id="install"></a>', 1)[1].split(
             '<a id="usage-guides"></a>', 1
         )[0]
         for phrase in [
-            "GitHub Release 完整安装器",
-            "Source ZIP",
-            "仅供开发者",
-            "不能执行 Web/API 自动化测试",
-            "安装完成，可以执行 Web/API 自动化测试",
-            "无需系统安装 Node.js、npm、Git、Chrome、Excel 或 Python",
+            "Codex Plugin：无需求-UI逆向测试工作台",
+            "codex plugin marketplace add",
+            "codex plugin add reverse-test-workbench@reverse-test-workbench",
+            "Windows 安装按钮",
+            "Windows 零 Node 安装",
+            "npx skills add Saitamasans/testing-skills",
         ]:
             self.assertIn(phrase, install_section)
-        self.assertNotIn("首次运行下载", install_section)
 
-    def test_readme_has_windows_x64_three_step_execution_delivery(self):
+    def test_readme_public_installers_explain_safety_and_recovery(self):
         readme = (ROOT / "README.md").read_text(encoding="utf-8")
         install_section = readme.split('<a id="install"></a>', 1)[1].split(
             '<a id="usage-guides"></a>', 1
         )[0]
         for phrase in [
-            "Windows x64 三步使用",
-            "install-web-api-test-execution-evidence.cmd",
-            "web-api-test-execution-evidence-1.0.2-windows-x64.zip",
-            "SHA256SUMS.txt",
-            "重启 Codex",
-            "把该 ZIP 交给第八个 Skill 执行",
+            "无需管理员权限",
+            "-Force",
             "-Repair",
-            r"%USERPROFILE%\.testing-skills\installations\web-api-test-execution-evidence.json",
-            r"%USERPROFILE%\.testing-skills\diagnostics\web-api-test-execution-evidence",
-            "正常执行阶段不会下载 Node、Runner、Playwright 或 Chromium",
+            "HTTPS 安装脚本",
+            r".agents\skills",
+            "网络失败伪装成安装成功",
         ]:
             with self.subTest(phrase=phrase):
                 self.assertIn(phrase, install_section)
@@ -128,7 +128,7 @@ class ReadmeAndPackagesTest(unittest.TestCase):
     def test_first_seven_skill_usage_guides_are_complete(self):
         readme = (ROOT / "README.md").read_text(encoding="utf-8")
         start_marker = '<a id="usage-guides"></a>'
-        end_marker = '<a id="compiler-guide"></a>'
+        end_marker = '<a id="workbench-ui-acceptance-guide"></a>'
         self.assertIn(start_marker, readme)
         self.assertIn(end_marker, readme)
         usage_guides = readme.split(start_marker, 1)[1].split(end_marker, 1)[0]

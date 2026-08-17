@@ -652,7 +652,7 @@ class EighthSkillReleaseWorkflowContractTest(unittest.TestCase):
         self.assertIsNotNone(build)
         self.assertIn("verify-release-tarball.mjs", build.group(1))
 
-    def test_runner_111_is_retired_and_113_is_the_current_publishable_target(self):
+    def test_runner_111_is_retired_and_114_is_the_current_publishable_target(self):
         retired = "testing-runner-v1.1.1"
         for relative in [
             ".github/workflows",
@@ -668,10 +668,16 @@ class EighthSkillReleaseWorkflowContractTest(unittest.TestCase):
                 with self.subTest(path=path.relative_to(ROOT)):
                     self.assertNotIn(retired, path.read_text(encoding="utf-8", errors="ignore"))
 
-        readme = (ROOT / "README.md").read_text(encoding="utf-8")
-        self.assertIn("testing-runner-v1.1.1", readme)
-        self.assertIn("未发布/作废发布目标", readme)
-        self.assertIn("首个可发布目标为 `testing-runner-v1.1.2`", readme)
+        package = json.loads(
+            (ROOT / "packages/testing-runner/package.json").read_text(encoding="utf-8")
+        )
+        release_lock = json.loads(
+            (ROOT / "packages/testing-runner/release/runner-1.1.4-release-lock.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        self.assertEqual("1.1.4", package["version"])
+        self.assertEqual("testing-runner-v1.1.4", release_lock["runner"]["release_tag"])
         self.assertIn('tags:\n      - "testing-runner-v1.1.4"', self.runner_release)
         self.assertNotIn('tags:\n      - "testing-runner-v1.1.1"', self.runner_release)
 

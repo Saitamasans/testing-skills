@@ -288,12 +288,17 @@ class NoNodeInstallerStaticTest(unittest.TestCase):
         self.assertNotIn("Expand-Archive", source)
         self.assertIn("[IO.Compression.ZipFile]::ExtractToDirectory", source)
 
-    def test_readme_leads_with_zero_node_commands_for_all_and_one(self):
+    def test_readme_leads_with_non_npx_windows_install_commands(self):
         readme = (ROOT / "README.md").read_text(encoding="utf-8")
         recommended = readme.split("### 高级方式：npx", 1)[0]
-        self.assertIn("无需安装 Node.js、npm、npx 或 Git", recommended)
+        self.assertIn("Windows 10/11 自带的 Windows PowerShell", recommended)
+        self.assertIn("无需管理员权限", recommended)
         self.assertIn("scripts/install.ps1", recommended)
-        self.assertIn("web-api-test-execution-evidence-v1.0.2/install-all.cmd", recommended)
+        self.assertIn(
+            "workbench-ui-acceptance-execution-v0.1.0/"
+            "install-workbench-ui-acceptance-execution.cmd",
+            recommended,
+        )
         self.assertIn(") -Skill 'requirement-test-workbench'", recommended)
         self.assertNotIn("npx skills add", recommended)
         advanced = readme.split("### 高级方式：npx", 1)[1]
