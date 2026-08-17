@@ -49,7 +49,7 @@ evidence/run-data.json
 <workspace-python> scripts/init_run_data.py --output <run-root>/evidence/run-data.json --run-id <id> --system-name <name> --target-url <url> --plugin-version <version> --executor-version <version> --started-at <iso-time> --budget-minutes <minutes>
 <workspace-python> scripts/validate_run_data.py <run-root>/evidence/run-data.json
 <workspace-python> scripts/build_artifacts.py --input <run-root>/evidence/run-data.json --output-dir <run-root>
-<workspace-python> scripts/record_artifact_validation.py --run-root <run-root> --status passed|failed|skipped
+<workspace-python> scripts/record_artifact_validation.py --run-root <run-root> --status passed|failed|skipped [--pages <页数>] [--evidence <相对证据路径>]
 <workspace-python> scripts/check_artifact_consistency.py --run-root <run-root>
 ```
 
@@ -149,7 +149,7 @@ knowledge
 - 数字、布尔值和数组保持原始类型，不预先拼接成展示字符串。
 - 所有资产编号在各自集合内唯一。
 - 证据路径必须相对运行根目录，禁止绝对路径和 `..` 跳转。
-- 不保存密码、验证码、Cookie、Authorization、token、secret 或 OTP；目标 URL 也不得内嵌凭据或敏感查询参数。校验器发现时拒绝生成。
+- 不保存密码、验证码、Cookie、Authorization、token、secret 或 OTP；目标 URL 也不得内嵌凭据或敏感查询参数。校验器拒绝敏感字段名、认证头、Cookie、JWT 和带标签的高置信凭据值，但无法可靠识别所有无标签任意秘密，因此浏览器探索阶段仍必须阻止凭据进入事实源。
 - 新证据推翻旧认知时更新状态与影响资产，不删除历史记录。
 - 生成器可以重复运行并覆盖派生文件，但不得修改输入 JSON、截图或其他证据文件。
 
@@ -157,11 +157,11 @@ knowledge
 
 - `preflight_artifacts.py` 一次检查 DOCX、XLSX、LibreOffice、表格和图片能力；不创建产物。
 - 完整模式先在 `.rtw-artifacts-*` 暂存目录生成，结构校验通过后再事务性发布；普通异常必须恢复旧文件。
-- `_artifact-build.json` 记录数据指纹、请求产物、生成/跳过、结构校验、视觉状态、耗时和清理结果。
-- 同一数据指纹和请求范围没有变化时返回 `unchanged`，不重复生成。
-- 最终发布后使用 `check_artifact_consistency.py` 核对最新事实源指纹、派生断点关键字段和生成文件存在性。
+- `_artifact-build.json` 记录数据指纹、每个正式文件的大小与 SHA-256、请求产物、生成/跳过、结构校验、视觉状态、耗时和清理结果。
+- 同一数据指纹和请求范围没有变化，且每个正式文件的大小与 SHA-256 仍匹配时返回 `unchanged`，不重复生成。
+- 最终发布后使用 `check_artifact_consistency.py` 核对最新事实源指纹、派生断点关键字段以及 DOCX、XLSX、运行数据和断点文件的大小与 SHA-256。
 - 单项能力缺失时部分交付；旧文件可以保留，但标记 `preserved_previous`，不得冒充当前结果。
-- LibreOffice 缺失时直接使用结构检查，不尝试失败渲染；视觉结果由 `record_artifact_validation.py` 单独记录。
+- LibreOffice 缺失时直接使用结构检查，不尝试失败渲染；视觉结果由 `record_artifact_validation.py` 单独记录，并绑定被检查 DOCX 的 SHA-256 与渲染证据路径。
 - 只清理当前运行根目录下含自有 marker 且超过 24 小时的暂存目录；不得删除截图、用户文件、无 marker 或其他运行目录。
 
 ## 展示映射

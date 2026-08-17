@@ -116,6 +116,25 @@ with tempfile.TemporaryDirectory() as temp_dir:
         if sheet.max_column < 2 or not sheet.cell(1, 1).value:
             raise AssertionError(f"sheet missing fixed headers: {sheet.title}")
 
+    formula_data = json.loads(FIXTURE.read_text(encoding="utf-8"))
+    formula_data["navigation"][0]["notes"] = '=HYPERLINK("https://example.invalid/leak","open")'
+    formula_fixture = output_dir / "formula-run-data.json"
+    formula_fixture.write_text(json.dumps(formula_data, ensure_ascii=False), encoding="utf-8")
+    formula_output = output_dir / "formula-output"
+    subprocess.run(
+        [sys.executable, str(BUILDER), "--input", str(formula_fixture), "--output-dir", str(formula_output)],
+        check=True,
+    )
+    formula_book = load_workbook(formula_output / "测试资产表.xlsx", data_only=False)
+    formula_sheet = formula_book["02_功能菜单清单"]
+    notes_column = next(
+        index for index in range(1, formula_sheet.max_column + 1)
+        if formula_sheet.cell(1, index).value == "备注"
+    )
+    formula_cell = formula_sheet.cell(2, notes_column)
+    if formula_cell.data_type != "s" or formula_cell.value != formula_data["navigation"][0]["notes"]:
+        raise AssertionError("XLSX report treated untrusted text as a formula")
+
     state = json.loads(state_path.read_text(encoding="utf-8"))
     if state.get("run_id") != "fixture-run-001":
         raise AssertionError("run-state projection does not match source run")
@@ -145,6 +164,21 @@ with tempfile.TemporaryDirectory() as temp_dir:
     if stale.returncode == 0 or "stale" not in (stale.stdout + stale.stderr):
         raise AssertionError("consistency checker accepted stale derived artifacts")
 
+    repaired = subprocess.run(
+        [
+            sys.executable,
+            str(BUILDER),
+            "--input",
+            str(FIXTURE),
+            "--output-dir",
+            str(output_dir),
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    if json.loads(repaired.stdout).get("status") != "generated":
+        raise AssertionError("builder did not repair a tampered canonical run-data file")
     repeat = subprocess.run(
         [
             sys.executable,
@@ -159,9 +193,18 @@ with tempfile.TemporaryDirectory() as temp_dir:
         text=True,
     )
     if json.loads(repeat.stdout).get("status") != "unchanged":
-        raise AssertionError("unchanged input triggered a redundant full rebuild")
+        raise AssertionError("unchanged verified artifacts triggered a redundant full rebuild")
     if not docx_path.exists() or not xlsx_path.exists():
         raise AssertionError("repeat generation removed derived artifacts")
+
+    xlsx_path.write_bytes(b"")
+    corrupted = subprocess.run(
+        [sys.executable, str(CONSISTENCY), "--run-root", str(output_dir)],
+        capture_output=True,
+        text=True,
+    )
+    if corrupted.returncode == 0 or "corrupted" not in (corrupted.stdout + corrupted.stderr):
+        raise AssertionError("consistency checker accepted a truncated generated artifact")
 
 with tempfile.TemporaryDirectory() as temp_dir:
     output_dir = Path(temp_dir)
@@ -268,6 +311,19 @@ with tempfile.TemporaryDirectory() as temp_dir:
     )
     if result.returncode == 0 or "sensitive key" not in (result.stdout + result.stderr):
         raise AssertionError("validator accepted sensitive data")
+
+with tempfile.TemporaryDirectory() as temp_dir:
+    bad_path = Path(temp_dir) / "bad-sensitive-value.json"
+    bad = json.loads(FIXTURE.read_text(encoding="utf-8"))
+    bad["summary"]["one_line_conclusion"] = "Authorization: Bearer rtw-review-canary-secret-value"
+    bad_path.write_text(json.dumps(bad, ensure_ascii=False), encoding="utf-8")
+    result = subprocess.run(
+        [sys.executable, str(VALIDATOR), str(bad_path)],
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode == 0 or "sensitive value" not in (result.stdout + result.stderr):
+        raise AssertionError("validator accepted a credential-shaped value in a normal field")
 
 with tempfile.TemporaryDirectory() as temp_dir:
     bad_path = Path(temp_dir) / "bad-path.json"

@@ -7,6 +7,7 @@ import argparse
 from datetime import datetime, timezone
 import json
 import os
+from hashlib import sha256
 from pathlib import Path
 import tempfile
 
@@ -20,9 +21,17 @@ def main() -> int:
     parser.add_argument("--status", required=True, choices=("passed", "failed", "skipped"))
     parser.add_argument("--reason", default="")
     parser.add_argument("--pages", type=int, default=0)
+    parser.add_argument(
+        "--evidence",
+        action="append",
+        default=[],
+        help="Rendered visual evidence path relative to the run root",
+    )
     args = parser.parse_args()
     if args.status != "passed" and not args.reason.strip():
         parser.error("--reason is required for failed or skipped validation")
+    if args.status == "passed" and args.pages <= 0:
+        parser.error("--pages must be greater than zero for passed validation")
 
     manifest_path = args.run_root / MANIFEST_RELATIVE
     try:
@@ -31,6 +40,28 @@ def main() -> int:
         print(f"artifact validation record failed: {exc}")
         return 1
 
+    artifact = manifest.get("artifacts", {}).get("docx", {})
+    docx_relative = str(artifact.get("path", "过程小结.docx"))
+    docx_path = args.run_root / docx_relative
+    if args.status == "passed":
+        if artifact.get("status") != "generated" or not docx_path.is_file():
+            parser.error("passed validation requires a generated DOCX artifact")
+        if not args.evidence:
+            parser.error("passed validation requires at least one --evidence path")
+        for evidence in args.evidence:
+            evidence_path = Path(evidence)
+            if evidence_path.is_absolute() or ".." in evidence_path.parts:
+                parser.error("--evidence paths must be relative to the run root")
+            resolved_evidence = args.run_root / evidence_path
+            if not resolved_evidence.is_file() or resolved_evidence.stat().st_size == 0:
+                parser.error(f"visual evidence does not exist: {evidence}")
+
+    docx_sha256 = None
+    if docx_path.is_file():
+        docx_sha256 = sha256(docx_path.read_bytes()).hexdigest()
+    if args.status == "passed" and docx_sha256 != artifact.get("integrity", {}).get("sha256"):
+        parser.error("generated DOCX changed after artifact publication")
+
     manifest["visual_validation"] = {
         **manifest.get("visual_validation", {}),
         "status": args.status,
@@ -38,6 +69,8 @@ def main() -> int:
         "reason": args.reason,
         "pages": max(args.pages, 0),
         "claimed_passed": args.status == "passed",
+        "evidence": args.evidence,
+        "artifact": {"path": docx_relative, "sha256": docx_sha256},
     }
 
     manifest_path.parent.mkdir(parents=True, exist_ok=True)

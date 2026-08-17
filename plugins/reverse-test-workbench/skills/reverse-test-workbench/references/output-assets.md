@@ -48,7 +48,7 @@
 <workspace-python> scripts/validate_run_data.py <run-root>/evidence/run-data.json
 <workspace-python> scripts/build_artifacts.py --input <run-root>/evidence/run-data.json --output-dir <run-root>
 <workspace-python> scripts/build_artifacts.py --input <run-root>/evidence/run-data.json --output-dir <run-root> --state-only
-<workspace-python> scripts/record_artifact_validation.py --run-root <run-root> --status passed|failed|skipped [--reason <原因>] [--pages <页数>]
+<workspace-python> scripts/record_artifact_validation.py --run-root <run-root> --status passed|failed|skipped [--reason <原因>] [--pages <页数>] [--evidence <相对证据路径>]
 ```
 
 完整模式只在正式暂停或收口时生成 DOCX/XLSX；`--state-only` 只更新 `run-data.json` 和 `_run-state.json`，用于批次边界、临时等待和断点续跑。生成前必须先校验；校验或生成失败时保留已有有效产物，不输出半成品结论。
@@ -63,7 +63,7 @@
 
 同一数据指纹、请求产物和能力状态均未变化，且正式文件仍存在时，生成器返回 `unchanged`，不得重复生成和渲染。事实源、能力状态、请求产物或正式文件发生变化时才重新构建。
 
-LibreOffice 不可用时，预检直接记录结构检查降级，完整生成器不尝试渲染。外部渲染或人工视觉检查结束后调用 `record_artifact_validation.py` 写入 `passed / failed / skipped`；没有视觉检查证据时不得写 `passed`。
+LibreOffice 不可用时，预检直接记录结构检查降级，完整生成器不尝试渲染。外部渲染或人工视觉检查结束后调用 `record_artifact_validation.py` 写入 `passed / failed / skipped`；只有 DOCX 已生成、页数大于 0 且至少提供一个位于运行目录内的渲染证据路径时，才允许写 `passed`。
 
 生成器只清理当前运行根目录下、名称匹配 `.rtw-artifacts-*`、包含 Plugin 自有 marker 且超过 24 小时的暂存目录。无 marker、未过期、其他名称、evidence 截图和用户文件一律不清理。
 

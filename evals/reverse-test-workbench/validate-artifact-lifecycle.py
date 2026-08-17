@@ -87,6 +87,85 @@ with tempfile.TemporaryDirectory() as temp_dir:
 
 with tempfile.TemporaryDirectory() as temp_dir:
     output_dir = Path(temp_dir)
+    subprocess.run(
+        [sys.executable, str(BUILDER), "--input", str(FIXTURE), "--output-dir", str(output_dir)],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    evidence = output_dir / "evidence/visual/page-1.png"
+    evidence.parent.mkdir(parents=True, exist_ok=True)
+    evidence.write_bytes(b"visual evidence")
+    passed = subprocess.run(
+        [
+            sys.executable,
+            str(RECORDER),
+            "--run-root",
+            str(output_dir),
+            "--status",
+            "passed",
+            "--pages",
+            "1",
+            "--evidence",
+            "evidence/visual/page-1.png",
+        ],
+        capture_output=True,
+        text=True,
+    )
+    if passed.returncode != 0:
+        raise AssertionError(f"visual validation with evidence was rejected: {passed.stderr}")
+    manifest = json.loads((output_dir / "evidence/_artifact-build.json").read_text(encoding="utf-8"))
+    visual = manifest["visual_validation"]
+    if visual["status"] != "passed" or visual["pages"] != 1 or visual["artifact"]["sha256"] != manifest["artifacts"]["docx"]["integrity"]["sha256"]:
+        raise AssertionError("visual validation did not bind a passed result to the DOCX and evidence")
+
+    (output_dir / "过程小结.docx").write_bytes(b"tampered-docx")
+    tampered = subprocess.run(
+        [
+            sys.executable,
+            str(RECORDER),
+            "--run-root",
+            str(output_dir),
+            "--status",
+            "passed",
+            "--pages",
+            "1",
+            "--evidence",
+            "evidence/visual/page-1.png",
+        ],
+        capture_output=True,
+        text=True,
+    )
+    if tampered.returncode == 0 or "changed" not in (tampered.stdout + tampered.stderr):
+        raise AssertionError("visual validation accepted a DOCX that changed after publication")
+
+with tempfile.TemporaryDirectory() as temp_dir:
+    output_dir = Path(temp_dir)
+    subprocess.run(
+        [sys.executable, str(BUILDER), "--input", str(FIXTURE), "--output-dir", str(output_dir)],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    missing_evidence = subprocess.run(
+        [
+            sys.executable,
+            str(RECORDER),
+            "--run-root",
+            str(output_dir),
+            "--status",
+            "passed",
+            "--pages",
+            "0",
+        ],
+        capture_output=True,
+        text=True,
+    )
+    if missing_evidence.returncode == 0:
+        raise AssertionError("visual validation accepted passed with zero pages and no evidence")
+
+with tempfile.TemporaryDirectory() as temp_dir:
+    output_dir = Path(temp_dir)
     old_docx = output_dir / "过程小结.docx"
     old_docx.write_bytes(b"previous-docx")
     subprocess.run(

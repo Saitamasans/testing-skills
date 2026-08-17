@@ -118,6 +118,17 @@ SENSITIVE_KEYS = {
     "verification_code",
 }
 
+SENSITIVE_VALUE_PATTERNS = (
+    re.compile(r"(?i)\b(?:authorization|proxy-authorization)\s*:\s*(?:bearer|basic)\s+\S+"),
+    re.compile(r"(?i)\b(?:cookie|set-cookie)\s*:\s*[^\s;=]+=[^\s;]*"),
+    re.compile(
+        r"(?i)\b(?:password|passwd|pwd|token|access[_ -]?token|refresh[_ -]?token|secret|otp)"
+        r"\s*(?:=|:)\s*(?!<[^>]+>|\b(?:redacted|masked|omitted|removed|none|unknown|required|"
+        r"unavailable|missing|absent|blank|empty|not[_ -]?(?:provided|configured))\b)\S{8,}"
+    ),
+    re.compile(r"\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\b"),
+)
+
 
 class ValidationError(ValueError):
     pass
@@ -139,6 +150,10 @@ def _scan_sensitive(value: Any, path: str = "$") -> None:
     elif isinstance(value, list):
         for index, child in enumerate(value):
             _scan_sensitive(child, f"{path}[{index}]")
+    elif isinstance(value, str):
+        for pattern in SENSITIVE_VALUE_PATTERNS:
+            if pattern.search(value):
+                raise ValidationError(f"sensitive value is forbidden at {path}")
 
 
 def _validate_ids(data: dict[str, Any]) -> None:

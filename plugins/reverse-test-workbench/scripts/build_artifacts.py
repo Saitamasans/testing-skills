@@ -226,6 +226,14 @@ def display(value: Any) -> Any:
     return value
 
 
+def _set_xlsx_value(cell: Any, value: Any) -> None:
+    """Write report text as a literal value, never as an Excel formula."""
+    shown = display(value)
+    cell.value = shown
+    if isinstance(shown, str) and shown.lstrip().startswith(("=", "+", "-", "@")):
+        cell.data_type = "s"
+
+
 def text(value: Any) -> str:
     shown = display(value)
     return str(shown) if shown != "" else ""
@@ -490,8 +498,8 @@ def _build_xlsx(data: dict[str, Any], path: Path) -> None:
 
         for row_index, row in enumerate(rows, start=2):
             for column_index, (_, key) in enumerate(columns, start=1):
-                value = display(row.get(key, ""))
-                cell = sheet.cell(row_index, column_index, value)
+                cell = sheet.cell(row_index, column_index)
+                _set_xlsx_value(cell, row.get(key, ""))
                 cell.font = body_font
                 cell.alignment = Alignment(vertical="top", wrap_text=True)
                 cell.border = border
@@ -691,6 +699,24 @@ def _data_fingerprint(data: dict[str, Any]) -> str:
     return hashlib.sha256(encoded).hexdigest()
 
 
+def _file_fingerprint(path: Path) -> dict[str, Any]:
+    content = path.read_bytes()
+    return {"size_bytes": len(content), "sha256": hashlib.sha256(content).hexdigest()}
+
+
+def _matches_file_fingerprint(path: Path, expected: Any) -> bool:
+    if not path.is_file() or not isinstance(expected, dict):
+        return False
+    try:
+        actual = _file_fingerprint(path)
+    except OSError:
+        return False
+    return actual == {
+        "size_bytes": expected.get("size_bytes"),
+        "sha256": expected.get("sha256"),
+    }
+
+
 def _load_existing_manifest(output_dir: Path) -> dict[str, Any] | None:
     path = output_dir / BUILD_MANIFEST_RELATIVE
     if not path.is_file():
@@ -714,16 +740,23 @@ def _unchanged_result(
     if manifest.get("input_sha256") != input_sha256 or manifest.get("requested") != request:
         return None
     artifacts = manifest.get("artifacts", {})
+    file_integrity = manifest.get("file_integrity", {})
+    required_files = {
+        RUN_DATA_RELATIVE.as_posix(): output_dir / RUN_DATA_RELATIVE,
+        STATE_RELATIVE.as_posix(): output_dir / STATE_RELATIVE,
+    }
     for name, requested in request.items():
         if not requested:
             continue
         artifact = artifacts.get(name, {})
         if artifact.get("status") == "generated":
             target = output_dir / (DOCX_NAME if name == "docx" else XLSX_NAME)
-            if not target.is_file():
+            required_files[target.relative_to(output_dir).as_posix()] = target
+            if not _matches_file_fingerprint(target, artifact.get("integrity")):
                 return None
-    if not (output_dir / RUN_DATA_RELATIVE).is_file() or not (output_dir / STATE_RELATIVE).is_file():
-        return None
+    for relative, target in required_files.items():
+        if not _matches_file_fingerprint(target, file_integrity.get(relative)):
+            return None
     result: dict[str, Any] = {
         "status": "unchanged",
         "previous_status": manifest.get("status"),
@@ -837,6 +870,16 @@ def build(
                     preserved_previous=(output_dir / XLSX_NAME).is_file(),
                 )
 
+        file_integrity = {
+            RUN_DATA_RELATIVE.as_posix(): _file_fingerprint(temp_run_data),
+            STATE_RELATIVE.as_posix(): _file_fingerprint(temp_state),
+        }
+        for artifact_name, temp_path in (("docx", temp_docx), ("xlsx", temp_xlsx)):
+            if artifacts[artifact_name]["status"] == "generated":
+                integrity = _file_fingerprint(temp_path)
+                artifacts[artifact_name]["integrity"] = integrity
+                file_integrity[artifacts[artifact_name]["path"]] = integrity
+
         generated_heavy = [
             name for name in ("docx", "xlsx") if artifacts[name]["status"] == "generated"
         ]
@@ -868,6 +911,7 @@ def build(
             "input_sha256": input_sha256,
             "requested": request,
             "artifacts": artifacts,
+            "file_integrity": file_integrity,
             "generated": generated_heavy,
             "skipped": skipped_heavy,
             "validations": validations,

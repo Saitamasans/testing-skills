@@ -24,6 +24,24 @@ def _load(path: Path) -> dict[str, Any]:
     return value
 
 
+def _file_fingerprint(path: Path) -> dict[str, Any]:
+    content = path.read_bytes()
+    return {"size_bytes": len(content), "sha256": sha256(content).hexdigest()}
+
+
+def _require_fingerprint(run_root: Path, relative: str, expected: Any) -> None:
+    path = run_root / relative
+    if not path.is_file() or not isinstance(expected, dict):
+        raise ConsistencyError(f"artifact integrity metadata is missing: {relative}")
+    actual = _file_fingerprint(path)
+    normalized_expected = {
+        "size_bytes": expected.get("size_bytes"),
+        "sha256": expected.get("sha256"),
+    }
+    if actual != normalized_expected:
+        raise ConsistencyError(f"generated artifact is corrupted or replaced: {relative}")
+
+
 def check(run_root: Path) -> dict[str, Any]:
     evidence = run_root / "evidence"
     run_data_path = evidence / "run-data.json"
@@ -61,12 +79,20 @@ def check(run_root: Path) -> dict[str, Any]:
         if actual != expected:
             raise ConsistencyError(f"derived run-state is stale at {field}")
 
+    file_integrity = manifest.get("file_integrity")
+    if not isinstance(file_integrity, dict):
+        raise ConsistencyError("artifact file integrity metadata is missing")
+    for relative in ("evidence/run-data.json", "evidence/_run-state.json"):
+        _require_fingerprint(run_root, relative, file_integrity.get(relative))
+
     for artifact_name, artifact in manifest.get("artifacts", {}).items():
         if artifact.get("status") != "generated":
             continue
         relative = artifact.get("path")
-        if not relative or not (run_root / relative).is_file():
+        if not relative:
             raise ConsistencyError(f"generated {artifact_name} artifact is missing")
+        _require_fingerprint(run_root, relative, artifact.get("integrity"))
+        _require_fingerprint(run_root, relative, file_integrity.get(relative))
 
     return {
         "status": "consistent",

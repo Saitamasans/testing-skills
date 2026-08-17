@@ -62,5 +62,13 @@ if "plugin.version.split('+', 1)[0]" not in workflow:
     raise AssertionError("dependency workflow is not cachebuster-aware")
 if "parts = plugin.version.split('.').map(Number)" in workflow:
     raise AssertionError("dependency workflow still parses build metadata as a number")
+if "npx -y \"@playwright/mcp@${LATEST}\" --version" in workflow:
+    raise AssertionError("dependency workflow executes unreviewed package code")
+if "actions/checkout@v4" in workflow or "actions/setup-node@v4" in workflow:
+    raise AssertionError("dependency workflow must pin actions to immutable commit SHAs")
+if "persist-credentials: false" not in workflow:
+    raise AssertionError("dependency workflow must disable checkout credential persistence")
+if "contents: read" not in workflow or "contents: write" not in workflow:
+    raise AssertionError("dependency workflow must separate read-only inspection and write update jobs")
 
 print("release readiness validation passed")
