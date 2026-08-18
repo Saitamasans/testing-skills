@@ -7,12 +7,12 @@ sys.path.insert(0, str(ROOT / "tooling"))
 from build_skills import BANNER, EXECUTION_BANNER, build_all, load_manifest, parse_frontmatter
 
 ORIGINAL_SEVEN = {
-    "single-api-test-full": "\u5355\u63a5\u53e3\u7528\u4f8b\u751f\u6210\u4e0e\u5bf9\u9f50_\u5b8c\u6574\u7248Skill_v0.3.md",
-    "single-api-test-concise": "\u7cbe\u70bc\u7248_\u5355\u63a5\u53e3\u7528\u4f8b\u4e0e\u5bf9\u9f50skill_v0.3.md",
-    "multi-api-flow-test": "\u591a\u63a5\u53e3\u94fe\u8def\u6d4b\u8bd5\u7528\u4f8b\u751f\u6210skill_v0.6_\u7cbe\u70bc\u6267\u884c\u7248.md",
-    "requirement-test-workbench": "\u6839\u636e\u9700\u6c42-\u7528\u4f8b\u751f\u6210_skill.md",
-    "production-verification-test": "\u6b63\u5f0f\u670d\u9a8c\u8bc1-\u7528\u4f8b\u751f\u6210 Skill.md",
-    "test-case-quality-audit": "\u6d4b\u8bd5\u7528\u4f8b-\u5ba1\u8ba1\u4e0e\u8bc4_Skill_V1.md",
+    "single-api-test-full": "skill-sources/single-api-test-full/\u5355\u63a5\u53e3\u7528\u4f8b\u751f\u6210\u4e0e\u5bf9\u9f50_\u5b8c\u6574\u7248Skill_v0.3.md",
+    "single-api-test-concise": "skill-sources/single-api-test-concise/\u7cbe\u70bc\u7248_\u5355\u63a5\u53e3\u7528\u4f8b\u4e0e\u5bf9\u9f50skill_v0.3.md",
+    "multi-api-flow-test": "skill-sources/multi-api-flow-test/\u591a\u63a5\u53e3\u94fe\u8def\u6d4b\u8bd5\u7528\u4f8b\u751f\u6210skill_v0.6_\u7cbe\u70bc\u6267\u884c\u7248.md",
+    "requirement-test-workbench": "skill-sources/requirement-test-workbench/\u6839\u636e\u9700\u6c42-\u7528\u4f8b\u751f\u6210_skill.md",
+    "production-verification-test": "skill-sources/production-verification-test/\u6b63\u5f0f\u670d\u9a8c\u8bc1-\u7528\u4f8b\u751f\u6210 Skill.md",
+    "test-case-quality-audit": "skill-sources/test-case-quality-audit/\u6d4b\u8bd5\u7528\u4f8b-\u5ba1\u8ba1\u4e0e\u8bc4_Skill_V1.md",
     "requirement-clarification-test": "skill-sources/requirement-clarification-test/\u6d4b\u8bd5\u89c6\u89d2-\u9700\u6c42\u6f84\u6e05 Skill.md",
 }
 
