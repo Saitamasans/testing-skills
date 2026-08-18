@@ -1,6 +1,6 @@
 ---
 name: reverse-test-workbench
-description: 用于只有可访问系统 UI、但没有需求文档、接口文档、源码或可靠预期结果时的无需求/弱需求测试、黑盒 UI 逆向、探索性测试、截图留痕、测试资产沉淀、批次化执行和断点续跑；适用于用户提供 Web 系统或后台 URL，要求 AI 使用官方 Playwright MCP 直接操作页面并逐步建立功能地图、行为关系、执行路径、问题风险和测试认知资产的场景。
+description: Use when a user asks to explore or reverse-test a Web system or admin console from its UI without reliable requirements, API documentation, or source code, using an available Playwright-compatible browser executor to build evidence, coverage boundaries, behavioral knowledge, risks, and resumable test assets.
 ---
 
 <!-- 此文件由根目录中文源文件自动生成，请勿直接编辑。 -->
@@ -353,3 +353,13 @@ evidence/
 - 操作真实浏览器、处理超时或页面交互时，读取 `references/browser-execution.md`。
 - 规划批次、建立双地图、设计异常探针或控制探索深度时，读取 `references/exploration-design.md`。
 - 创建或更新三类产物、统一运行数据、进度状态和断点时，读取 `references/output-assets.md` 及其引用的 `references/run-data-contract.md`。
+
+## 最终自检
+
+在报告、暂停或收口前，必须逐项核对并据实记录：
+
+- 本轮运行定位、范围边界、覆盖承诺、探索重点和预算是否明确。
+- 每个已报告为完成的批次、页面、功能面或路径是否确实执行并有证据；未执行内容是否仍保留在未覆盖范围或待办池。
+- 导航入口处置、页面处置深度、信息增量和主流程/异常探索是否分别统计，没有把“看见”“到达”或“做过一次正常操作”写成有效探索。
+- 每个关键发现是否区分事实、判断、影响、依据、置信边界和建议动作；没有确认缺陷时是否使用风险或待确认口径。
+- 是否说明本轮回答了什么、没有回答什么、剩余探索债务和续跑后的第一动作；未使用“系统测试完成”或“全量覆盖”等越界措辞。
