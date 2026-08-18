@@ -1,0 +1,111 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "reverse-test-workbench/run-data.schema.json",
+  "title": "Reverse Test Workbench Run Data",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "run",
+    "summary",
+    "coverage",
+    "batches",
+    "navigation",
+    "page_inventory",
+    "paths",
+    "test_cases",
+    "issues",
+    "risks",
+    "test_data",
+    "evidence",
+    "knowledge"
+  ],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "run": {
+      "type": "object",
+      "required": [
+        "run_id",
+        "system_name",
+        "target_url",
+        "status",
+        "skill_version",
+        "run_positioning",
+        "scope_boundary",
+        "coverage_commitment",
+        "exploration_focus",
+        "run_budget",
+        "budget_control",
+        "account_context",
+        "executor",
+        "artifact_preflight",
+        "timing",
+        "resume"
+      ],
+      "properties": {
+        "skill_version": {"type": "string", "minLength": 1},
+        "budget_control": {
+          "type": "object",
+          "required": [
+            "mode",
+            "started_at",
+            "closeout_at",
+            "deadline_at",
+            "last_checked_at",
+            "status",
+            "overrun_ms"
+          ]
+        },
+        "executor": {
+          "type": "object",
+          "required": [
+            "protocol",
+            "version",
+            "browser_channel",
+            "session_mode",
+            "model_vision_capability",
+            "capability_state"
+          ]
+        },
+        "timing": {
+          "type": "object",
+          "required": [
+            "executor_gate",
+            "entry",
+            "b00",
+            "b01_quick_map",
+            "first_business_interaction",
+            "b01_navigation_ledger",
+            "business_batches",
+            "waiting_user",
+            "artifact_generation",
+            "artifact_validation",
+            "total"
+          ]
+        }
+      }
+    },
+    "summary": {
+      "type": "object",
+      "required": [
+        "one_line_conclusion",
+        "answered_questions",
+        "unanswered_questions",
+        "key_findings",
+        "recommendations",
+        "conclusion_boundary"
+      ]
+    },
+    "coverage": {"type": "object"},
+    "batches": {"type": "array", "items": {"type": "object"}},
+    "navigation": {"type": "array", "items": {"type": "object"}},
+    "page_inventory": {"type": "array", "items": {"type": "object"}},
+    "paths": {"type": "array", "items": {"type": "object"}},
+    "test_cases": {"type": "array", "items": {"type": "object"}},
+    "issues": {"type": "array", "items": {"type": "object"}},
+    "risks": {"type": "array", "items": {"type": "object"}},
+    "test_data": {"type": "array", "items": {"type": "object"}},
+    "evidence": {"type": "array", "items": {"type": "object"}},
+    "knowledge": {"type": "array", "items": {"type": "object"}}
+  },
+  "additionalProperties": false
+}

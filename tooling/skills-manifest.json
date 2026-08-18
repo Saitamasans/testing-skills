@@ -92,6 +92,16 @@
       "default_prompt": "请只读审计这些多源材料，先盘点材料和能力等级，给出 3 条候选业务链；我选择后只生成该链的阶段 A 报告，不调用接口或数据库。",
       "case_output": false,
       "resource_dirs": ["schemas", "runtime"]
+    },
+    {
+      "source": "skill-sources/reverse-test-workbench/SKILL.md",
+      "slug": "reverse-test-workbench",
+      "display_name": "无需求 UI 逆向测试工作台",
+      "short_description": "用官方 Playwright MCP 从零探索未知 Web 系统并沉淀证据与测试认知",
+      "default_prompt": "请使用无需求 UI 逆向测试工作台，从这个 URL 开始做代表性探索测试，并保留证据与覆盖边界。",
+      "case_output": false,
+      "resource_dirs": ["scripts", "references", "assets"],
+      "root_files": ["requirements-artifacts.txt"]
     }
   ]
 }

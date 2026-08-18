@@ -3,7 +3,6 @@ name: reverse-test-workbench
 description: Use when a user asks to explore or reverse-test a Web system or admin console from its UI without reliable requirements, API documentation, or source code, using an available Playwright-compatible browser executor to build evidence, coverage boundaries, behavioral knowledge, risks, and resumable test assets.
 ---
 
-<!-- 此文件由根目录中文源文件自动生成，请勿直接编辑。 -->
 # 无需求-UI逆向测试工作台
 
 **铁律：执行器能力、页面事实和覆盖边界不得猜测；不能可靠执行就降级或阻塞，未实际执行就必须保持未覆盖。**

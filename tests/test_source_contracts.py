@@ -28,6 +28,7 @@ SPECIALIZED_SKILLS = {
     "web-api-test-execution-evidence",
     "test-case-execution-compiler",
     "multi-source-test-audit",
+    "reverse-test-workbench",
 }
 
 

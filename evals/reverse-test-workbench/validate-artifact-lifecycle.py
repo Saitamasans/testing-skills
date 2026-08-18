@@ -9,10 +9,10 @@ import time
 
 
 ROOT = Path(__file__).resolve().parents[2]
-PLUGIN = ROOT / "plugins/reverse-test-workbench"
-BUILDER = PLUGIN / "scripts/build_artifacts.py"
-PREFLIGHT = PLUGIN / "scripts/preflight_artifacts.py"
-RECORDER = PLUGIN / "scripts/record_artifact_validation.py"
+SKILL = ROOT / "skills/reverse-test-workbench"
+BUILDER = SKILL / "scripts/build_artifacts.py"
+PREFLIGHT = SKILL / "scripts/preflight_artifacts.py"
+RECORDER = SKILL / "scripts/record_artifact_validation.py"
 FIXTURE = ROOT / "evals/reverse-test-workbench/fixtures/minimal-run-data.json"
 
 

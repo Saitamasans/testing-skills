@@ -37,6 +37,7 @@ REQUIRED_RUN = {
     "system_name",
     "target_url",
     "status",
+    "skill_version",
     "run_positioning",
     "scope_boundary",
     "coverage_commitment",

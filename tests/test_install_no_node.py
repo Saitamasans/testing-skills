@@ -288,9 +288,18 @@ class NoNodeInstallerStaticTest(unittest.TestCase):
         self.assertNotIn("Expand-Archive", source)
         self.assertIn("[IO.Compression.ZipFile]::ExtractToDirectory", source)
 
-    def test_readme_leads_with_non_npx_windows_install_commands(self):
+    def test_readme_keeps_windows_no_node_and_universal_skill_paths(self):
         readme = (ROOT / "README.md").read_text(encoding="utf-8")
-        recommended = readme.split("### 高级方式：npx", 1)[0]
+        universal = readme.split("### 通用 Skill：无需求-UI逆向测试工作台", 1)[1].split(
+            "### 可选 Codex 适配器", 1
+        )[0]
+        self.assertIn(
+            "npx skills add Saitamasans/testing-skills@reverse-test-workbench -g -y",
+            universal,
+        )
+        recommended = readme.split("### 推荐方式：Windows 安装按钮", 1)[1].split(
+            "### 高级方式：npx", 1
+        )[0]
         self.assertIn("Windows 10/11 自带的 Windows PowerShell", recommended)
         self.assertIn("无需管理员权限", recommended)
         self.assertIn("scripts/install.ps1", recommended)

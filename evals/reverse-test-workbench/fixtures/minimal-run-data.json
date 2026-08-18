@@ -5,6 +5,7 @@
     "system_name": "样例后台",
     "target_url": "https://example.test/admin",
     "status": "formal_pause",
+    "skill_version": "0.1.0",
     "generated_at": "2026-08-15T12:00:00+08:00",
     "run_positioning": ["阶段探索"],
     "scope_boundary": "当前账号可见系统",

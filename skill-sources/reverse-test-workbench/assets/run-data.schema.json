@@ -28,6 +28,7 @@
         "system_name",
         "target_url",
         "status",
+        "skill_version",
         "run_positioning",
         "scope_boundary",
         "coverage_commitment",
@@ -41,6 +42,7 @@
         "resume"
       ],
       "properties": {
+        "skill_version": {"type": "string", "minLength": 1},
         "budget_control": {
           "type": "object",
           "required": [

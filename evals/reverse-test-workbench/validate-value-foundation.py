@@ -2,7 +2,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[2]
-SKILL = ROOT / "plugins/reverse-test-workbench/skills/reverse-test-workbench/SKILL.md"
+SKILL = ROOT / "skills/reverse-test-workbench/SKILL.md"
 EXPLORATION = SKILL.parent / "references/exploration-design.md"
 OUTPUTS = SKILL.parent / "references/output-assets.md"
 BROWSER = SKILL.parent / "references/browser-execution.md"
@@ -24,7 +24,7 @@ preflight_cases = PREFLIGHT_CASES.read_text(encoding="utf-8")
 
 for fragment in (
     "## 运行定位与结论等级",
-    "执行器/Plugin 验证",
+    "执行器/集成验证",
     "可以与一个证据阶段组合",
     "计划批次全部进入终态只触发收口候选",
     "已识别：看见入口或功能线索",
@@ -82,7 +82,7 @@ for fragment in (
 
 for fragment in (
     '"run_positioning"',
-    '["执行器/Plugin验证", "初始侦察"]',
+    '["执行器/集成验证", "初始侦察"]',
     '"information_gain_state"',
     '"low_information_decision"',
     '"active_value_recovery"',
@@ -182,7 +182,7 @@ for fragment in (
     "硬截止 `deadline_at`",
     "每次启动新业务批次、动态插入路径或新的页面动作前",
     "进入 `closeout_at` 后禁止新的点击、导航、输入和范围扩张",
-    "使用固定 `init_run_data.py` 建立规范骨架",
+    "使用 Skill 自带的 `init_run_data.py` 建立规范骨架",
 ):
     require(skill, fragment, SKILL)
 
@@ -221,7 +221,7 @@ for fragment in (
 for fragment in (
     "## 单一事实源",
     "run-data.schema.json",
-    "bundled Python",
+    "可选的 `python-docx` 和 `openpyxl` 能力",
     "稳定 ASCII `snake_case` 键",
     "密码、验证码、Cookie、Authorization、token、secret 或 OTP",
     "固定生成器不包含浏览器",

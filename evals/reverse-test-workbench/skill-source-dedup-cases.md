@@ -1,37 +1,37 @@
-# Skill 来源去重验收场景
+# Skill 来源与适配器镜像验收场景
 
 ## 目标
 
-验证 `reverse-test-workbench` 在 Codex 中只有一个活动运行时来源，避免旧纯 Skill 与 Plugin Skill 同时触发、执行规则不一致或选中旧版本。
+验证 `reverse-test-workbench` 只有一个通用规则事实源，同时允许不同宿主提供可选适配器，避免公共 Skill 与适配器中的规则漂移。
 
-## 场景 A：首次安装 Plugin
+## 场景 A：通用安装
 
-现状：用户从 marketplace 安装 Plugin，本机不存在旧纯 Skill。
+现状：用户在任意支持 Skill 指令和 MCP 的宿主中安装 `skills/reverse-test-workbench`。
 
-期望：唯一活动来源为 Plugin 提供的 `reverse-test-workbench:reverse-test-workbench`；Skill 与官方 Playwright MCP 由同一 Plugin 版本管理。
+期望：不需要 Codex、特定操作系统或特定安装目录；宿主能提供官方 Playwright MCP 时直接完成能力门禁并运行。
 
-## 场景 B：本机遗留旧纯 Skill
+## 场景 B：Codex 适配器安装
 
-现状：`~/.codex/skills/reverse-test-workbench` 与 Plugin 缓存同时存在。
+现状：Codex 用户安装 `plugins/reverse-test-workbench`。
 
-期望：把旧纯 Skill 完整移动到 Skill 扫描目录之外的备份位置，不直接删除；新任务中不再出现无命名空间的重复 Skill。
+期望：适配器提供 `.codex-plugin/plugin.json` 和 `.mcp.json`，其 Skill 内容与公共包逐文件一致；适配器只负责接线，不拥有独立测试规则。
 
-## 场景 C：Plugin 源码迭代
+## 场景 C：公共包与适配器同时存在
 
-现状：开发目录中的 Plugin Skill 已修改，但已安装缓存仍是旧版本。
+现状：宿主同时发现无命名空间公共 Skill 和带命名空间的适配器 Skill。
 
-期望：源码目录是开发事实源，缓存目录只代表当前已安装版本；完成统一修改前不手工覆盖缓存，也不把源码复制回 `~/.codex/skills`。
+期望：两者核心内容完全一致，不会产生行为差异；安装文档应建议用户在同一宿主中选择一种安装方式，避免重复触发。
 
-## 场景 D：重新安装后验证
+## 场景 D：源码迭代
 
-现状：Plugin 已按 cachebuster 流程重新安装并启动新任务。
+现状：开发者修改 `skill-sources/reverse-test-workbench`。
 
-期望：只发现 Plugin 命名空间 Skill；MCP、Skill、manifest 和缓存版本属于同一次安装，不允许从不同来源拼接执行环境。
+期望：先生成公共 `skills/reverse-test-workbench`，再确定性同步到 Codex 适配器；CI 对公共包漂移和适配器镜像漂移分别失败。
 
 ## 通用验收
 
-- Plugin 是唯一活动分发和运行来源。
-- 旧纯 Skill 只允许作为扫描目录外的备份存在。
-- 不通过修改 `config.toml` 或直接改 Plugin 缓存解决重复问题。
-- 不删除旧版本历史，不影响当前已安装 `v0.1.0` 对照基线。
-- 当前任务可能仍保留启动时的旧 Skill 清单；最终验证必须在新任务中进行。
+- 通用 Skill 是主产品和唯一规则事实源。
+- 宿主适配器是可选分发层，不改变核心规则。
+- 核心不包含 Codex、Windows、macOS、固定用户目录或固定运行时前提。
+- 官方 Playwright MCP 是首选执行协议，由当前宿主发现或配置。
+- 不支持 Skill/MCP/等价浏览器能力的普通聊天产品明确不在可执行范围内。

@@ -3,10 +3,9 @@ import re
 
 
 ROOT = Path(__file__).resolve().parents[2]
-PLUGIN = ROOT / "plugins/reverse-test-workbench"
-SKILL = PLUGIN / "skills/reverse-test-workbench/SKILL.md"
+SKILL = ROOT / "skills/reverse-test-workbench/SKILL.md"
 REFERENCES = SKILL.parent / "references"
-SCRIPTS = PLUGIN / "scripts"
+SCRIPTS = SKILL.parent / "scripts"
 
 
 skill = SKILL.read_text(encoding="utf-8")
@@ -40,6 +39,7 @@ for reference_name in (
     "exploration-design.md",
     "output-assets.md",
     "run-data-contract.md",
+    "host-integration-contract.md",
 ):
     if reference_name not in skill:
         raise AssertionError(f"SKILL.md does not reference {reference_name}")
