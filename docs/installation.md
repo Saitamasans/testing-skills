@@ -50,6 +50,10 @@ codex plugin add reverse-test-workbench@reverse-test-workbench
 
 `workbench-ui-acceptance-execution` 是浏览器 UI 验收执行 Skill，本身不内置独立 runner，不强制下载额外执行器或浏览器安装包；安装只复制 Skill 文件，执行时复用当前 AI 环境已有的浏览器控制能力。
 
+`reverse-test-workbench` 使用独立的不可变 Release 安装资产：
+`reverse-test-workbench-v0.1.0/install-reverse-test-workbench.cmd`。它不依赖已经冻结的
+`skill-installers-v1`，避免新增 Skill 后主页按钮指向不存在的旧 Release 资产。
+
 ## 多源测试审计
 
 点击首页 Install 按钮只需下载一个 `install-multi-source-test-audit.cmd`。双击它后，CMD 会自动下载并校验固定版本的安装脚本；安装脚本再下载并校验完整离线 Runtime。安装完成后请重启 Codex。

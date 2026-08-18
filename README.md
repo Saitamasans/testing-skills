@@ -19,7 +19,7 @@
 | 用例质量审计<br>`test-case-quality-audit` | 审计已有用例的可执行性、需求一致性、遗漏风险和冗余。 | [![Install](https://img.shields.io/badge/Install-2ea44f)](https://github.com/Saitamasans/testing-skills/releases/download/skill-installers-v1/install-test-case-quality-audit.cmd) |
 | 需求澄清-需求评审<br>`requirement-clarification-test` | 在写用例前找出需求缺口并判断是否具备开测条件。 | [![Install](https://img.shields.io/badge/Install-2ea44f)](https://github.com/Saitamasans/testing-skills/releases/download/skill-installers-v1/install-requirement-clarification-test.cmd) |
 | 多源测试-审计<br>`multi-source-test-audit` | 关联需求、接口、客户端、后端和 Admin 材料，生成静态审计线索。 | [![Install](https://img.shields.io/badge/Install-2ea44f)](https://github.com/Saitamasans/testing-skills/releases/download/multi-source-test-audit-v0.1.4/install-multi-source-test-audit.cmd) |
-| 无需求-UI逆向测试工作台<br>`reverse-test-workbench` | 只有 Web UI 时，使用官方 Playwright MCP 做探索、留证和测试资产沉淀。 | [![Install](https://img.shields.io/badge/Install-2ea44f)](https://github.com/Saitamasans/testing-skills/releases/download/skill-installers-v1/install-reverse-test-workbench.cmd) |
+| 无需求-UI逆向测试工作台<br>`reverse-test-workbench` | 只有 Web UI 时，使用官方 Playwright MCP 做探索、留证和测试资产沉淀。 | [![Install](https://img.shields.io/badge/Install-2ea44f)](https://github.com/Saitamasans/testing-skills/releases/download/reverse-test-workbench-v0.1.0/install-reverse-test-workbench.cmd) |
 
 一个任务选择一个主 Skill；只有在分工清晰时再增加辅助 Skill。完整选择建议见[使用指南](docs/skill-guides.md)。
 

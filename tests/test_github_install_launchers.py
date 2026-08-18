@@ -24,6 +24,10 @@ WORKBENCH_UI_ACCEPTANCE_RELEASE_BASE = (
     "https://github.com/Saitamasans/testing-skills/releases/download/"
     "workbench-ui-acceptance-execution-v0.1.0/"
 )
+REVERSE_TEST_WORKBENCH_RELEASE_BASE = (
+    "https://github.com/Saitamasans/testing-skills/releases/download/"
+    "reverse-test-workbench-v0.1.0/"
+)
 RAW_INSTALLER = (
     "https://raw.githubusercontent.com/Saitamasans/testing-skills/"
     "main/scripts/install.ps1"
@@ -125,6 +129,13 @@ class GitHubInstallReadmeTest(unittest.TestCase):
                     continue
                 if slug in NO_PUBLIC_INSTALLER_SKILLS:
                     asset_url = MULTI_SOURCE_RUNTIME_RELEASE_BASE + "install-multi-source-test-audit.cmd"
+                    self.assertEqual(1, self.readme.count(asset_url))
+                    continue
+                if slug == "reverse-test-workbench":
+                    asset_url = (
+                        REVERSE_TEST_WORKBENCH_RELEASE_BASE
+                        + "install-reverse-test-workbench.cmd"
+                    )
                     self.assertEqual(1, self.readme.count(asset_url))
                     continue
                 if slug == "workbench-ui-acceptance-execution":
@@ -275,7 +286,10 @@ class GitHubInstallReadmeTest(unittest.TestCase):
                     cells[1],
                 )
                 if slug == "reverse-test-workbench":
-                    asset_url = RELEASE_BASE + "install-reverse-test-workbench.cmd"
+                    asset_url = (
+                        REVERSE_TEST_WORKBENCH_RELEASE_BASE
+                        + "install-reverse-test-workbench.cmd"
+                    )
                     self.assertEqual(1, cells[2].count(asset_url))
                     self.assertRegex(
                         cells[2],

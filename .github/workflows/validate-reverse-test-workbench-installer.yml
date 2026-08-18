@@ -1,0 +1,57 @@
+name: Validate reverse-test-workbench installer
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "installers/install-reverse-test-workbench.cmd"
+      - "README.md"
+      - "docs/installation.md"
+      - ".github/workflows/validate-reverse-test-workbench-installer.yml"
+  pull_request:
+    paths:
+      - "installers/install-reverse-test-workbench.cmd"
+      - "README.md"
+      - "docs/installation.md"
+      - ".github/workflows/validate-reverse-test-workbench-installer.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check installer source
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Check public release asset
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s installers/install-reverse-test-workbench.cmd
+          gh api "repos/$GITHUB_REPOSITORY/releases/tags/reverse-test-workbench-v0.1.0" \
+            > release.json
+          node - release.json <<'NODE'
+          const fs = require("node:fs");
+          const value = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
+          if (value.tag_name !== "reverse-test-workbench-v0.1.0" ||
+              value.draft !== false || value.prerelease !== false) {
+            throw new Error("reverse-test-workbench public release is not published");
+          }
+          const names = value.assets.map(({ name }) => name);
+          if (!names.includes("install-reverse-test-workbench.cmd")) {
+            throw new Error("reverse-test-workbench installer asset is missing");
+          }
+          NODE
+
+      - name: Check homepage points to the published asset
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -Fq \
+            'https://github.com/Saitamasans/testing-skills/releases/download/reverse-test-workbench-v0.1.0/install-reverse-test-workbench.cmd' \
+            README.md
