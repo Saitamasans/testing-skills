@@ -111,6 +111,8 @@ class GitHubInstallReadmeTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.readme = (ROOT / "README.md").read_text(encoding="utf-8")
+        cls.install_doc = (ROOT / "docs/installation.md").read_text(encoding="utf-8")
+        cls.guide_doc = (ROOT / "docs/skill-guides.md").read_text(encoding="utf-8")
         cls.slugs = [item["slug"] for item in load_manifest(ROOT)["skills"]]
 
     def test_readme_links_one_button_per_public_skill(self):
@@ -127,7 +129,7 @@ class GitHubInstallReadmeTest(unittest.TestCase):
                     continue
                 if slug == "workbench-ui-acceptance-execution":
                     asset_url = WORKBENCH_UI_ACCEPTANCE_RELEASE_BASE + "install-workbench-ui-acceptance-execution.cmd"
-                    self.assertEqual(2, self.readme.count(asset_url))
+                    self.assertEqual(1, self.readme.count(asset_url))
                     continue
                 asset_url = RELEASE_BASE + f"install-{slug}.cmd"
                 self.assertEqual(1, self.readme.count(asset_url))
@@ -149,17 +151,17 @@ class GitHubInstallReadmeTest(unittest.TestCase):
             "SmartScreen",
             "Release 资产发布后",
         ]:
-            self.assertIn(phrase, self.readme)
-        self.assertIn("scripts/install.ps1", self.readme)
-        self.assertIn("-All", self.readme)
-        self.assertIn("-Skill 'requirement-test-workbench'", self.readme)
-        self.assertIn("启动器只读取本仓库的 HTTPS 安装脚本", self.readme)
+            self.assertIn(phrase, self.install_doc)
+        self.assertIn("scripts/install.ps1", self.install_doc)
+        self.assertIn("-All", self.install_doc)
+        self.assertIn("-Skill 'requirement-test-workbench'", self.install_doc)
+        self.assertIn("启动器只读取本仓库的 HTTPS 安装脚本", self.install_doc)
         for slug in HIDDEN_README_SKILLS:
             self.assertNotIn(slug, self.readme)
 
     def test_public_fallback_runs_immutable_cmd_without_pausing_and_preserves_exit_code(self):
-        fallback = self.readme.split("### 命令兜底：Windows 零 Node 安装", 1)[1].split(
-            "### 高级方式：npx",
+        fallback = self.install_doc.split("## 命令兜底：Windows 零 Node 安装", 1)[1].split(
+            "## 高级方式：npx",
             1,
         )[0]
         self.assertIn(
@@ -175,14 +177,7 @@ class GitHubInstallReadmeTest(unittest.TestCase):
         self.assertIn("-Skill 'requirement-test-workbench'", fallback)
 
     def test_readme_distinguishes_node_requirements_by_workflow(self):
-        start_marker = '<a id="install"></a>'
-        end_marker = '<a id="usage-guides"></a>'
-        self.assertIn(start_marker, self.readme)
-        self.assertIn(end_marker, self.readme)
-        install_guide = self.readme.split(start_marker, 1)[1].split(
-            end_marker,
-            1,
-        )[0]
+        install_guide = self.install_doc
 
         for phrase in [
             "第 7 个 `requirement-clarification-test` 实际生成需求澄清 `.xlsx` 文件时，"
@@ -201,9 +196,9 @@ class GitHubInstallReadmeTest(unittest.TestCase):
     def test_readme_workbench_execution_guide_contains_required_materials(self):
         start_marker = '<a id="workbench-ui-acceptance-guide"></a>'
         end_marker = '<a id="multi-source-audit-guide"></a>'
-        self.assertIn(start_marker, self.readme)
-        self.assertIn(end_marker, self.readme)
-        execution_guide = self.readme.split(start_marker, 1)[1].split(
+        self.assertIn(start_marker, self.guide_doc)
+        self.assertIn(end_marker, self.guide_doc)
+        execution_guide = self.guide_doc.split(start_marker, 1)[1].split(
             end_marker,
             1,
         )[0]
@@ -223,37 +218,19 @@ class GitHubInstallReadmeTest(unittest.TestCase):
                 self.assertIn(phrase, execution_guide)
 
     def test_readme_has_stable_navigation_anchors(self):
-        anchors = [
-            "skills",
-            "install",
-            "usage-guides",
-            "workbench-ui-acceptance-guide",
-            "multi-source-audit-guide",
-            "outputs",
-        ]
         skills_marker = '<a id="skills"></a>'
         self.assertEqual(1, self.readme.count(skills_marker))
-        skills_position = self.readme.index(skills_marker)
-        top_navigation = self.readme[:skills_position]
-        link_positions = []
-        anchor_positions = []
-
-        for anchor in anchors:
-            with self.subTest(anchor=anchor):
-                marker = f'<a id="{anchor}"></a>'
-                link = f"](#{anchor})"
-                self.assertEqual(1, self.readme.count(marker))
-                self.assertEqual(1, self.readme.count(link))
-                self.assertIn(link, top_navigation)
-                link_positions.append(top_navigation.index(link))
-                anchor_positions.append(self.readme.index(marker))
-
-        self.assertEqual(sorted(link_positions), link_positions)
-        self.assertEqual(sorted(anchor_positions), anchor_positions)
+        for target in [
+            "docs/installation.md",
+            "docs/skill-guides.md",
+            "docs/development.md",
+        ]:
+            with self.subTest(target=target):
+                self.assertIn(f"]({target})", self.readme)
 
     def test_readme_uses_concise_three_column_skill_overview(self):
         start_marker = '<a id="skills"></a>'
-        end_marker = '<a id="install"></a>'
+        end_marker = '## 快速使用'
         self.assertIn(start_marker, self.readme)
         self.assertIn(end_marker, self.readme)
         skill_overview = self.readme.split(start_marker, 1)[1].split(
@@ -261,7 +238,7 @@ class GitHubInstallReadmeTest(unittest.TestCase):
             1,
         )[0]
 
-        header = "| Skill | 适合任务 | Windows 安装 |"
+        header = "| Skill | 适合任务 | 安装 |"
         self.assertEqual(1, skill_overview.count(header))
         lines = skill_overview.splitlines()
         header_index = lines.index(header)
@@ -298,11 +275,13 @@ class GitHubInstallReadmeTest(unittest.TestCase):
                     cells[1],
                 )
                 if slug == "reverse-test-workbench":
-                    self.assertIn(
-                        "npx skills add Saitamasans/testing-skills@reverse-test-workbench -g -y",
+                    asset_url = RELEASE_BASE + "install-reverse-test-workbench.cmd"
+                    self.assertEqual(1, cells[2].count(asset_url))
+                    self.assertRegex(
                         cells[2],
+                        rf"^\[!\[Install\]\([^)]+\)\]\({re.escape(asset_url)}\)$",
                     )
-                    self.assertIn("Codex 可选适配器", cells[2])
+                    release_urls.append(asset_url)
                     continue
                 if slug == "multi-source-test-audit":
                     asset_url = MULTI_SOURCE_RUNTIME_RELEASE_BASE + "install-multi-source-test-audit.cmd"
@@ -315,7 +294,7 @@ class GitHubInstallReadmeTest(unittest.TestCase):
                     continue
                 if slug == "workbench-ui-acceptance-execution":
                     asset_url = WORKBENCH_UI_ACCEPTANCE_RELEASE_BASE + "install-workbench-ui-acceptance-execution.cmd"
-                    self.assertEqual(2, self.readme.count(asset_url))
+                    self.assertEqual(1, self.readme.count(asset_url))
                     self.assertEqual(1, cells[2].count(asset_url))
                     self.assertRegex(
                         cells[2],
@@ -332,7 +311,9 @@ class GitHubInstallReadmeTest(unittest.TestCase):
                 )
                 release_urls.append(asset_url)
 
-        self.assertEqual(len(skill_specs) - 1, len(set(release_urls)))
+        self.assertEqual(len(skill_specs), len(set(release_urls)))
+        self.assertNotIn("npx skills add", skill_overview)
+        self.assertNotIn("codex plugin", skill_overview)
         self.assertNotIn(
             "| 中文名称 | Package | 类型 | 适用场景 | 安装 |",
             self.readme,

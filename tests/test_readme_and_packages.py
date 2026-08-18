@@ -12,10 +12,19 @@ HIDDEN_README_SKILLS = {
     "test-case-execution-compiler",
 }
 
+INSTALL_DOC = ROOT / "docs/installation.md"
+GUIDE_DOC = ROOT / "docs/skill-guides.md"
+
 
 class ReadmeAndPackagesTest(unittest.TestCase):
+    def test_canonical_skill_sources_are_grouped_out_of_the_repository_root(self):
+        for item in load_manifest(ROOT)["skills"]:
+            self.assertTrue(item["source"].startswith("skill-sources/"), item["source"])
+        self.assertEqual([], sorted(path.name for path in ROOT.glob("*Skill*.md")))
+
     def test_readme_paths_exist_and_install_commands_are_complete(self):
         readme = (ROOT / "README.md").read_text(encoding="utf-8")
+        installation = INSTALL_DOC.read_text(encoding="utf-8")
         installers = [
             (ROOT / "scripts/install.ps1").read_text(encoding="utf-8"),
             (ROOT / "scripts/install-all.ps1").read_text(encoding="utf-8"),
@@ -34,24 +43,30 @@ class ReadmeAndPackagesTest(unittest.TestCase):
         self.assertIn('Join-Path $PSScriptRoot "install.ps1"', installers[1])
         self.assertIn("-All", installers[1])
         self.assertNotIn("npx", installers[0] + installers[1])
-        self.assertIn("scripts/install.ps1", readme)
-        self.assertIn("-All", readme)
-        self.assertIn("-Skill 'requirement-test-workbench'", readme)
-        self.assertIn("npx skills add Saitamasans/testing-skills", readme)
-        self.assertIn("CC Switch", readme)
+        self.assertNotIn("npx skills add", readme)
+        self.assertNotIn("codex plugin", readme)
+        self.assertIn("docs/installation.md", readme)
+        self.assertIn("scripts/install.ps1", installation)
+        self.assertIn("-All", installation)
+        self.assertIn("-Skill 'requirement-test-workbench'", installation)
+        self.assertIn("npx skills add Saitamasans/testing-skills", installation)
+        self.assertIn("CC Switch", installation)
         self.assertTrue((ROOT / "LICENSE").read_text(encoding="utf-8").startswith("MIT License"))
 
     def test_public_install_commands_use_supported_selectors(self):
         readme = (ROOT / "README.md").read_text(encoding="utf-8")
-        self.assertNotIn("--path", readme)
-        self.assertIn("npx skills add Saitamasans/testing-skills", readme)
-        self.assertIn("codex plugin marketplace add Saitamasans/testing-skills --ref main", readme)
-        self.assertIn("codex plugin add reverse-test-workbench@reverse-test-workbench", readme)
+        installation = INSTALL_DOC.read_text(encoding="utf-8")
+        self.assertNotIn("--path", installation)
+        self.assertNotIn("npx skills add", readme)
+        self.assertIn("npx skills add Saitamasans/testing-skills", installation)
+        self.assertIn("codex plugin marketplace add Saitamasans/testing-skills --ref main", installation)
+        self.assertIn("codex plugin add reverse-test-workbench@reverse-test-workbench", installation)
         for slug in HIDDEN_README_SKILLS:
             self.assertNotIn(slug, readme)
 
     def test_readme_documents_reverse_test_workbench_distribution(self):
         readme = (ROOT / "README.md").read_text(encoding="utf-8")
+        combined = readme + INSTALL_DOC.read_text(encoding="utf-8")
         for phrase in [
             "reverse-test-workbench",
             "官方 Playwright MCP",
@@ -60,7 +75,7 @@ class ReadmeAndPackagesTest(unittest.TestCase):
             "新建任务",
             "不要求使用 Codex、Claude Code、Cursor",
         ]:
-            self.assertIn(phrase, readme)
+            self.assertIn(phrase, combined)
 
     def test_only_five_packages_contain_renderer(self):
         manifest = load_manifest(ROOT)["skills"]
@@ -102,10 +117,7 @@ class ReadmeAndPackagesTest(unittest.TestCase):
         self.assertNotIn("npx @saitamasans/testing-runner", combined)
 
     def test_readme_distinguishes_public_skill_and_optional_adapter_paths(self):
-        readme = (ROOT / "README.md").read_text(encoding="utf-8")
-        install_section = readme.split('<a id="install"></a>', 1)[1].split(
-            '<a id="usage-guides"></a>', 1
-        )[0]
+        install_section = INSTALL_DOC.read_text(encoding="utf-8")
         for phrase in [
             "通用 Skill：无需求-UI逆向测试工作台",
             "可选 Codex 适配器",
@@ -118,10 +130,7 @@ class ReadmeAndPackagesTest(unittest.TestCase):
             self.assertIn(phrase, install_section)
 
     def test_readme_public_installers_explain_safety_and_recovery(self):
-        readme = (ROOT / "README.md").read_text(encoding="utf-8")
-        install_section = readme.split('<a id="install"></a>', 1)[1].split(
-            '<a id="usage-guides"></a>', 1
-        )[0]
+        install_section = INSTALL_DOC.read_text(encoding="utf-8")
         for phrase in [
             "无需管理员权限",
             "-Force",
@@ -134,7 +143,7 @@ class ReadmeAndPackagesTest(unittest.TestCase):
                 self.assertIn(phrase, install_section)
 
     def test_first_seven_skill_usage_guides_are_complete(self):
-        readme = (ROOT / "README.md").read_text(encoding="utf-8")
+        readme = GUIDE_DOC.read_text(encoding="utf-8")
         start_marker = '<a id="usage-guides"></a>'
         end_marker = '<a id="workbench-ui-acceptance-guide"></a>'
         self.assertIn(start_marker, readme)
@@ -150,7 +159,7 @@ class ReadmeAndPackagesTest(unittest.TestCase):
             (6, "test-case-quality-audit"),
             (7, "requirement-clarification-test"),
         ]
-        headings = list(re.finditer(r"(?m)^### ([1-7])\. .+$", usage_guides))
+        headings = list(re.finditer(r"(?m)^## ([1-7])\. .+$", usage_guides))
         self.assertEqual(
             [str(number) for number, _ in guide_specs],
             [match.group(1) for match in headings],
@@ -176,9 +185,9 @@ class ReadmeAndPackagesTest(unittest.TestCase):
                 self.assertIn(f"`{slug}`", example)
 
     def test_multi_api_guide_separates_starting_input_from_formal_admission(self):
-        readme = (ROOT / "README.md").read_text(encoding="utf-8")
-        start_heading = "### 3. 多接口链路用例生成（`multi-api-flow-test`）"
-        end_heading = "### 4. 需求澄清与用例生成skill-工作台（`requirement-test-workbench`）"
+        readme = GUIDE_DOC.read_text(encoding="utf-8")
+        start_heading = "## 3. 多接口链路用例生成（`multi-api-flow-test`）"
+        end_heading = "## 4. 需求澄清与用例生成工作台（`requirement-test-workbench`）"
         self.assertIn(start_heading, readme)
         self.assertIn(end_heading, readme)
         multi_api_guide = readme.split(start_heading, 1)[1].split(
@@ -205,12 +214,10 @@ class ReadmeAndPackagesTest(unittest.TestCase):
                 self.assertIn(phrase, multi_api_guide)
 
     def test_output_files_use_skill_specific_trigger_rules(self):
-        readme = (ROOT / "README.md").read_text(encoding="utf-8")
+        readme = GUIDE_DOC.read_text(encoding="utf-8")
         start_marker = '<a id="outputs"></a>'
-        end_heading = "## 本地开发"
         self.assertIn(start_marker, readme)
-        self.assertIn(end_heading, readme)
-        outputs = readme.split(start_marker, 1)[1].split(end_heading, 1)[0]
+        outputs = readme.split(start_marker, 1)[1]
 
         for phrase in [
             "单接口完整版、单接口精炼版、多接口链路和正式服验证这 4 个 Skill "

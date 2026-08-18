@@ -260,8 +260,8 @@ class NoNodeInstallerStaticTest(unittest.TestCase):
             "Windows PowerShell 5.1 needs the UTF-8 BOM when executing the installer with -File",
         )
         trim_bom = ".TrimStart([char]0xFEFF)"
-        readme = (ROOT / "README.md").read_text(encoding="utf-8")
-        self.assertGreaterEqual(readme.count(trim_bom), 1)
+        installation = (ROOT / "docs/installation.md").read_text(encoding="utf-8")
+        self.assertGreaterEqual(installation.count(trim_bom), 1)
         for launcher in (ROOT / "installers").glob("*.cmd"):
             with self.subTest(launcher=launcher.name):
                 text = launcher.read_text(encoding="utf-8")
@@ -290,15 +290,16 @@ class NoNodeInstallerStaticTest(unittest.TestCase):
 
     def test_readme_keeps_windows_no_node_and_universal_skill_paths(self):
         readme = (ROOT / "README.md").read_text(encoding="utf-8")
-        universal = readme.split("### 通用 Skill：无需求-UI逆向测试工作台", 1)[1].split(
-            "### 可选 Codex 适配器", 1
+        installation = (ROOT / "docs/installation.md").read_text(encoding="utf-8")
+        universal = installation.split("## 通用 Skill：无需求-UI逆向测试工作台", 1)[1].split(
+            "## 可选 Codex 适配器", 1
         )[0]
         self.assertIn(
             "npx skills add Saitamasans/testing-skills@reverse-test-workbench -g -y",
             universal,
         )
-        recommended = readme.split("### 推荐方式：Windows 安装按钮", 1)[1].split(
-            "### 高级方式：npx", 1
+        recommended = installation.split("## 推荐方式：Windows 安装按钮", 1)[1].split(
+            "## 高级方式：npx", 1
         )[0]
         self.assertIn("Windows 10/11 自带的 Windows PowerShell", recommended)
         self.assertIn("无需管理员权限", recommended)
@@ -310,9 +311,10 @@ class NoNodeInstallerStaticTest(unittest.TestCase):
         )
         self.assertIn(") -Skill 'requirement-test-workbench'", recommended)
         self.assertNotIn("npx skills add", recommended)
-        advanced = readme.split("### 高级方式：npx", 1)[1]
+        advanced = installation.split("## 高级方式：npx", 1)[1]
         for check in ("node -v", "npm -v", "npx -v"):
             self.assertIn(check, advanced)
+        self.assertNotIn("npx skills add", readme)
 
 
 if __name__ == "__main__":
