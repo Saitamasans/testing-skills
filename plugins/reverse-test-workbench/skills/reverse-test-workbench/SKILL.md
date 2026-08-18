@@ -1,6 +1,6 @@
 ---
 name: reverse-test-workbench
-description: Use when a user asks to explore or reverse-test a Web system or admin console from its UI without reliable requirements, API documentation, or source code, using an available Playwright-compatible browser executor to build evidence, coverage boundaries, behavioral knowledge, risks, and resumable test assets.
+description: 仅有 Web 系统界面、缺少可靠需求或接口文档时，使用官方 Playwright MCP 进行无需求 UI 逆向探索、证据留存、风险发现和可续跑测试资产沉淀。
 ---
 
 <!-- 此文件由根目录中文源文件自动生成，请勿直接编辑。 -->
