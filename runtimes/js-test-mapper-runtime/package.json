@@ -1,0 +1,59 @@
+{
+  "name": "@saitamasans/js-test-mapper-runtime",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Independent runtime for js-test-mapper Web asset collection, analysis, lineage, and artifact projections.",
+  "engines": {
+    "node": ">=20"
+  },
+  "bin": {
+    "js-test-mapper": "bin/js-test-mapper.mjs"
+  },
+  "scripts": {
+    "test": "node --test tests/*.test.mjs",
+    "scan": "node bin/js-test-mapper.mjs scan",
+    "smoke": "node scripts/smoke.mjs",
+    "bundle": "node scripts/build-bundle.mjs",
+    "check-runtime": "node scripts/check-runtime.mjs"
+  },
+  "dependencies": {
+    "@babel/parser": "7.29.8",
+    "@babel/traverse": "7.29.8",
+    "@babel/types": "7.29.8",
+    "@jridgewell/trace-mapping": "0.3.31",
+    "@vue/compiler-sfc": "3.5.42",
+    "ajv": "8.20.0",
+    "docx": "9.6.1",
+    "exceljs": "4.4.0",
+    "playwright": "1.61.1"
+  },
+  "bundledDependencies": [
+    "@babel/parser",
+    "@babel/traverse",
+    "@babel/types",
+    "@jridgewell/trace-mapping",
+    "@vue/compiler-sfc",
+    "ajv",
+    "docx",
+    "exceljs",
+    "playwright"
+  ],
+  "files": [
+    "bin",
+    "src",
+    "schemas",
+    "scripts"
+  ],
+  "bundleDependencies": [
+    "@babel/parser",
+    "@babel/traverse",
+    "@babel/types",
+    "@jridgewell/trace-mapping",
+    "@vue/compiler-sfc",
+    "ajv",
+    "docx",
+    "exceljs",
+    "playwright"
+  ]
+}

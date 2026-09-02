@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "runtime_name": "@saitamasans/js-test-mapper-runtime",
+  "runtime_version": "0.1.0",
+  "minimum_node": 20,
+  "official_ci_node": "22.23.1",
+  "playwright": {
+    "version": "1.61.1",
+    "browser": "chromium",
+    "chromium_revision": "1228",
+    "browser_preparation": "prepared at install/release time; never downloaded by a normal scan"
+  },
+  "normal_run_network_policy": {
+    "runtime_dependency_downloads": false,
+    "browser_downloads": false,
+    "active_business_api_calls": 0
+  }
+}

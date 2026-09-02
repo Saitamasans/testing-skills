@@ -1,0 +1,10 @@
+{
+  "schema_version": 1,
+  "runtime_name": "@saitamasans/js-test-mapper-runtime",
+  "runtime_version": "0.1.0",
+  "minimum_node": 20,
+  "official_ci_node": "22.23.1",
+  "playwright_version": "1.61.1",
+  "vue_compiler_sfc_version": "3.5.42",
+  "active_business_api_calls": 0
+}

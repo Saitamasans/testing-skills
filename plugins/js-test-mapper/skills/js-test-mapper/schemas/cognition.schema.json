@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://testing-skills.local/js-test-mapper/cognition.schema.json",
+  "type": "object",
+  "required": ["schema_version", "run_id", "system_summary", "lead", "route_presentations", "chain_presentations", "risk_items", "next_test_focus", "uncertain"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "run_id": {"type": "string", "minLength": 1},
+    "system_summary": {"type": "string", "minLength": 1},
+    "lead": {"type": "string", "minLength": 1},
+    "route_presentations": {"type": "array", "items": {"$ref": "#/$defs/route"}},
+    "chain_presentations": {"type": "array", "items": {"$ref": "#/$defs/chain"}},
+    "risk_items": {"type": "array", "items": {"$ref": "#/$defs/risk"}},
+    "next_test_focus": {"type": "array", "items": {"type": "string"}},
+    "uncertain": {"type": "array", "items": {"type": "string"}}
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "route": {"type": "object", "required": ["display_id", "module", "feature", "capability", "evidence_ids"], "properties": {"display_id": {"type": "string", "pattern": "^ROUTE-\\d{3,}$"}, "module": {"type": "string"}, "feature": {"type": "string"}, "capability": {"type": "string"}, "evidence_ids": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}}}, "additionalProperties": false},
+    "chain": {"type": "object", "required": ["display_id", "feature", "business_action", "tester_summary", "evidence_ids"], "properties": {"display_id": {"type": "string", "pattern": "^CHAIN-\\d{3,}$"}, "feature": {"type": "string"}, "business_action": {"type": "string"}, "tester_summary": {"type": "string"}, "evidence_ids": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}}}, "additionalProperties": false},
+    "risk": {"type": "object", "required": ["target_risk_display_id", "type", "statement", "priority", "related_display_ids", "evidence_ids"], "properties": {"target_risk_display_id": {"type": "string", "pattern": "^RISK-\\d{3,}$"}, "type": {"enum": ["测试关注点", "风险", "待确认"]}, "statement": {"type": "string"}, "priority": {"enum": ["P0", "P1", "P2", "P3"]}, "related_display_ids": {"type": "array", "items": {"type": "string"}}, "evidence_ids": {"type": "array", "items": {"type": "string"}}}, "anyOf": [{"properties": {"related_display_ids": {"minItems": 1}}}, {"properties": {"evidence_ids": {"minItems": 1}}}], "additionalProperties": false}
+  }
+}

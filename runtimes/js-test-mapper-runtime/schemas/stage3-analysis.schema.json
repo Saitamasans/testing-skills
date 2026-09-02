@@ -1,0 +1,136 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://testing-skills.local/js-test-mapper/stage3-analysis.schema.json",
+  "type": "object",
+  "required": ["analysis_focus", "structural_relations", "call_chain_candidates"],
+  "properties": {
+    "analysis_focus": {"type": "array", "items": {"$ref": "#/$defs/focus"}},
+    "structural_relations": {"type": "array", "items": {"$ref": "#/$defs/relation"}},
+    "call_chain_candidates": {"type": "array", "items": {"$ref": "#/$defs/chain"}}
+  },
+  "additionalProperties": true,
+  "$defs": {
+    "location": {
+      "type": "object",
+      "required": ["file", "line", "column"],
+      "properties": {
+        "file": {"type": "string", "minLength": 1},
+        "line": {"type": "integer", "minimum": 1},
+        "column": {"type": "integer", "minimum": 0}
+      },
+      "additionalProperties": false
+    },
+    "focus": {
+      "type": "object",
+      "required": ["asset_id", "canonical_url", "priority", "focus_reasons", "signals", "l2_eligible", "l3_eligible", "skip_reason"],
+      "properties": {
+        "asset_id": {"type": "string", "minLength": 1},
+        "canonical_url": {"type": "string", "minLength": 1},
+        "priority": {"enum": ["HIGH", "MEDIUM", "LOW"]},
+        "focus_reasons": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}},
+        "signals": {
+          "type": "object",
+          "required": ["current_batch_relevance", "first_party_trust", "runtime_activity", "relationship_richness", "risk_behavior", "information_novelty"],
+          "properties": {
+            "current_batch_relevance": {"type": "boolean"},
+            "first_party_trust": {"type": "boolean"},
+            "runtime_activity": {"type": "boolean"},
+            "relationship_richness": {"type": "boolean"},
+            "risk_behavior": {"type": "boolean"},
+            "information_novelty": {"type": "boolean"}
+          },
+          "additionalProperties": false
+        },
+        "l2_eligible": {"type": "boolean"},
+        "l3_eligible": {"type": "boolean"},
+        "skip_reason": {"type": ["string", "null"]}
+      },
+      "additionalProperties": false
+    },
+    "relation": {
+      "type": "object",
+      "required": ["relation_id", "asset_id", "relation_type", "value", "location", "evidence_level", "context"],
+      "properties": {
+        "relation_id": {"type": "string", "minLength": 1},
+        "asset_id": {"type": "string", "minLength": 1},
+        "relation_type": {"type": "string", "minLength": 1},
+        "value": {"type": "string"},
+        "location": {"$ref": "#/$defs/location"},
+        "evidence_level": {"const": "E2"},
+        "context": {"type": "string", "minLength": 1}
+      },
+      "additionalProperties": true
+    },
+    "chain": {
+      "type": "object",
+      "required": ["chain_id", "asset_id", "action_label", "action_candidate", "module_route_context", "nodes", "edges", "preconditions", "permission_conditions", "state_conditions", "api_references", "post_processing", "collapsed_wrappers", "expanded_public_layers", "stop_reason", "stop_context", "evidence_ids", "evidence_level", "context"],
+      "properties": {
+        "chain_id": {"type": "string", "minLength": 1},
+        "asset_id": {"type": "string", "minLength": 1},
+        "action_label": {"type": "string", "minLength": 1},
+        "action_candidate": {"type": "string", "minLength": 1},
+        "module_route_context": {"type": "object"},
+        "nodes": {"type": "array", "items": {"type": "object"}},
+        "edges": {"type": "array", "items": {"$ref": "#/$defs/edge"}},
+        "branches": {"type": "array", "items": {"$ref": "#/$defs/branch"}},
+        "preconditions": {"type": "array", "items": {"type": "object"}},
+        "permission_conditions": {"type": "array", "items": {"type": "object"}},
+        "state_conditions": {"type": "array", "items": {"type": "object"}},
+        "api_references": {"type": "array", "items": {"type": "object"}},
+        "post_processing": {"type": "array", "items": {"type": "object"}},
+        "collapsed_wrappers": {"type": "array", "items": {"type": "string"}},
+        "expanded_public_layers": {"type": "array", "items": {"type": "string"}},
+        "stop_reason": {"type": "string", "minLength": 1},
+        "stop_context": {"type": "string", "minLength": 1},
+        "evidence_ids": {"type": "array", "items": {"type": "string"}},
+        "evidence_level": {"const": "E2"},
+        "context": {"type": "string", "minLength": 1}
+      },
+      "additionalProperties": true
+    },
+    "edge": {
+      "type": "object",
+      "required": ["edge_id", "from", "to", "relation_type", "evidence_level", "context"],
+      "properties": {
+        "edge_id": {"type": "string", "minLength": 1},
+        "from": {"type": "string", "minLength": 1},
+        "to": {"type": "string", "minLength": 1},
+        "relation_type": {"type": "string", "minLength": 1},
+        "branch_id": {"type": "string", "minLength": 1},
+        "branch_outcome": {"enum": ["true", "false"]},
+        "path_effect": {"enum": ["continue", "stop"]},
+        "evidence_level": {"const": "E2"},
+        "context": {"type": "string", "minLength": 1}
+      },
+      "additionalProperties": true
+    },
+    "branch": {
+      "type": "object",
+      "required": ["branch_id", "branch_kind", "condition", "location", "outcomes", "evidence_level", "context"],
+      "properties": {
+        "branch_id": {"type": "string", "minLength": 1},
+        "branch_kind": {"enum": ["guard", "if_else", "recovery"]},
+        "condition": {"type": "string", "minLength": 1},
+        "location": {"$ref": "#/$defs/location"},
+        "outcomes": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["outcome", "path_effect", "target_node_ids", "evidence_level", "context"],
+            "properties": {
+              "outcome": {"enum": ["true", "false"]},
+              "path_effect": {"enum": ["continue", "stop"]},
+              "target_node_ids": {"type": "array", "items": {"type": "string", "minLength": 1}},
+              "evidence_level": {"const": "E2"},
+              "context": {"type": "string", "minLength": 1}
+            },
+            "additionalProperties": true
+          }
+        },
+        "evidence_level": {"const": "E2"},
+        "context": {"type": "string", "minLength": 1}
+      },
+      "additionalProperties": true
+    }
+  }
+}

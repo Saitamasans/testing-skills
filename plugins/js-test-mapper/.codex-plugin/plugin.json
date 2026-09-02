@@ -1,0 +1,17 @@
+{
+  "name": "js-test-mapper",
+  "version": "0.1.0",
+  "description": "Codex adapter for the independent Web JS reverse test mapping Runtime.",
+  "author": {"name": "Testing Skills"},
+  "keywords": ["testing", "javascript", "playwright", "source-map"],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Web JS 逆向测试建图",
+    "shortDescription": "从 Web JS 技术资产恢复系统地图和测试线索",
+    "longDescription": "以只读方式采集 Web 页面自然加载的 JS、Chunk 和明确 Source Map，输出可追溯技术事实；独立 Runtime 负责执行，Plugin 只提供 Codex 适配和发现入口。",
+    "developerName": "Testing Skills",
+    "category": "Productivity",
+    "capabilities": ["Browser asset collection", "Static analysis", "Runtime discovery"],
+    "defaultPrompt": ["请对这个 URL 做只读 Web JS 逆向测试建图。"]
+  }
+}
