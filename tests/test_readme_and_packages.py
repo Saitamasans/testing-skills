@@ -11,6 +11,10 @@ HIDDEN_README_SKILLS = {
     "web-api-test-execution-evidence",
     "test-case-execution-compiler",
 }
+NON_GENERIC_SHELL_INSTALL_SKILLS = {
+    "multi-source-test-audit",
+    "js-test-mapper",
+}
 
 INSTALL_DOC = ROOT / "docs/installation.md"
 GUIDE_DOC = ROOT / "docs/skill-guides.md"
@@ -38,7 +42,7 @@ class ReadmeAndPackagesTest(unittest.TestCase):
                 self.assertNotIn(item["slug"], readme)
             else:
                 self.assertIn(item["slug"], readme)
-            if item["slug"] != "multi-source-test-audit":
+            if item["slug"] not in NON_GENERIC_SHELL_INSTALL_SKILLS:
                 self.assertIn(item["slug"], installers[2])
         self.assertIn('Join-Path $PSScriptRoot "install.ps1"', installers[1])
         self.assertIn("-All", installers[1])

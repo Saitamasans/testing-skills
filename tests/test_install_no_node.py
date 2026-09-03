@@ -265,6 +265,8 @@ class NoNodeInstallerStaticTest(unittest.TestCase):
         for launcher in (ROOT / "installers").glob("*.cmd"):
             with self.subTest(launcher=launcher.name):
                 text = launcher.read_text(encoding="utf-8")
+                if launcher.name == "install-js-test-mapper-runtime.cmd":
+                    continue
                 if launcher.name in {
                     "install-all.cmd",
                     "install-web-api-test-execution-evidence.cmd",
@@ -274,6 +276,17 @@ class NoNodeInstallerStaticTest(unittest.TestCase):
                     self.assertIn("Get-FileHash", text)
                 else:
                     self.assertIn(trim_bom, text)
+
+    def test_js_test_mapper_installer_is_a_node_runtime_helper(self):
+        launcher = ROOT / "installers" / "install-js-test-mapper-runtime.cmd"
+        text = launcher.read_text(encoding="utf-8")
+        self.assertIn("Node.js 20 or newer", text)
+        self.assertIn("runtimes\\js-test-mapper-runtime\\scripts\\install-bundle.mjs", text)
+        self.assertIn("--bundle", text)
+        self.assertIn("--manifest", text)
+        self.assertIn("--install-root", text)
+        self.assertNotIn("TrimStart([char]0xFEFF)", text)
+        self.assertNotIn("INSTALL_SELECTOR", text)
 
     def test_recommended_installer_does_not_invoke_node_npm_npx_or_git(self):
         source = INSTALLER.read_text(encoding="utf-8")

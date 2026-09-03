@@ -54,6 +54,10 @@ codex plugin add reverse-test-workbench@reverse-test-workbench
 `reverse-test-workbench-v0.1.0/install-reverse-test-workbench.cmd`。它不依赖已经冻结的
 `skill-installers-v1`，避免新增 Skill 后主页按钮指向不存在的旧 Release 资产。
 
+## Web JS 逆向测试建图
+
+`js-test-mapper` 是 Runtime 型 Skill。请下载并完整解压 `js-test-mapper-0.1.0.zip`，Windows 用户再运行包内的 `install-js-test-mapper-runtime.cmd`；不要只单独下载该 `.cmd`。安装要求 Node.js 20 或更高版本，首次安装会准备匹配版本的 Playwright Chromium。
+
 ## 多源测试审计
 
 点击首页 Install 按钮只需下载一个 `install-multi-source-test-audit.cmd`。双击它后，CMD 会自动下载并校验固定版本的安装脚本；安装脚本再下载并校验完整离线 Runtime。安装完成后请重启 Codex。

@@ -29,6 +29,7 @@ SPECIALIZED_SKILLS = {
     "test-case-execution-compiler",
     "multi-source-test-audit",
     "reverse-test-workbench",
+    "js-test-mapper",
 }
 
 
@@ -74,6 +75,14 @@ class SourceContractsTest(unittest.TestCase):
             elif slug == "workbench-ui-acceptance-execution":
                 self.assertIn("do not use for case generation", text, slug)
                 self.assertIn("HTML 验收报告", text, slug)
+            elif slug == "js-test-mapper":
+                for phrase in [
+                    "不是 UI 测试执行器、API 执行器",
+                    "active_business_api_calls",
+                    "Word",
+                    "Excel",
+                ]:
+                    self.assertIn(phrase, text, f"{slug}: {phrase}")
             else:
                 self.assertIn("不生成正式测试用例", text, slug)
 

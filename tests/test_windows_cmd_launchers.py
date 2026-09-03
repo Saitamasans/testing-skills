@@ -26,6 +26,7 @@ class WindowsCmdLauncherRuntimeTest(unittest.TestCase):
             path for path in sorted(INSTALLERS.glob("*.cmd"))
             if path.name not in {
                 "install-all.cmd",
+                "install-js-test-mapper-runtime.cmd",
                 "install-web-api-test-execution-evidence.cmd",
             }
         ]

@@ -28,12 +28,19 @@ REVERSE_TEST_WORKBENCH_RELEASE_BASE = (
     "https://github.com/Saitamasans/testing-skills/releases/download/"
     "reverse-test-workbench-v0.1.0/"
 )
+JS_TEST_MAPPER_RELEASE_BASE = (
+    "https://github.com/Saitamasans/testing-skills/releases/download/"
+    "v0.1.0/"
+)
 RAW_INSTALLER = (
     "https://raw.githubusercontent.com/Saitamasans/testing-skills/"
     "main/scripts/install.ps1"
 )
 NO_PUBLIC_INSTALLER_SKILLS = {
     "multi-source-test-audit",
+}
+SPECIALIZED_INSTALLERS = {
+    "js-test-mapper": "install-js-test-mapper-runtime.cmd",
 }
 HIDDEN_README_SKILLS = {
     "web-api-test-execution-evidence",
@@ -49,7 +56,7 @@ class GitHubInstallLauncherTest(unittest.TestCase):
 
     def test_exactly_one_all_and_manifest_launchers_exist(self):
         expected = {"install-all.cmd"} | {
-            f"install-{slug}.cmd"
+            SPECIALIZED_INSTALLERS.get(slug, f"install-{slug}.cmd")
             for slug in self.slugs
             if slug not in NO_PUBLIC_INSTALLER_SKILLS
         }
@@ -74,6 +81,8 @@ class GitHubInstallLauncherTest(unittest.TestCase):
                 if slug in NO_PUBLIC_INSTALLER_SKILLS:
                     self.assertFalse((self.installers / f"install-{slug}.cmd").exists())
                     continue
+                if slug in SPECIALIZED_INSTALLERS:
+                    continue
                 launcher = self.installers / f"install-{slug}.cmd"
                 self.assertTrue(launcher.exists(), launcher)
                 text = launcher.read_text(encoding="utf-8")
@@ -85,6 +94,16 @@ class GitHubInstallLauncherTest(unittest.TestCase):
                 self.assertNotIn("-All", text)
                 self.assertEqual(1, text.count("-Skill"))
                 self.assertNotRegex(text, r"%(?:\*|[0-9])")
+
+    def test_js_test_mapper_uses_runtime_specific_installer(self):
+        launcher = self.installers / SPECIALIZED_INSTALLERS["js-test-mapper"]
+        self.assertTrue(launcher.exists(), launcher)
+        text = launcher.read_text(encoding="utf-8")
+        self.assertIn("Node.js 20 or newer", text)
+        self.assertIn("runtimes\\js-test-mapper-runtime\\scripts\\install-bundle.mjs", text)
+        for argument in ("--bundle", "--manifest", "--install-root"):
+            self.assertIn(argument, text)
+        self.assertNotIn("INSTALL_SELECTOR", text)
 
     def _assert_common_launcher_contract(self, text, *, immutable=False):
         self.assertIn(r"%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe", text)
@@ -140,6 +159,10 @@ class GitHubInstallReadmeTest(unittest.TestCase):
                     continue
                 if slug == "workbench-ui-acceptance-execution":
                     asset_url = WORKBENCH_UI_ACCEPTANCE_RELEASE_BASE + "install-workbench-ui-acceptance-execution.cmd"
+                    self.assertEqual(1, self.readme.count(asset_url))
+                    continue
+                if slug == "js-test-mapper":
+                    asset_url = JS_TEST_MAPPER_RELEASE_BASE + "js-test-mapper-0.1.0.zip"
                     self.assertEqual(1, self.readme.count(asset_url))
                     continue
                 asset_url = RELEASE_BASE + f"install-{slug}.cmd"
@@ -271,6 +294,7 @@ class GitHubInstallReadmeTest(unittest.TestCase):
             ("需求澄清", "requirement-clarification-test"),
             ("多源测试-审计", "multi-source-test-audit"),
             ("无需求-UI逆向测试工作台", "reverse-test-workbench"),
+            ("无需求-Web JS逆向测试建图", "js-test-mapper"),
         ]
         self.assertEqual(len(skill_specs), len(rows))
         release_urls = []
@@ -308,6 +332,16 @@ class GitHubInstallReadmeTest(unittest.TestCase):
                     continue
                 if slug == "workbench-ui-acceptance-execution":
                     asset_url = WORKBENCH_UI_ACCEPTANCE_RELEASE_BASE + "install-workbench-ui-acceptance-execution.cmd"
+                    self.assertEqual(1, self.readme.count(asset_url))
+                    self.assertEqual(1, cells[2].count(asset_url))
+                    self.assertRegex(
+                        cells[2],
+                        rf"^\[!\[Install\]\([^)]+\)\]\({re.escape(asset_url)}\)$",
+                    )
+                    release_urls.append(asset_url)
+                    continue
+                if slug == "js-test-mapper":
+                    asset_url = JS_TEST_MAPPER_RELEASE_BASE + "js-test-mapper-0.1.0.zip"
                     self.assertEqual(1, self.readme.count(asset_url))
                     self.assertEqual(1, cells[2].count(asset_url))
                     self.assertRegex(
@@ -368,6 +402,9 @@ class GitHubInstallerReleaseWorkflowTest(unittest.TestCase):
             self.assertIn(phrase, workflow)
         self.assertIn("! -name 'install-web-api-test-execution-evidence.cmd'", workflow)
         self.assertIn("! -name 'install-workbench-ui-acceptance-execution.cmd'", workflow)
+        self.assertIn("! -name 'install-reverse-test-workbench.cmd'", workflow)
+        self.assertIn("! -name 'install-js-test-mapper-runtime.cmd'", workflow)
+        self.assertIn('test "${#ordinary[@]}" -eq 7', workflow)
         for forbidden in [
             "contents: write",
             "gh release upload skill-installers-v1",

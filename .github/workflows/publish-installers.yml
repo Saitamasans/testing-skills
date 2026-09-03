@@ -48,6 +48,7 @@ jobs:
             ! -name 'install-web-api-test-execution-evidence.cmd' \
             ! -name 'install-test-case-execution-compiler.cmd' \
             ! -name 'install-workbench-ui-acceptance-execution.cmd' \
+            ! -name 'install-reverse-test-workbench.cmd' \
             ! -name 'install-js-test-mapper-runtime.cmd' | sort)
           test "${#ordinary[@]}" -eq 7
 
