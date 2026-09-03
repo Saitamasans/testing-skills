@@ -110,7 +110,7 @@
       "short_description": "从 Web JS 技术资产恢复系统地图和可追溯的测试线索",
       "default_prompt": "请对这个 Web URL 做只读 JS 逆向测试建图，先建立 B01 技术资产地图。",
       "case_output": false,
-      "resource_dirs": ["scripts", "references", "schemas", "assets"]
+      "resource_dirs": ["scripts", "references", "schemas", "assets", "runtime"]
     }
   ]
 }

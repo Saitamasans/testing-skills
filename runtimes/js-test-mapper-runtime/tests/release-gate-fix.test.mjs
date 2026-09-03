@@ -3,38 +3,18 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { assertNodeVersion, installRuntime, locateReleaseFiles } from "../../../release/install-bundle.mjs";
+import { bootstrapRuntime } from "../../../skill-sources/js-test-mapper/scripts/runtime-bootstrap.mjs";
 
-test("standalone installer enforces Node >=20 and locates only RC-local files", async () => {
-  assert.doesNotThrow(() => assertNodeVersion("20.19.0"));
-  assert.doesNotThrow(() => assertNodeVersion("22.23.1"));
-  assert.throws(() => assertNodeVersion("18.20.4"), />=20/);
-  const root = await mkdtemp(path.join(os.tmpdir(), "js-test-mapper-release-gate-phase2-"));
-  try {
-    await writeFile(path.join(root, "runtime.tgz"), "bundle", "utf8");
-    await writeFile(path.join(root, "runtime.manifest.json"), "{}", "utf8");
-    const files = await locateReleaseFiles(root);
-    assert.equal(files.bundlePath, path.join(root, "runtime.tgz"));
-    assert.equal(files.manifestPath, path.join(root, "runtime.manifest.json"));
-  } finally {
-    await rm(root, { recursive: true, force: true });
-  }
+test("bootstrap and public installer enforce Node 20 and immutable tracked inputs", async () => {
+  assert.ok(Number(process.versions.node.split(".")[0]) >= 20);
+  const bootstrap = await readFile(new URL("../../../skill-sources/js-test-mapper/scripts/runtime-bootstrap.mjs", import.meta.url), "utf8");
+  const installer = await readFile(new URL("../../../installers/install-js-test-mapper.cmd", import.meta.url), "utf8");
+  assert.match(bootstrap, /node_20_or_newer_required/); assert.match(installer, /Node\.js 20 or newer/); assert.match(installer, /testing-skills@v0\.1\.1-rc\.2/);
+  assert.doesNotMatch(bootstrap + installer, /testing-skills-src|review[\\/]|[A-Z]:\\Users\\/i);
 });
 
-test("standalone installer source has no development-repository launcher dependency", async () => {
-  const source = await readFile(new URL("../../../release/install-bundle.mjs", import.meta.url), "utf8");
-  assert.doesNotMatch(source, /testing-skills-src|\.\.\\runtimes|\.\.\/tooling/);
-});
-
-test("standalone installer rejects a mismatched TGZ hash before install", async () => {
-  const root = await mkdtemp(path.join(os.tmpdir(), "js-test-mapper-release-gate-hash-"));
-  try {
-    const bundlePath = path.join(root, "runtime.tgz");
-    const manifestPath = path.join(root, "runtime.manifest.json");
-    await writeFile(bundlePath, "tampered", "utf8");
-    await writeFile(manifestPath, JSON.stringify({ runtime: { name: "x", version: "0" }, bundle: { sha256: "0".repeat(64) } }), "utf8");
-    await assert.rejects(installRuntime({ bundlePath, manifestPath, installRoot: path.join(root, "install"), browserPath: path.join(root, "browser"), repair: false }), /runtime_bundle_sha256_mismatch/);
-  } finally {
-    await rm(root, { recursive: true, force: true });
-  }
+test("bootstrap rejects a mismatched TGZ hash before npm install", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "js-test-mapper-bootstrap-hash-"));
+  try { const bundle = path.join(root, "runtime.tgz"); await writeFile(bundle, "tampered", "utf8"); await assert.rejects(bootstrapRuntime({ runtimeRoot: path.join(root, "runtime"), bundlePath: bundle }), /runtime_bundle_sha256_mismatch/); }
+  finally { await rm(root, { recursive: true, force: true }); }
 });

@@ -8,7 +8,7 @@
 
 Runtime 最低 Node 20，官方 CI/开发 Node 22.23.1，Playwright 固定 1.61.1。Runtime 的 npm 依赖在 bundle 构建时按独立 lock 准备并随 bundle 分发；正常扫描不得执行 npm install、pnpm dlx 或下载浏览器。
 
-launcher 只发现和调用已安装 Runtime。优先读取 `JS_TEST_MAPPER_RUNTIME_ROOT`，也允许显式 `--runtime-root`；找不到或完整性失败时停止并给出最小 install/repair 动作，不自动修复。
+launcher 优先读取 `JS_TEST_MAPPER_RUNTIME_ROOT`，也允许显式 `--runtime-root`；找不到或完整性失败时只调用 Skill 内固定的 bootstrap 一次。bootstrap 仅获取 runtime lock 指定的 GitHub Release TGZ，完成 SHA-256 校验并以 `npm --offline --ignore-scripts` 安装；不下载或执行远程脚本。
 
 ## 网络边界
 

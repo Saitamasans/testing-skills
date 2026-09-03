@@ -1,0 +1,10 @@
+{
+  "schema_version": 1,
+  "runtime_name": "@saitamasans/js-test-mapper-runtime",
+  "runtime_version": "0.1.1-rc.2",
+  "release_tag": "v0.1.1-rc.2",
+  "bundle_name": "saitamasans-js-test-mapper-runtime-0.1.1-rc.2.tgz",
+  "bundle_url": "https://github.com/Saitamasans/testing-skills/releases/download/v0.1.1-rc.2/saitamasans-js-test-mapper-runtime-0.1.1-rc.2.tgz",
+  "bundle_sha256": "61f097e13f1f37c546f160336892ab87c881a0e2f18fe0989b6cbc7f501390c2",
+  "install_root": ".codex/runtimes/js-test-mapper"
+}

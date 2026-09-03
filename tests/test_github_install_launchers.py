@@ -30,9 +30,9 @@ REVERSE_TEST_WORKBENCH_RELEASE_BASE = (
     "https://github.com/Saitamasans/testing-skills/releases/download/"
     "reverse-test-workbench-v0.1.0/"
 )
-JS_TEST_MAPPER_RELEASE_BASE = (
-    "https://github.com/Saitamasans/testing-skills/releases/download/"
-    "v0.1.1-rc.1/"
+JS_TEST_MAPPER_RELEASE_BASES = tuple(
+    "https://github.com/Saitamasans/testing-skills/releases/download/" + tag + "/"
+    for tag in ("v0.1.1-rc.1", "v0.1.1-rc.2")
 )
 RAW_INSTALLER = (
     "https://raw.githubusercontent.com/Saitamasans/testing-skills/"
@@ -98,41 +98,18 @@ class GitHubInstallLauncherTest(unittest.TestCase):
                 self.assertEqual(1, text.count("-Skill"))
                 self.assertNotRegex(text, r"%(?:\*|[0-9])")
 
-    def test_js_test_mapper_uses_runtime_specific_installer(self):
+    def test_js_test_mapper_uses_standard_skill_plus_internal_runtime(self):
         launcher = self.installers / SPECIALIZED_INSTALLERS["js-test-mapper"]
         self.assertTrue(launcher.exists(), launcher)
         text = launcher.read_text(encoding="utf-8")
-        self.assertIn("v0.1.1-rc.1/install-js-test-mapper.ps1", text)
-        self.assertRegex(text, r"PS1_SHA256=[a-f0-9]{64}")
-        self.assertIn("Security.Cryptography.SHA256", text)
-        self.assertIn("%*", text)
+        self.assertIn("skills@1.5.23", text)
+        self.assertIn("Saitamasans/testing-skills@v0.1.1-rc.2", text)
+        self.assertIn("--skill js-test-mapper", text)
+        self.assertIn("runtime-bootstrap.mjs", text)
         self.assertIn("TESTING_SKILLS_NO_PAUSE", text)
-        self.assertNotIn("--bundle", text)
-        self.assertNotIn("--manifest", text)
-        self.assertNotIn("--install-root", text)
-        self.assertNotIn("INSTALL_SELECTOR", text)
-
-        installer = (self.installers / "install-js-test-mapper.ps1").read_text(encoding="utf-8")
-        self.assertIn("v0.1.1-rc.1/js-test-mapper-0.1.1-rc.1.zip", installer)
-        self.assertRegex(installer, r"ReleaseZipSha256 = '[a-f0-9]{64}'")
-        self.assertNotIn("/main/", installer)
-        self.assertNotIn("/latest/", installer)
-        for relative in ("SKILL.md", "agents\\openai.yaml", "scripts\\runtime-launcher.mjs"):
-            self.assertIn(relative, installer)
-        self.assertIn(".agents\\skills\\js-test-mapper", installer)
-        self.assertIn(".codex\\runtimes\\js-test-mapper", installer)
-        self.assertIn("Node.js 20", installer)
-        self.assertIn("--runtime-info", installer)
-        contract = json.loads((ROOT / "release" / "js-test-mapper-v0.1.1-rc.1.json").read_text(encoding="utf-8"))
-        self.assertEqual(0, contract["active_business_api_calls"])
-        self.assertEqual(
-            contract["public_installer_sha256"],
-            hashlib.sha256(launcher.read_bytes()).hexdigest(),
-        )
-        self.assertEqual(
-            contract["powershell_installer_sha256"],
-            hashlib.sha256((self.installers / "install-js-test-mapper.ps1").read_bytes()).hexdigest(),
-        )
+        for forbidden in ("powershell", "pwsh", "ExecutionPolicy", "Invoke-WebRequest", "DownloadFile", "Net.WebClient", "curl", "certutil", "bitsadmin", "EncodedCommand"):
+            self.assertNotIn(forbidden.lower(), text.lower())
+        self.assertFalse((self.installers / "install-js-test-mapper.ps1").exists())
 
     def _assert_common_launcher_contract(self, text, *, immutable=False):
         self.assertIn(r"%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe", text)
@@ -191,7 +168,9 @@ class GitHubInstallReadmeTest(unittest.TestCase):
                     self.assertEqual(1, self.readme.count(asset_url))
                     continue
                 if slug == "js-test-mapper":
-                    asset_url = JS_TEST_MAPPER_RELEASE_BASE + "install-js-test-mapper.cmd"
+                    candidates = [base + "install-js-test-mapper.cmd" for base in JS_TEST_MAPPER_RELEASE_BASES]
+                    self.assertEqual(1, sum(self.readme.count(url) for url in candidates))
+                    asset_url = next(url for url in candidates if url in self.readme)
                     self.assertEqual(1, self.readme.count(asset_url))
                     continue
                 asset_url = RELEASE_BASE + f"install-{slug}.cmd"
@@ -370,7 +349,9 @@ class GitHubInstallReadmeTest(unittest.TestCase):
                     release_urls.append(asset_url)
                     continue
                 if slug == "js-test-mapper":
-                    asset_url = JS_TEST_MAPPER_RELEASE_BASE + "install-js-test-mapper.cmd"
+                    candidates = [base + "install-js-test-mapper.cmd" for base in JS_TEST_MAPPER_RELEASE_BASES]
+                    self.assertEqual(1, sum(self.readme.count(url) for url in candidates))
+                    asset_url = next(url for url in candidates if url in self.readme)
                     self.assertEqual(1, self.readme.count(asset_url))
                     self.assertEqual(1, cells[2].count(asset_url))
                     self.assertRegex(

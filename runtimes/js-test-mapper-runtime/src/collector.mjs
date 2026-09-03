@@ -9,6 +9,7 @@ import { runtimeMetadata, validateRunData } from "./run-data.mjs";
 import { integrateStage3Stage4 } from "./stage5-integration.mjs";
 import { buildCognitionInput } from "./cognition.mjs";
 import { batchPurpose, nextBatchId } from "./batch.mjs";
+import { launchBrowserRuntime } from "./browser-runtime.mjs";
 
 const STATIC_IMPORT = /(?:\bimport\s*\(\s*|\b(?:import|export)\s+(?:[^;]*?\bfrom\s*)?)(["'`])([^"'`]+)\1/g;
 const TRACKING_PARAMS = /^(?:utm_.+|fbclid|gclid|_ts|timestamp)$/i;
@@ -95,7 +96,9 @@ export async function collectTarget({
   const responseTasks = [];
   const degradation = [];
   const runtimeObservations = [];
-  const browser = await browserType.launch({ headless: !(headed || interactive) });
+  const browser = browserType === chromium
+    ? (await launchBrowserRuntime({ browserType, headless: !(headed || interactive) })).browser
+    : await browserType.launch({ headless: !(headed || interactive) });
   const context = await browser.newContext();
   const page = await context.newPage();
 

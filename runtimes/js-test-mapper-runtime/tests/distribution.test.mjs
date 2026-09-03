@@ -23,18 +23,17 @@ test("Runtime and Skill release schemas are one semantic contract", async () => 
   }
 });
 
-test("Public release installer forwards the complete user argument vector", async () => {
-  const installer = await readFile(path.join(repoRoot, "release", "install-js-test-mapper-runtime.cmd"), "utf8");
-  assert.match(installer, /install-bundle\.mjs" --release-dir "%RELEASE_DIR%" %\*/);
-  assert.doesNotMatch(installer, /set "INSTALL_ROOT=%~1"/);
+test("Public installer uses an immutable standard Skill install without a script downloader", async () => {
+  const installer = await readFile(path.join(repoRoot, "installers", "install-js-test-mapper.cmd"), "utf8");
+  assert.match(installer, /skills@1\.5\.23/); assert.match(installer, /testing-skills@v0\.1\.1-rc\.2/); assert.match(installer, /--skill js-test-mapper/); assert.match(installer, /runtime-bootstrap\.mjs/);
+  assert.doesNotMatch(installer, /powershell|pwsh|ExecutionPolicy|Invoke-WebRequest|DownloadFile|Net\.WebClient|curl|certutil|bitsadmin|EncodedCommand/i);
 });
 
-test("Fresh acceptance is wired to the public release installer", async () => {
-  const source = await readFile(path.join(repoRoot, "tooling", "run-release-comprehensive-fresh-acceptance.mjs"), "utf8");
-  assert.match(source, /install-js-test-mapper-runtime\.cmd/);
-  assert.match(source, /public_installer_invoked: true/);
-  assert.match(source, /dev_install_api_used: false/);
-  assert.doesNotMatch(source, /import \{ installBundle/);
+test("Tracked Skill contains bootstrap, lock, and launcher self-bootstrap wiring", async () => {
+  const skill = path.join(repoRoot, "skills", "js-test-mapper");
+  const source = (await Promise.all([readFile(path.join(skill, "scripts", "runtime-bootstrap.mjs"), "utf8"), readFile(path.join(skill, "runtime", "runtime-lock.json"), "utf8"), readFile(path.join(skill, "scripts", "runtime-launcher.mjs"), "utf8")])).join("\n");
+  assert.match(source, /--offline/); assert.match(source, /--ignore-scripts/); assert.match(source, /runtime_bundle_sha256_mismatch/); assert.match(source, /v0\.1\.1-rc\.2/);
+  assert.doesNotMatch(source, /testing-skills-src|review[\\/]|[A-Z]:\\Users\\/i);
 });
 
 function run(executable, args, cwd) {
@@ -69,7 +68,7 @@ test("bundle, offline install, receipt, discovery, integrity, and repair form a 
   const packed = await run(process.execPath, [path.join(packageRoot, "scripts", "build-bundle.mjs"), outputDir], packageRoot);
   const bundle = JSON.parse(packed.stdout.trim().split(/\r?\n/).at(-1));
   const manifest = JSON.parse(await readFile(bundle.manifestPath, "utf8"));
-  assert.equal(manifest.runtime.version, "0.1.0");
+  assert.equal(manifest.runtime.version, "0.1.1-rc.2");
   assert.equal(manifest.runtime.minimum_node, 20);
   assert.equal(manifest.browser.normal_scan_downloads, false);
   assert.ok(manifest.files.some((file) => file.path === "bin/js-test-mapper.mjs"));
@@ -83,21 +82,22 @@ test("bundle, offline install, receipt, discovery, integrity, and repair form a 
   const installed = await installBundle({ bundlePath: bundle.bundlePath, manifestPath: bundle.manifestPath, installRoot });
   assert.equal(installed.ok, true);
   const receipt = JSON.parse(await readFile(path.join(installRoot, "runtime-receipt.json"), "utf8"));
-  assert.equal(receipt.runtime_version, "0.1.0");
+  assert.equal(receipt.runtime_version, "0.1.1-rc.2");
   assert.match(receipt.bundle_sha256, /^[a-f0-9]{64}$/);
   assert.match(receipt.manifest_sha256, /^[a-f0-9]{64}$/);
   assert.equal((await checkRuntime(installRoot)).ok, true);
 
   const cli = path.join(installedPackageRoot(installRoot), "bin", "js-test-mapper.mjs");
-  assert.match((await run(process.execPath, [cli, "--version"], root)).stdout, /0\.1\.0/);
+  assert.match((await run(process.execPath, [cli, "--version"], root)).stdout, /0\.1\.1-rc\.2/);
   const launcher = path.join(repoRoot, "skills", "js-test-mapper", "scripts", "runtime-launcher.mjs");
   const discovered = JSON.parse((await run(process.execPath, [launcher, "--runtime-root", installRoot, "--runtime-info"], root)).stdout);
-  assert.equal(discovered.runtime_version, "0.1.0");
+  assert.equal(discovered.runtime_version, "0.1.1-rc.2");
 
   await writeFile(cli, `${await readFile(cli, "utf8")}\n// corruption\n`, "utf8");
   await assert.rejects(checkRuntime(installRoot), /runtime_integrity_failed/);
-  await assert.rejects(run(process.execPath, [launcher, "--runtime-root", installRoot, "--runtime-info"], root), /runtime integrity mismatch/);
-  const repaired = await installBundle({ bundlePath: bundle.bundlePath, manifestPath: bundle.manifestPath, installRoot, repair: true });
-  assert.equal(repaired.repaired, true);
+  const previousBundle = process.env.JS_TEST_MAPPER_RUNTIME_BUNDLE_PATH;
+  process.env.JS_TEST_MAPPER_RUNTIME_BUNDLE_PATH = bundle.bundlePath;
+  try { const output = (await run(process.execPath, [launcher, "--runtime-root", installRoot, "--runtime-info"], root)).stdout.trim().split(/\r?\n/).at(-1); assert.equal(JSON.parse(output).runtime_version, "0.1.1-rc.2"); }
+  finally { if (previousBundle === undefined) delete process.env.JS_TEST_MAPPER_RUNTIME_BUNDLE_PATH; else process.env.JS_TEST_MAPPER_RUNTIME_BUNDLE_PATH = previousBundle; }
   assert.equal((await checkRuntime(installRoot)).ok, true);
 });
