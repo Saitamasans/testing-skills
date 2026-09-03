@@ -32,7 +32,7 @@ REVERSE_TEST_WORKBENCH_RELEASE_BASE = (
 )
 JS_TEST_MAPPER_RELEASE_BASES = tuple(
     "https://github.com/Saitamasans/testing-skills/releases/download/" + tag + "/"
-    for tag in ("v0.1.1-rc.1", "v0.1.1-rc.2")
+    for tag in ("v0.1.1-rc.1", "v0.1.1-rc.2", "v0.1.1-rc.3")
 )
 RAW_INSTALLER = (
     "https://raw.githubusercontent.com/Saitamasans/testing-skills/"
@@ -103,13 +103,41 @@ class GitHubInstallLauncherTest(unittest.TestCase):
         self.assertTrue(launcher.exists(), launcher)
         text = launcher.read_text(encoding="utf-8")
         self.assertIn("skills@1.5.23", text)
-        self.assertIn("Saitamasans/testing-skills@v0.1.1-rc.2", text)
+        self.assertIn("Saitamasans/testing-skills@v0.1.1-rc.3", text)
         self.assertIn("--skill js-test-mapper", text)
         self.assertIn("runtime-bootstrap.mjs", text)
         self.assertIn("TESTING_SKILLS_NO_PAUSE", text)
         for forbidden in ("powershell", "pwsh", "ExecutionPolicy", "Invoke-WebRequest", "DownloadFile", "Net.WebClient", "curl", "certutil", "bitsadmin", "EncodedCommand"):
             self.assertNotIn(forbidden.lower(), text.lower())
         self.assertFalse((self.installers / "install-js-test-mapper.ps1").exists())
+
+    def test_js_test_mapper_installer_hides_success_logs_and_keeps_failure_logs(self):
+        text = (self.installers / SPECIALIZED_INSTALLERS["js-test-mapper"]).read_text(encoding="utf-8")
+        self.assertIn('>"%CLI_LOG%" 2>&1', text)
+        self.assertIn('type "%CLI_LOG%"', text)
+        self.assertIn('del /q "%CLI_LOG%"', text)
+        self.assertIn('>"%RUNTIME_LOG%" 2>&1', text)
+        self.assertIn('type "%RUNTIME_LOG%"', text)
+        self.assertIn('del /q "%RUNTIME_LOG%"', text)
+        self.assertIn('set "CLI_EXIT_CODE=%ERRORLEVEL%"', text)
+        self.assertIn('set "RUNTIME_EXIT_CODE=%ERRORLEVEL%"', text)
+        self.assertIn("[ERROR] 标准 Skill 安装失败", text)
+        self.assertIn("[ERROR] JS 分析 Runtime 准备失败", text)
+        self.assertNotIn("SKILLS ASCII Logo", text)
+        self.assertNotIn("Security Risk Assessments", text)
+        self.assertNotIn("Installation Summary", text)
+        self.assertNotIn('Installing js-test-mapper as a standard Skill', text)
+
+    def test_js_test_mapper_success_summary_is_bilingual_and_near_bottom(self):
+        text = (self.installers / SPECIALIZED_INSTALLERS["js-test-mapper"]).read_text(encoding="utf-8")
+        summary = text.index("[OK] 安装成功")
+        self.assertIn("[OK] Installation successful", text[summary:])
+        self.assertIn("========================================================", text[summary:])
+        self.assertIn("埼玉 AI 测试", text)
+        self.assertIn("[1/3] 正在安装标准 Skill", text)
+        self.assertIn("[2/3] 正在准备 JS 分析 Runtime", text)
+        self.assertIn("[3/3] 正在验证安装", text)
+        self.assertLess(summary, text.index(":node_error"))
 
     def _assert_common_launcher_contract(self, text, *, immutable=False):
         self.assertIn(r"%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe", text)
