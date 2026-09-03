@@ -405,6 +405,18 @@ class GitHubInstallerReleaseWorkflowTest(unittest.TestCase):
         self.assertIn("! -name 'install-reverse-test-workbench.cmd'", workflow)
         self.assertIn("! -name 'install-js-test-mapper-runtime.cmd'", workflow)
         self.assertIn('test "${#ordinary[@]}" -eq 7', workflow)
+        self.assertIn('test "${#frozen_ordinary_names[@]}" -eq 7', workflow)
+        self.assertIn("mapfile -t ordinary_names", workflow)
+        self.assertIn("mapfile -t frozen_ordinary_names", workflow)
+        self.assertIn(
+            'diff -u <(printf \'%s\\n\' "${ordinary_names[@]}") '
+            '<(printf \'%s\\n\' "${frozen_ordinary_names[@]}")',
+            workflow,
+        )
+        self.assertNotIn(
+            'cmp "$launcher" "build/frozen-installers/$(basename "$launcher")"',
+            workflow,
+        )
         for forbidden in [
             "contents: write",
             "gh release upload skill-installers-v1",

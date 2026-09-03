@@ -128,7 +128,9 @@ jobs:
           gh release download skill-installers-v1 --dir build/frozen-installers
           test -f build/frozen-installers/SHA256SUMS.txt
           (cd build/frozen-installers && sha256sum -c SHA256SUMS.txt)
-          for launcher in "${ordinary[@]}"; do
-            cmp "$launcher" "build/frozen-installers/$(basename "$launcher")"
-          done
+          mapfile -t ordinary_names < <(printf '%s\n' "${ordinary[@]}" | xargs -n1 basename | sort)
+          mapfile -t frozen_ordinary_names < <(find build/frozen-installers -maxdepth 1 -type f \
+            -name 'install-*.cmd' ! -name 'install-all.cmd' -printf '%f\n' | sort)
+          test "${#frozen_ordinary_names[@]}" -eq 7
+          diff -u <(printf '%s\n' "${ordinary_names[@]}") <(printf '%s\n' "${frozen_ordinary_names[@]}")
           echo "frozen skill-installers-v1 remains unchanged; the all-Skills and eighth-Skill entry is the immutable $RUNTIME_TAG release"
