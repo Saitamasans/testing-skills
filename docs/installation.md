@@ -56,7 +56,12 @@ codex plugin add reverse-test-workbench@reverse-test-workbench
 
 ## Web JS 逆向测试建图
 
-`js-test-mapper` 是 Runtime 型 Skill。请下载并完整解压 `js-test-mapper-0.1.0.zip`，Windows 用户再运行包内的 `install-js-test-mapper-runtime.cmd`；不要只单独下载该 `.cmd`。安装要求 Node.js 20 或更高版本，首次安装会准备匹配版本的 Playwright Chromium。
+`js-test-mapper` 是 Runtime 型 Skill。普通 Windows 用户点击首页 **Install RC**，只下载
+`install-js-test-mapper.cmd`，然后双击并等待安装完成。安装器会从固定的
+`v0.1.1-rc.1` Release 校验并安装 Skill 与 Runtime；要求 Node.js 20 或更高版本，首次安装会准备匹配版本的 Playwright Chromium。
+
+安装成功后请完全退出并重新打开 CC Switch / Codex，在 Skills 中确认
+`Web JS 逆向测试建图 / js-test-mapper`，随后在新任务里用自然语言直接调用。完整 ZIP 仅用于离线审计和高级安装，不再是普通用户主入口。
 
 ## 多源测试审计
 

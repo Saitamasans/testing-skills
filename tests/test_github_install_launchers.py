@@ -1,3 +1,5 @@
+import hashlib
+import json
 import re
 import sys
 import unittest
@@ -30,7 +32,7 @@ REVERSE_TEST_WORKBENCH_RELEASE_BASE = (
 )
 JS_TEST_MAPPER_RELEASE_BASE = (
     "https://github.com/Saitamasans/testing-skills/releases/download/"
-    "v0.1.0/"
+    "v0.1.1-rc.1/"
 )
 RAW_INSTALLER = (
     "https://raw.githubusercontent.com/Saitamasans/testing-skills/"
@@ -40,8 +42,9 @@ NO_PUBLIC_INSTALLER_SKILLS = {
     "multi-source-test-audit",
 }
 SPECIALIZED_INSTALLERS = {
-    "js-test-mapper": "install-js-test-mapper-runtime.cmd",
+    "js-test-mapper": "install-js-test-mapper.cmd",
 }
+AUXILIARY_INSTALLERS = {"install-js-test-mapper-runtime.cmd"}
 HIDDEN_README_SKILLS = {
     "web-api-test-execution-evidence",
     "test-case-execution-compiler",
@@ -55,7 +58,7 @@ class GitHubInstallLauncherTest(unittest.TestCase):
         cls.installers = ROOT / "installers"
 
     def test_exactly_one_all_and_manifest_launchers_exist(self):
-        expected = {"install-all.cmd"} | {
+        expected = {"install-all.cmd"} | AUXILIARY_INSTALLERS | {
             SPECIALIZED_INSTALLERS.get(slug, f"install-{slug}.cmd")
             for slug in self.slugs
             if slug not in NO_PUBLIC_INSTALLER_SKILLS
@@ -99,11 +102,37 @@ class GitHubInstallLauncherTest(unittest.TestCase):
         launcher = self.installers / SPECIALIZED_INSTALLERS["js-test-mapper"]
         self.assertTrue(launcher.exists(), launcher)
         text = launcher.read_text(encoding="utf-8")
-        self.assertIn("Node.js 20 or newer", text)
-        self.assertIn("runtimes\\js-test-mapper-runtime\\scripts\\install-bundle.mjs", text)
-        for argument in ("--bundle", "--manifest", "--install-root"):
-            self.assertIn(argument, text)
+        self.assertIn("v0.1.1-rc.1/install-js-test-mapper.ps1", text)
+        self.assertRegex(text, r"PS1_SHA256=[a-f0-9]{64}")
+        self.assertIn("Security.Cryptography.SHA256", text)
+        self.assertIn("%*", text)
+        self.assertIn("TESTING_SKILLS_NO_PAUSE", text)
+        self.assertNotIn("--bundle", text)
+        self.assertNotIn("--manifest", text)
+        self.assertNotIn("--install-root", text)
         self.assertNotIn("INSTALL_SELECTOR", text)
+
+        installer = (self.installers / "install-js-test-mapper.ps1").read_text(encoding="utf-8")
+        self.assertIn("v0.1.1-rc.1/js-test-mapper-0.1.1-rc.1.zip", installer)
+        self.assertRegex(installer, r"ReleaseZipSha256 = '[a-f0-9]{64}'")
+        self.assertNotIn("/main/", installer)
+        self.assertNotIn("/latest/", installer)
+        for relative in ("SKILL.md", "agents\\openai.yaml", "scripts\\runtime-launcher.mjs"):
+            self.assertIn(relative, installer)
+        self.assertIn(".agents\\skills\\js-test-mapper", installer)
+        self.assertIn(".codex\\runtimes\\js-test-mapper", installer)
+        self.assertIn("Node.js 20", installer)
+        self.assertIn("--runtime-info", installer)
+        contract = json.loads((ROOT / "release" / "js-test-mapper-v0.1.1-rc.1.json").read_text(encoding="utf-8"))
+        self.assertEqual(0, contract["active_business_api_calls"])
+        self.assertEqual(
+            contract["public_installer_sha256"],
+            hashlib.sha256(launcher.read_bytes()).hexdigest(),
+        )
+        self.assertEqual(
+            contract["powershell_installer_sha256"],
+            hashlib.sha256((self.installers / "install-js-test-mapper.ps1").read_bytes()).hexdigest(),
+        )
 
     def _assert_common_launcher_contract(self, text, *, immutable=False):
         self.assertIn(r"%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe", text)
@@ -162,7 +191,7 @@ class GitHubInstallReadmeTest(unittest.TestCase):
                     self.assertEqual(1, self.readme.count(asset_url))
                     continue
                 if slug == "js-test-mapper":
-                    asset_url = JS_TEST_MAPPER_RELEASE_BASE + "js-test-mapper-0.1.0.zip"
+                    asset_url = JS_TEST_MAPPER_RELEASE_BASE + "install-js-test-mapper.cmd"
                     self.assertEqual(1, self.readme.count(asset_url))
                     continue
                 asset_url = RELEASE_BASE + f"install-{slug}.cmd"
@@ -341,7 +370,7 @@ class GitHubInstallReadmeTest(unittest.TestCase):
                     release_urls.append(asset_url)
                     continue
                 if slug == "js-test-mapper":
-                    asset_url = JS_TEST_MAPPER_RELEASE_BASE + "js-test-mapper-0.1.0.zip"
+                    asset_url = JS_TEST_MAPPER_RELEASE_BASE + "install-js-test-mapper.cmd"
                     self.assertEqual(1, self.readme.count(asset_url))
                     self.assertEqual(1, cells[2].count(asset_url))
                     self.assertRegex(
@@ -403,6 +432,7 @@ class GitHubInstallerReleaseWorkflowTest(unittest.TestCase):
         self.assertIn("! -name 'install-web-api-test-execution-evidence.cmd'", workflow)
         self.assertIn("! -name 'install-workbench-ui-acceptance-execution.cmd'", workflow)
         self.assertIn("! -name 'install-reverse-test-workbench.cmd'", workflow)
+        self.assertIn("! -name 'install-js-test-mapper.cmd'", workflow)
         self.assertIn("! -name 'install-js-test-mapper-runtime.cmd'", workflow)
         self.assertIn('test "${#ordinary[@]}" -eq 7', workflow)
         self.assertIn('test "${#frozen_ordinary_names[@]}" -eq 7', workflow)

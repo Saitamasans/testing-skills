@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "release_version": "0.1.1-rc.1",
+  "runtime_version": "0.1.0",
+  "tag": "v0.1.1-rc.1",
+  "public_installer": "install-js-test-mapper.cmd",
+  "public_installer_sha256": "ab6417c0a26a1598260f7286326a828fd68cb3d51666d08c18f4709497c01cb6",
+  "powershell_installer": "install-js-test-mapper.ps1",
+  "powershell_installer_sha256": "e5f0f9095cd1378c2fc30cfab79c94488e61daac6092e4c6fe4ccf410743530a",
+  "release_zip": "js-test-mapper-0.1.1-rc.1.zip",
+  "release_zip_sha256": "949c0c32b40843b9053da4acee2a426bd61e54563289701fa80056065439b1f6",
+  "runtime_tgz": "saitamasans-js-test-mapper-runtime-0.1.0.tgz",
+  "runtime_tgz_sha256": "2023ba964a201a3615d40b6776b7f9c885eaf669df7325282170c407d5a545a8",
+  "active_business_api_calls": 0
+}

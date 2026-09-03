@@ -265,7 +265,7 @@ class NoNodeInstallerStaticTest(unittest.TestCase):
         for launcher in (ROOT / "installers").glob("*.cmd"):
             with self.subTest(launcher=launcher.name):
                 text = launcher.read_text(encoding="utf-8")
-                if launcher.name == "install-js-test-mapper-runtime.cmd":
+                if launcher.name in {"install-js-test-mapper.cmd", "install-js-test-mapper-runtime.cmd"}:
                     continue
                 if launcher.name in {
                     "install-all.cmd",
