@@ -15,7 +15,7 @@ for /f "delims=." %%V in ('node -p "process.versions.node"') do set "NODE_MAJOR=
 if not defined NODE_MAJOR goto node_error
 if %NODE_MAJOR% LSS 20 goto node_error
 echo [1/3] 正在安装标准 Skill...
-call npx.cmd -y skills@1.5.23 add Saitamasans/testing-skills@v0.1.1-rc.3 --skill js-test-mapper --agent codex --global --yes --copy >"%CLI_LOG%" 2>&1
+call npx.cmd -y skills@1.5.23 add Saitamasans/testing-skills@v0.1.1-rc.4 --skill js-test-mapper --agent codex --global --yes --copy >"%CLI_LOG%" 2>&1
 set "CLI_EXIT_CODE=%ERRORLEVEL%"
 if not "%CLI_EXIT_CODE%"=="0" (
   set "INSTALL_EXIT_CODE=%CLI_EXIT_CODE%"

@@ -1,6 +1,9 @@
 import hashlib
 import json
 import re
+import os
+import tempfile
+import subprocess
 import sys
 import unittest
 from pathlib import Path
@@ -32,7 +35,7 @@ REVERSE_TEST_WORKBENCH_RELEASE_BASE = (
 )
 JS_TEST_MAPPER_RELEASE_BASES = tuple(
     "https://github.com/Saitamasans/testing-skills/releases/download/" + tag + "/"
-    for tag in ("v0.1.1-rc.1", "v0.1.1-rc.2", "v0.1.1-rc.3")
+    for tag in ("v0.1.1-rc.1", "v0.1.1-rc.2", "v0.1.1-rc.3", "v0.1.1-rc.4")
 )
 RAW_INSTALLER = (
     "https://raw.githubusercontent.com/Saitamasans/testing-skills/"
@@ -103,7 +106,7 @@ class GitHubInstallLauncherTest(unittest.TestCase):
         self.assertTrue(launcher.exists(), launcher)
         text = launcher.read_text(encoding="utf-8")
         self.assertIn("skills@1.5.23", text)
-        self.assertIn("Saitamasans/testing-skills@v0.1.1-rc.3", text)
+        self.assertIn("Saitamasans/testing-skills@v0.1.1-rc.4", text)
         self.assertIn("--skill js-test-mapper", text)
         self.assertIn("runtime-bootstrap.mjs", text)
         self.assertIn("TESTING_SKILLS_NO_PAUSE", text)
@@ -126,7 +129,44 @@ class GitHubInstallLauncherTest(unittest.TestCase):
         self.assertNotIn("SKILLS ASCII Logo", text)
         self.assertNotIn("Security Risk Assessments", text)
         self.assertNotIn("Installation Summary", text)
-        self.assertNotIn('Installing js-test-mapper as a standard Skill', text)
+
+    def test_js_test_mapper_cmd_is_crlf_and_executes_with_windows_cmd(self):
+        launcher = self.installers / SPECIALIZED_INSTALLERS["js-test-mapper"]
+        raw = launcher.read_bytes()
+        self.assertNotIn(b"\r\n\n", raw)
+        self.assertEqual(0, raw.count(b"\n") - raw.count(b"\r\n"))
+        self.assertEqual(0, raw.count(b"\x00"))
+        with tempfile.TemporaryDirectory(prefix="js-test-mapper-cmd-") as temp:
+            root = Path(temp)
+            mock_npx = root / "npx.cmd"
+            mock_npx.write_text(
+                "@echo off\n"
+                "set \"P=%USERPROFILE%\\.agents\\skills\\js-test-mapper\"\n"
+                "mkdir \"%P%\" >nul 2>nul\n"
+                "mkdir \"%P%\\agents\" >nul 2>nul\n"
+                "mkdir \"%P%\\scripts\" >nul 2>nul\n"
+                ">\"%P%\\SKILL.md\" echo fixture\n"
+                ">\"%P%\\agents\\openai.yaml\" echo fixture\n"
+                ">\"%P%\\scripts\\runtime-bootstrap.mjs\" echo process.exit(0);\n"
+                "exit /b 0\n",
+                encoding="ascii",
+                newline="\r\n",
+            )
+            env = os.environ.copy()
+            env["TESTING_SKILLS_NO_PAUSE"] = "1"
+            env["USERPROFILE"] = str(root / "profile")
+            env["PATH"] = str(root) + os.pathsep + env.get("PATH", "")
+            result = subprocess.run(
+                [os.environ.get("ComSpec", "cmd.exe"), "/d", "/c", str(launcher)],
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                env=env,
+                timeout=30,
+            )
+        self.assertNotEqual(9009, result.returncode)
+        self.assertNotIn("not recognized as an internal or external command", (result.stdout or "") + (result.stderr or ""))
 
     def test_js_test_mapper_success_summary_is_bilingual_and_near_bottom(self):
         text = (self.installers / SPECIALIZED_INSTALLERS["js-test-mapper"]).read_text(encoding="utf-8")
