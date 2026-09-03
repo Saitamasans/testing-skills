@@ -5,6 +5,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tooling"))
 from build_skills import BANNER, EXECUTION_BANNER, build_all, load_manifest, parse_frontmatter
+from branding import origin_alias, origin_text
 
 ORIGINAL_SEVEN = {
     "single-api-test-full": "skill-sources/single-api-test-full/\u5355\u63a5\u53e3\u7528\u4f8b\u751f\u6210\u4e0e\u5bf9\u9f50_\u5b8c\u6574\u7248Skill_v0.3.md",
@@ -112,6 +113,9 @@ class BuildSkillsTest(unittest.TestCase):
             else:
                 self.assertIn(source_body.strip(), generated_body)
             self.assertTrue((generated.parent / "agents/openai.yaml").exists())
+            origin = generated.parent / "ORIGIN.txt"
+            self.assertEqual(origin_text(item["slug"], ROOT), origin.read_text(encoding="utf-8"))
+            self.assertIn(f"Alias: {origin_alias(item['slug'], ROOT)}", origin.read_text(encoding="utf-8"))
 
     def test_check_mode_detects_no_drift(self):
         build_all(ROOT)

@@ -7,6 +7,8 @@ import sys
 import tempfile
 from pathlib import Path
 
+from branding import origin_text
+
 ROOT = Path(__file__).resolve().parents[1]
 BANNER = "<!-- 此文件由根目录中文源文件自动生成，请勿直接编辑。 -->"
 EXECUTION_BANNER = "<!-- 此文件由源文件自动生成，请勿直接编辑。 -->"
@@ -146,6 +148,7 @@ def build_all(root: Path = ROOT, check: bool = False) -> list[Path]:
                 raise ValueError(f"manifest root_file 不存在: {source_file}")
             desired[package / relative] = source_file.read_bytes()
         desired[package / "agents/openai.yaml"] = _openai_yaml(item)
+        desired[package / "ORIGIN.txt"] = origin_text(item["slug"], root)
         if item["case_output"]:
             renderer = root / "tooling/test-case-renderer.mjs"
             if renderer.exists():

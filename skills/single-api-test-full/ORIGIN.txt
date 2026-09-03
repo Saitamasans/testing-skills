@@ -1,0 +1,3 @@
+Origin: 埼玉 AI 测试
+Alias: saitamasans
+Purpose: attribution only; not part of Skill execution instructions.

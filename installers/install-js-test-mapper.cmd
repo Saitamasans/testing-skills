@@ -1,6 +1,9 @@
 @echo off
 setlocal EnableExtensions
 set "INSTALL_EXIT_CODE=1"
+rem brand:display:start
+echo 埼玉 AI 测试 - js-test-mapper installer
+rem brand:display:end
 where node.exe >nul 2>nul || (echo ERROR: Node.js 20 or newer is required.& goto finish)
 where npm.cmd >nul 2>nul || (echo ERROR: npm is required.& goto finish)
 where npx.cmd >nul 2>nul || (echo ERROR: npx is required.& goto finish)

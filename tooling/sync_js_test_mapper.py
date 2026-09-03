@@ -7,6 +7,8 @@ import sys
 import tempfile
 from pathlib import Path
 
+from branding import origin_text
+
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE = ROOT / "skill-sources" / "js-test-mapper"
@@ -51,6 +53,7 @@ def desired_public() -> dict[Path, bytes]:
         f"  default_prompt: \"{item['default_prompt']}\"\n"
     )
     source_files[Path("agents/openai.yaml")] = yaml.encode("utf-8")
+    source_files[Path("ORIGIN.txt")] = origin_text("js-test-mapper", ROOT).encode("utf-8")
     return source_files
 
 

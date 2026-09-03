@@ -1,5 +1,9 @@
 # testing-skills
 
+<!-- brand:display:start -->
+由 **埼玉 AI 测试** 维护的中文测试 Skill 集合。
+<!-- brand:display:end -->
+
 面向中文测试工作的通用 Agent Skill，覆盖需求澄清、测试设计、用例审计、正式服验证、多源测试审计和浏览器 UI 执行。
 
 [选择 Skill](#skills) · [安装文档](docs/installation.md) · [使用指南](docs/skill-guides.md) · [开发与发布](docs/development.md)
