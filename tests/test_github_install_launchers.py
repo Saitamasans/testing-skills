@@ -106,7 +106,7 @@ class GitHubInstallLauncherTest(unittest.TestCase):
         self.assertTrue(launcher.exists(), launcher)
         text = launcher.read_text(encoding="utf-8")
         self.assertIn("skills@1.5.23", text)
-        self.assertIn("Saitamasans/testing-skills@v0.1.1-rc.4", text)
+        self.assertIn("Saitamasans/testing-skills@v0.1.1-rc.5", text)
         self.assertIn("--skill js-test-mapper", text)
         self.assertIn("runtime-bootstrap.mjs", text)
         self.assertIn("TESTING_SKILLS_NO_PAUSE", text)
@@ -124,8 +124,8 @@ class GitHubInstallLauncherTest(unittest.TestCase):
         self.assertIn('del /q "%RUNTIME_LOG%"', text)
         self.assertIn('set "CLI_EXIT_CODE=%ERRORLEVEL%"', text)
         self.assertIn('set "RUNTIME_EXIT_CODE=%ERRORLEVEL%"', text)
-        self.assertIn("[ERROR] 标准 Skill 安装失败", text)
-        self.assertIn("[ERROR] JS 分析 Runtime 准备失败", text)
+        self.assertIn("[ERROR] Standard Skill installation failed.", text)
+        self.assertIn("[ERROR] JS analysis Runtime preparation failed.", text)
         self.assertNotIn("SKILLS ASCII Logo", text)
         self.assertNotIn("Security Risk Assessments", text)
         self.assertNotIn("Installation Summary", text)
@@ -133,6 +133,10 @@ class GitHubInstallLauncherTest(unittest.TestCase):
     def test_js_test_mapper_cmd_is_crlf_and_executes_with_windows_cmd(self):
         launcher = self.installers / SPECIALIZED_INSTALLERS["js-test-mapper"]
         raw = launcher.read_bytes()
+        self.assertEqual(raw, raw.decode("ascii").encode("ascii"))
+        self.assertGreater(raw.count(b"\r\n"), 0)
+        self.assertNotIn(b"\xef\xbb\xbf", raw)
+        self.assertNotRegex(raw, rb"[^\x09\x0a\x0d\x20-\x7e]")
         self.assertNotIn(b"\r\n\n", raw)
         self.assertEqual(0, raw.count(b"\n") - raw.count(b"\r\n"))
         self.assertEqual(0, raw.count(b"\x00"))
@@ -165,19 +169,24 @@ class GitHubInstallLauncherTest(unittest.TestCase):
                 env=env,
                 timeout=30,
             )
-        self.assertNotEqual(9009, result.returncode)
+        self.assertEqual(0, result.returncode)
+        self.assertIn("[OK] Installation successful.", result.stdout)
+        self.assertIn("Please fully restart CC Switch / Codex before use.", result.stdout)
         self.assertNotIn("not recognized as an internal or external command", (result.stdout or "") + (result.stderr or ""))
 
     def test_js_test_mapper_success_summary_is_bilingual_and_near_bottom(self):
         text = (self.installers / SPECIALIZED_INSTALLERS["js-test-mapper"]).read_text(encoding="utf-8")
-        summary = text.index("[OK] 安装成功")
-        self.assertIn("[OK] Installation successful", text[summary:])
+        summary = text.index("[OK] Installation successful.")
+        self.assertIn("Saitama AI Testing", text)
+        self.assertIn("Web JS Reverse Test Mapper", text)
+        self.assertIn("[OK] Installation successful.", text[summary:])
         self.assertIn("========================================================", text[summary:])
-        self.assertIn("埼玉 AI 测试", text)
-        self.assertIn("[1/3] 正在安装标准 Skill", text)
-        self.assertIn("[2/3] 正在准备 JS 分析 Runtime", text)
-        self.assertIn("[3/3] 正在验证安装", text)
+        self.assertIn("Saitama AI Testing", text)
+        self.assertIn("[1/3] Installing standard Skill", text)
+        self.assertIn("[2/3] Preparing JS analysis Runtime", text)
+        self.assertIn("[3/3] Verifying installation", text)
         self.assertLess(summary, text.index(":node_error"))
+        self.assertNotRegex(text, r"[^\x00-\x7f]")
 
     def _assert_common_launcher_contract(self, text, *, immutable=False):
         self.assertIn(r"%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe", text)
