@@ -28,6 +28,10 @@ test("automatic readonly traversal maps Dcat-style navigation without business m
     assert.ok(visitedUrls.some((url) => url.includes("page=2")));
     assert.ok(observation.visited.some((item) => item.category === "safe_tab" && item.entry_label === "History"));
     assert.ok(observation.visited.some((item) => item.url.includes("/admin/orders/1/history")));
+    assert.ok(visitedUrls.some((url) => url === "/admin/delayed"));
+    assert.ok(visitedUrls.some((url) => url === "/admin/safe-a"));
+    assert.ok(visitedUrls.some((url) => url === "/admin/safe-b"));
+    assert.ok(observation.skipped.some((item) => item.href?.includes("/admin/broken") && item.reason === "navigation_failed"));
     assert.ok(observation.blocked.some((item) => /create|edit|export|delete|regenerate/i.test(item.href || item.label)));
     assert.ok(observation.skipped.some((item) => item.reason === "readonly_intent_not_proven"));
     const orders = observation.visited.find((item) => new URL(item.url).pathname === "/admin/orders");

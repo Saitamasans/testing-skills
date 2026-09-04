@@ -5,6 +5,6 @@
   "release_tag": "v0.1.1-rc.6",
   "bundle_name": "saitamasans-js-test-mapper-runtime-0.1.1-rc.6.tgz",
   "bundle_url": "https://github.com/Saitamasans/testing-skills/releases/download/v0.1.1-rc.6/saitamasans-js-test-mapper-runtime-0.1.1-rc.6.tgz",
-  "bundle_sha256": "a02e7d2969dc24a546df230f287c95727d4286cd76c656c059188fd6c4314628",
+  "bundle_sha256": "99b8b134400042bfd35cf9916c692cdc8d107f6ea2c9fc2fedade35f98ac2cc0",
   "install_root": ".codex/runtimes/js-test-mapper"
 }

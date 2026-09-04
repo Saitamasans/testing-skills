@@ -71,7 +71,7 @@ export async function traverseReadonlyNavigation({ page, onPage = null, maxPages
     const next = queue.shift(); const target = canonicalUrl(next.url, page.url());
     if (!target || new URL(target).origin !== origin || visitedUrls.has(target)) continue;
     try {
-      if (canonicalUrl(page.url(), page.url()) !== target) await page.goto(target, { waitUntil: "domcontentloaded", timeout: 5000 });
+      if (canonicalUrl(page.url(), page.url()) !== target) { const response = await page.goto(target, { waitUntil: "domcontentloaded", timeout: 5000 }); if (response && response.status() >= 400) { skipped.push({ label: next.entryLabel || "", href: redactSensitiveUrl(target), reason: "navigation_http_error", http_status: response.status(), category: next.category }); continue; } }
       await settle(page, Math.max(500, settleMs));
     } catch {
       skipped.push({ label: next.entryLabel || "", href: redactSensitiveUrl(target), reason: "navigation_failed", category: next.category });
@@ -88,7 +88,7 @@ export async function traverseReadonlyNavigation({ page, onPage = null, maxPages
       if (decision.category === "safe_tab") {
         try { await page.locator("a[href], [role=tab], button[data-toggle=tab], button[data-bs-toggle=tab]").nth(entry.index).click(); await settle(page); const tabTarget = entry.href || `#${entry.entryLabel}`; const tabKey = `${canonicalUrl(page.url(), page.url())}#tab:${entry.entryLabel}:${tabTarget}`; const tabSnapshot = await pageSnapshot(page, "safe_tab", { parent_menu: entry.parentMenu, menu_depth: entry.menuDepth, entry_label: entry.entryLabel, discovered_from: entry.discoveredFrom, target_url: redactSensitiveUrl(page.url()), tab_identity: tabKey }); tabSnapshot.url = redactSensitiveUrl(tabSnapshot.url); if (!visitedKeys.has(tabKey)) { visitedKeys.add(tabKey); visited.push(tabSnapshot); if (onPage) await onPage({ page, snapshot: tabSnapshot }); const fresh = await discover(page); for (const child of fresh) { const childDecision = classifyReadonlyEntry(child, page.url()); if (childDecision.decision === "blocked") record(blocked, child, childDecision); else if (childDecision.decision === "skipped") record(skipped, child, childDecision); else if (childDecision.url && !queued.has(childDecision.url)) { queued.add(childDecision.url); queue.push({ url: childDecision.url, category: childDecision.category, parentMenu: entry.entryLabel, menuDepth: (entry.menuDepth || 0) + 1, discoveredFrom: page.url() }); } } } } catch { record(skipped, entry, { reason: "tab_navigation_failed" }); } continue; }
       if (decision.category === "pagination") { const base = new URL(page.url()); base.search = ""; const count = paginationCounts.get(base.href) || 0; if (count >= MAX_PAGINATION_PER_LIST) { record(skipped, entry, { reason: "pagination_sample_limit" }); continue; } paginationCounts.set(base.href, count + 1); }
-      if (decision.url && !queued.has(decision.url)) { queued.add(decision.url); queue.push({ url: decision.url, category: decision.category, parentMenu: entry.parentMenu || entry.entryLabel || null, menuDepth: (entry.menuDepth || 0) + 1, discoveredFrom: page.url() }); }
+      if (decision.url && !queued.has(decision.url)) { queued.add(decision.url); queue.push({ url: decision.url, category: decision.category, entryLabel: entry.entryLabel, parentMenu: entry.parentMenu || entry.entryLabel || null, menuDepth: (entry.menuDepth || 0) + 1, discoveredFrom: page.url() }); }
     }
   }
   if (queue.length) skipped.push({ label: "", href: null, reason: "navigation_limit_reached", category: null });
