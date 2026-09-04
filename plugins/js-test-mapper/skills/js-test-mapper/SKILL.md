@@ -1,6 +1,6 @@
 ---
 name: js-test-mapper
-description: Use when a user needs to understand and map an unfamiliar Web test system from a URL by performing read-only JS/runtime reconnaissance, recovering routes, representative call chains, API references, permission/state clues, and producing tester-facing evidence-backed outputs without executing business tests.
+description: 用于只有 Web 测试地址或需求资料不完整时，通过只读 JS / Runtime 勘查逆向梳理系统路由、代表性调用链、接口引用、权限和状态线索，并输出面向测试人员的可追溯系统地图；不执行正式业务测试。
 ---
 
 <!-- 此文件由根目录中文源文件自动生成，请勿直接编辑。 -->
@@ -29,7 +29,7 @@ description: Use when a user needs to understand and map an unfamiliar Web test 
 6. 输出 `evidence/run-data.json`，并使用 `schemas/run-data.schema.json` 做结构和语义校验。
 7. 单资产、无 Map 或坏 Map 只局部降级，不把整个 Run 判失败。
 8. `scan` 只生成技术事实和 `cognition-input.json`；由当前 AI 按 `schemas/cognition.schema.json` 生成 `evidence/cognition.json`，再运行 `finalize` 生成正式 Word / Excel 和派生 evidence views。
-9. 如需登录或只读导航，使用 `scan --interactive`；浏览器会在同一个 Context/Run 中等待用户自行完成登录并按 Enter 结束采集。
+9. 如需登录或只读导航，使用 `scan --interactive`；浏览器会在同一个 Context/Run 中等待用户自行完成登录，用户确认登录后自动安全遍历可见导航、列表、只读详情、安全页签和分页，不要求用户逐个手工切换菜单；不确定入口默认跳过并记录。
 
 ## 当前能力边界
 

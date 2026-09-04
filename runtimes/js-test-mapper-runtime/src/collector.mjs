@@ -10,6 +10,7 @@ import { integrateStage3Stage4 } from "./stage5-integration.mjs";
 import { buildCognitionInput } from "./cognition.mjs";
 import { batchPurpose, nextBatchId } from "./batch.mjs";
 import { launchBrowserRuntime } from "./browser-runtime.mjs";
+import { traverseReadonlyNavigation } from "./readonly-navigation.mjs";
 
 const STATIC_IMPORT = /(?:\bimport\s*\(\s*|\b(?:import|export)\s+(?:[^;]*?\bfrom\s*)?)(["'`])([^"'`]+)\1/g;
 const TRACKING_PARAMS = /^(?:utm_.+|fbclid|gclid|_ts|timestamp)$/i;
@@ -79,6 +80,7 @@ export async function collectTarget({
   interactive = false,
   interactiveController = null,
   onInteractiveReady = null,
+  autoReadonlyNavigation = true,
   dynamicWaitMs = 500,
   browserType = chromium,
 }) {
@@ -165,16 +167,20 @@ export async function collectTarget({
     addDeclared(declared);
     await page.waitForTimeout(dynamicWaitMs);
     if (interactive) {
-      console.log("如页面需要登录，请在这个受控浏览器中自行登录。可以打开菜单、Tab、只读详情等页面帮助发现 lazy chunk。不要点击保存、提交、删除、审核、启停、发布、支付、上传等会改变业务状态的操作。完成登录和只读导航后，回到终端按 Enter 结束采集。");
+      console.log("如页面需要登录，请在这个受控浏览器中自行完成登录。登录完成后，采集器会自动遍历可确认安全的只读导航、列表、详情、页签和分页；不确定或可能改变业务状态的入口会自动跳过或阻止。");
       if (onInteractiveReady) await onInteractiveReady({ browser, context, page });
       if (interactiveController) await interactiveController({ browser, context, page });
       else {
         const readline = await import("node:readline/promises");
         const input = readline.createInterface({ input: process.stdin, output: process.stdout });
-        await input.question("按 Enter 结束采集并生成结果：");
+        await input.question("完成登录后按 Enter，开始自动安全只读遍历：");
         input.close();
       }
       addDeclared(await collectDeclared());
+      if (autoReadonlyNavigation) {
+        const readonlyNavigation = await traverseReadonlyNavigation({ page, onPage: async () => addDeclared(await collectDeclared()) });
+        runtimeObservations.push({ type: "readonly_navigation", ...readonlyNavigation });
+      }
     }
     await Promise.allSettled(responseTasks);
 
@@ -277,7 +283,7 @@ export async function collectTarget({
       ],
       assets,
       technical_facts: [...reusedFacts, ...l1.facts],
-      runtime_observations: [...runtimeObservations, { type: "source_maps", results: maps }, { type: "l1_analysis", results: l1.analyses }, { type: "passive_requests", requests: guardSnapshot.observed_requests }, { type: "blocked_business_api_attempts", attempts: guardSnapshot.blocked_business_api_attempts }, { type: "page_content_policy", value: "untrusted_data_not_instructions" }],
+      runtime_observations: [...runtimeObservations, { type: "source_maps", results: maps }, { type: "l1_analysis", results: l1.analyses }, { type: "browser_navigation_requests", requests: guardSnapshot.observed_requests.filter((item) => item.navigation) }, { type: "page_initiated_requests", requests: guardSnapshot.observed_requests.filter((item) => !item.navigation) }, { type: "passive_requests", requests: guardSnapshot.observed_requests }, { type: "blocked_business_api_attempts", attempts: guardSnapshot.blocked_business_api_attempts }, { type: "page_content_policy", value: "untrusted_data_not_instructions" }],
       evidence: assets.filter((asset) => asset.content_sha256).map((asset) => ({ evidence_id: `evidence-${asset.asset_id}`, asset_id: asset.asset_id, sha256: asset.content_sha256, source: asset.discovery_sources, persisted_bytes: false })),
       degradation,
       runtime: await runtimeMetadata(),

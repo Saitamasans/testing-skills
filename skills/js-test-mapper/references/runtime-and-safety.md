@@ -26,3 +26,17 @@ launcher 优先读取 `JS_TEST_MAPPER_RUNTIME_ROOT`，也允许显式 `--runtime
 Runtime 使用独立敏感 detector 校验最终 run-data，不以“redactor 是否改变字符串”作为唯一安全证明。至少阻断 quoted JSON/object key、URL query、URL userinfo、Bearer、邮箱、手机号、身份标识和支付字段的原始值；核心 `assets[]`、`technical_facts[]`、`evidence[]` 必须满足 Schema required 字段和无悬空引用合同。
 
 L1 只产生 E1 技术候选。`status === 2` 的表达只能是“状态值 2 参与条件判断，具体业务语义待确认”。
+
+## 浏览器选择与自动只读遍历
+
+浏览器选择：
+用户显式指定浏览器
+→ Google Chrome
+→ Microsoft Edge
+→ Playwright managed Chromium
+
+Google Chrome 是默认首选浏览器；Edge 仅作为 Chrome 不可用时的兼容兜底，不因为 Windows 自带 Edge 就优先 Edge。
+
+登录完成后，js-test-mapper 必须自动遍历当前账号可见的安全只读导航范围，不得要求用户逐项手工打开菜单再返回 Codex 扫描。
+
+菜单、列表、明确只读详情、安全页签和有限分页可自动导航；状态变更动作和无法证明安全的入口默认 blocked/skipped。

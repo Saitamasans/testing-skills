@@ -204,3 +204,27 @@ export function stage3NegativeRecoverySource() {
   return requestFallback(config);
 }`;
 }
+
+export async function startDcatReadonlyFixture() {
+  const requests = [];
+  let mutationCount = 0;
+  const server = createServer((request, response) => {
+    requests.push({ method: request.method, url: request.url });
+    const pathname = new URL(request.url, "http://dcat.local").pathname;
+    const send = (body, type = "text/html; charset=utf-8", status = 200) => { response.writeHead(status, { "content-type": type }); response.end(body); };
+    const shell = (content, title) => "<!doctype html><html><head><title>" + title + "</title><script src=\"/assets/admin.js\"></script></head><body>" +
+      "<aside class=\"main-sidebar\"><nav><a href=\"/admin/dashboard\">Dashboard</a><a href=\"/admin/orders\">Orders</a><a href=\"/admin/settings\">Settings</a><a href=\"/admin/orders/create\">Create Order</a><a href=\"/admin/orders/1/edit\">Edit</a><a href=\"/admin/orders/export\">Export</a></nav></aside>" +
+      "<main><nav class=\"breadcrumb\"><a href=\"/admin/dashboard\">Home</a><span class=\"breadcrumb-item\">" + title + "</span></nav>" + content + "</main></body></html>";
+    if (/^\/admin\/(?:cache\/clear|password\/reset|data\/sync|refund|orders\/cancel|regenerate|tasks\/run|orders\/export)$/.test(pathname)) { mutationCount += 1; return send("mutated"); }
+    if (pathname === "/admin/login") return send(shell("<h1>Login</h1>", "Login"));
+    if (pathname === "/admin/dashboard") return send(shell("<h1>Dashboard</h1><p>Overview</p>", "Dashboard"));
+    if (pathname === "/admin/orders") return send(shell("<h1>Orders</h1><form><input name=\"q\" placeholder=\"Search orders\"><select name=\"status\"><option>All</option></select></form><table><thead><tr><th>ID</th><th>Status</th><th>Total</th></tr></thead><tbody><tr><td><a href=\"/admin/orders/1\">View</a></td><td>Pending</td><td>10</td></tr></tbody></table><div class=\"pagination\"><a href=\"/admin/orders?page=2\">2</a><a href=\"/admin/orders?page=2\">Next</a></div><div class=\"tabs\"><a role=\"tab\" href=\"/admin/orders?tab=history\">History</a><a role=\"tab\" href=\"/admin/orders?tab=notes\">Notes</a></div><a href=\"/admin/settings/unknown\">Open</a>", "Orders"));
+    if (pathname === "/admin/orders/1") return send(shell("<h1>Order detail</h1><dl><dt>ID</dt><dd>1</dd></dl><a href=\"/admin/orders/1/edit\">Edit</a><a href=\"/admin/orders/1/delete\">Delete</a>", "Order detail"));
+    if (pathname === "/admin/settings") return send(shell("<h1>Settings</h1>", "Settings"));
+    if (pathname === "/assets/admin.js") return send("const route = '/admin'; const api = '/api/orders';", "application/javascript");
+    return send("not found", "text/plain", 404);
+  });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const address = server.address();
+  return { url: `http://127.0.0.1:${address.port}/admin/login`, requests, get mutationCount() { return mutationCount; }, async close() { await new Promise((resolve, reject) => server.close((error) => error ? reject(error) : resolve())); } };
+}

@@ -178,6 +178,7 @@ export class BusinessApiGuard {
       technical,
       business,
       passive: true,
+      navigation: typeof request.isNavigationRequest === "function" ? request.isNavigationRequest() : false,
     });
   }
 

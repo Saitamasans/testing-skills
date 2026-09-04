@@ -3,8 +3,8 @@ import { access } from "node:fs/promises";
 export function browserCandidates({ env = process.env, browserType } = {}) {
   const candidates = [];
   if (env.JS_TEST_MAPPER_BROWSER_EXECUTABLE) candidates.push({ kind: "executable", label: "explicit executable", launchOptions: { executablePath: env.JS_TEST_MAPPER_BROWSER_EXECUTABLE } });
-  candidates.push({ kind: "channel", label: "system Edge", launchOptions: { channel: "msedge" } });
   candidates.push({ kind: "channel", label: "system Chrome", launchOptions: { channel: "chrome" } });
+  candidates.push({ kind: "channel", label: "system Edge", launchOptions: { channel: "msedge" } });
   const managedPath = browserType?.executablePath?.();
   if (managedPath) candidates.push({ kind: "managed", label: "Playwright managed Chromium", launchOptions: { executablePath: managedPath } });
   return candidates;

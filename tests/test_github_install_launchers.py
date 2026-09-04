@@ -106,7 +106,7 @@ class GitHubInstallLauncherTest(unittest.TestCase):
         self.assertTrue(launcher.exists(), launcher)
         text = launcher.read_text(encoding="utf-8")
         self.assertIn("skills@1.5.23", text)
-        self.assertIn("Saitamasans/testing-skills@v0.1.1-rc.5", text)
+        self.assertIn("Saitamasans/testing-skills@v0.1.1-rc.6", text)
         self.assertIn("--skill js-test-mapper", text)
         self.assertIn("runtime-bootstrap.mjs", text)
         self.assertIn("TESTING_SKILLS_NO_PAUSE", text)
@@ -141,7 +141,7 @@ class GitHubInstallLauncherTest(unittest.TestCase):
         self.assertEqual(0, raw.count(b"\n") - raw.count(b"\r\n"))
         self.assertEqual(0, raw.count(b"\x00"))
         text = raw.decode("ascii")
-        self.assertIn("Saitamasans/testing-skills@v0.1.1-rc.5", text)
+        self.assertIn("Saitamasans/testing-skills@v0.1.1-rc.6", text)
         self.assertIn("[OK] Installation successful.", text)
         self.assertIn("Please fully restart CC Switch / Codex before use.", text)
 

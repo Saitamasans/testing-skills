@@ -9,7 +9,7 @@ test("bootstrap and public installer enforce Node 20 and immutable tracked input
   assert.ok(Number(process.versions.node.split(".")[0]) >= 20);
   const bootstrap = await readFile(new URL("../../../skill-sources/js-test-mapper/scripts/runtime-bootstrap.mjs", import.meta.url), "utf8");
   const installer = await readFile(new URL("../../../installers/install-js-test-mapper.cmd", import.meta.url), "utf8");
-  assert.match(bootstrap, /node_20_or_newer_required/); assert.match(installer, /Node\.js 20 or newer/); assert.match(installer, /testing-skills@v0\.1\.1-rc\.2/);
+  assert.match(bootstrap, /node_20_or_newer_required/); assert.match(installer, /Node\.js 20 or newer/); assert.match(installer, /testing-skills@v0\.1\.1-rc\.6/);
   assert.doesNotMatch(bootstrap + installer, /testing-skills-src|review[\\/]|[A-Z]:\\Users\\/i);
 });
 
