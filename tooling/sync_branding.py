@@ -63,8 +63,15 @@ def sync(root: Path = ROOT, check: bool = False) -> None:
     for path, content in expected_files(root).items():
         is_installer = path == root / INSTALLER_PATH
         if check:
-            expected = installer_bytes(content) if is_installer else content.encode("utf-8")
-            if not path.exists() or path.read_bytes() != expected:
+            matches = (
+                path.exists()
+                and (
+                    path.read_bytes() == installer_bytes(content)
+                    if is_installer
+                    else path.read_text(encoding="utf-8") == content
+                )
+            )
+            if not matches:
                 drift.append(path.relative_to(root).as_posix())
         else:
             path.parent.mkdir(parents=True, exist_ok=True)
