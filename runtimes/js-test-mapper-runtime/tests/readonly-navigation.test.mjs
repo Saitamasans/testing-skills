@@ -32,6 +32,10 @@ test("automatic readonly traversal maps Dcat-style navigation without business m
     assert.ok(visitedUrls.some((url) => url === "/admin/safe-a"));
     assert.ok(visitedUrls.some((url) => url === "/admin/safe-b"));
     assert.ok(observation.skipped.some((item) => item.href?.includes("/admin/broken") && item.reason === "navigation_failed"));
+    const missing = observation.skipped.find((item) => item.href?.includes("/admin/missing-page"));
+    assert.equal(missing?.reason, "navigation_http_error");
+    assert.equal(missing?.http_status, 404);
+    assert.ok(!visitedUrls.some((url) => url === "/admin/missing-page"));
     assert.ok(observation.blocked.some((item) => /create|edit|export|delete|regenerate/i.test(item.href || item.label)));
     assert.ok(observation.skipped.some((item) => item.reason === "readonly_intent_not_proven"));
     const orders = observation.visited.find((item) => new URL(item.url).pathname === "/admin/orders");
