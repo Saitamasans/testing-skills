@@ -1,5 +1,7 @@
 {
   "brand_name": "埼玉ai测试",
   "brand_display_name": "埼玉 AI 测试",
+  "installer_brand_display_name": "Saitama AI Testing",
+  "installer_product_display_name": "Web JS Reverse Test Mapper",
   "aliases": ["埼玉ai_test", "埼玉ai测试", "sai_ai", "saitamasans"]
 }

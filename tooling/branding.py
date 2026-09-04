@@ -9,9 +9,19 @@ ROOT = Path(__file__).resolve().parents[1]
 
 def load_brand(root: Path = ROOT) -> dict:
     brand = json.loads((root / "config/brand.json").read_text(encoding="utf-8"))
-    for field in ("brand_name", "brand_display_name"):
+    for field in (
+        "brand_name",
+        "brand_display_name",
+        "installer_brand_display_name",
+        "installer_product_display_name",
+    ):
         if not isinstance(brand.get(field), str) or not brand[field].strip():
             raise ValueError(f"{field} must be a non-empty string")
+    for field in ("installer_brand_display_name", "installer_product_display_name"):
+        try:
+            brand[field].encode("ascii")
+        except UnicodeEncodeError as exc:
+            raise ValueError(f"{field} must contain ASCII only") from exc
     aliases = brand.get("aliases")
     if not isinstance(aliases, list) or len(aliases) != 4 or len(set(aliases)) != 4:
         raise ValueError("aliases must contain exactly four unique values")

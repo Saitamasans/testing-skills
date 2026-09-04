@@ -11,6 +11,7 @@ README_START = "<!-- brand:display:start -->"
 README_END = "<!-- brand:display:end -->"
 INSTALLER_START = "rem brand:display:start"
 INSTALLER_END = "rem brand:display:end"
+INSTALLER_PATH = Path("installers/install-js-test-mapper.cmd")
 
 
 def replace_block(text: str, start: str, end: str, replacement: str) -> str:
@@ -38,19 +39,39 @@ def expected_files(root: Path = ROOT) -> dict[Path, str]:
     readme = (root / "README.md").read_text(encoding="utf-8")
     expected[root / "README.md"] = replace_block(readme, README_START, README_END, f"由 **{brand['brand_display_name']}** 维护的中文测试 Skill 集合。")
     installer = (root / "installers/install-js-test-mapper.cmd").read_text(encoding="utf-8")
-    expected[root / "installers/install-js-test-mapper.cmd"] = replace_block(installer, INSTALLER_START, INSTALLER_END, f"echo {brand['brand_display_name']} - js-test-mapper installer")
+    expected[root / INSTALLER_PATH] = replace_block(
+        installer,
+        INSTALLER_START,
+        INSTALLER_END,
+        "\n".join(
+            (
+                f"echo {brand['installer_brand_display_name']}",
+                f"echo {brand['installer_product_display_name']}",
+            )
+        ),
+    )
     return expected
+
+
+def installer_bytes(content: str) -> bytes:
+    normalized = content.replace("\r\n", "\n").replace("\r", "\n")
+    return normalized.replace("\n", "\r\n").encode("ascii")
 
 
 def sync(root: Path = ROOT, check: bool = False) -> None:
     drift = []
     for path, content in expected_files(root).items():
+        is_installer = path == root / INSTALLER_PATH
         if check:
-            if not path.exists() or path.read_text(encoding="utf-8") != content:
+            expected = installer_bytes(content) if is_installer else content.encode("utf-8")
+            if not path.exists() or path.read_bytes() != expected:
                 drift.append(path.relative_to(root).as_posix())
         else:
             path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_text(content, encoding="utf-8", newline="\n")
+            if is_installer:
+                path.write_bytes(installer_bytes(content))
+            else:
+                path.write_text(content, encoding="utf-8", newline="\n")
     if drift:
         raise RuntimeError("branding drift: " + ", ".join(drift))
 

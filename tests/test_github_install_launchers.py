@@ -130,7 +130,7 @@ class GitHubInstallLauncherTest(unittest.TestCase):
         self.assertNotIn("Security Risk Assessments", text)
         self.assertNotIn("Installation Summary", text)
 
-    def test_js_test_mapper_cmd_is_crlf_and_executes_with_windows_cmd(self):
+    def test_js_test_mapper_cmd_has_cross_platform_static_byte_contract(self):
         launcher = self.installers / SPECIALIZED_INSTALLERS["js-test-mapper"]
         raw = launcher.read_bytes()
         self.assertEqual(raw, raw.decode("ascii").encode("ascii"))
@@ -140,6 +140,14 @@ class GitHubInstallLauncherTest(unittest.TestCase):
         self.assertNotIn(b"\r\n\n", raw)
         self.assertEqual(0, raw.count(b"\n") - raw.count(b"\r\n"))
         self.assertEqual(0, raw.count(b"\x00"))
+        text = raw.decode("ascii")
+        self.assertIn("Saitamasans/testing-skills@v0.1.1-rc.5", text)
+        self.assertIn("[OK] Installation successful.", text)
+        self.assertIn("Please fully restart CC Switch / Codex before use.", text)
+
+    @unittest.skipUnless(os.name == "nt", "requires Windows cmd.exe")
+    def test_js_test_mapper_cmd_executes_with_windows_cmd(self):
+        launcher = self.installers / SPECIALIZED_INSTALLERS["js-test-mapper"]
         with tempfile.TemporaryDirectory(prefix="js-test-mapper-cmd-") as temp:
             root = Path(temp)
             mock_npx = root / "npx.cmd"

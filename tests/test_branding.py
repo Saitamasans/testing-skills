@@ -9,7 +9,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tooling"))
 
 from branding import load_brand, origin_alias, origin_text
-from sync_branding import expected_files, sync
+from sync_branding import expected_files, installer_bytes, sync
 
 
 class BrandingTest(unittest.TestCase):
@@ -42,6 +42,15 @@ class BrandingTest(unittest.TestCase):
     def test_expected_branding_files_are_in_sync(self):
         sync(ROOT, check=True)
         self.assertEqual(18, len(expected_files(ROOT)))
+
+    def test_installer_branding_is_ascii_crlf_bytes(self):
+        brand = load_brand(ROOT)
+        self.assertEqual("Saitama AI Testing", brand["installer_brand_display_name"])
+        self.assertEqual("Web JS Reverse Test Mapper", brand["installer_product_display_name"])
+        raw = (ROOT / "installers/install-js-test-mapper.cmd").read_bytes()
+        self.assertEqual(raw, installer_bytes(raw.decode("ascii")))
+        self.assertGreater(raw.count(b"\r\n"), 0)
+        self.assertEqual(0, raw.count(b"\n") - raw.count(b"\r\n"))
 
 
 if __name__ == "__main__":
