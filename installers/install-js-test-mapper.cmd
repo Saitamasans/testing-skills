@@ -15,7 +15,7 @@ for /f "delims=." %%V in ('node -p "process.versions.node"') do set "NODE_MAJOR=
 if not defined NODE_MAJOR goto node_error
 if %NODE_MAJOR% LSS 20 goto node_error
 echo [1/3] Installing standard Skill...
-call npx.cmd -y skills@1.5.23 add Saitamasans/testing-skills@v0.1.1-rc.6 --skill js-test-mapper --agent codex --global --yes --copy >"%CLI_LOG%" 2>&1
+call npx.cmd -y skills@1.5.23 add Saitamasans/testing-skills@v0.1.1-rc.7 --skill js-test-mapper --agent codex --global --yes --copy >"%CLI_LOG%" 2>&1
 set "CLI_EXIT_CODE=%ERRORLEVEL%"
 if not "%CLI_EXIT_CODE%"=="0" (
   set "INSTALL_EXIT_CODE=%CLI_EXIT_CODE%"
@@ -34,10 +34,15 @@ echo [2/3] Preparing JS analysis Runtime...
 node "%SKILL_PATH%\scripts\runtime-bootstrap.mjs" >"%RUNTIME_LOG%" 2>&1
 set "RUNTIME_EXIT_CODE=%ERRORLEVEL%"
 if not "%RUNTIME_EXIT_CODE%"=="0" (
-  set "INSTALL_EXIT_CODE=%RUNTIME_EXIT_CODE%"
-  echo [ERROR] JS analysis Runtime preparation failed.
-  type "%RUNTIME_LOG%"
-  goto finish
+  echo [WARN] Existing Runtime needs repair. Retrying once...
+  node "%SKILL_PATH%\scripts\runtime-bootstrap.mjs" --repair >>"%RUNTIME_LOG%" 2>&1
+  set "RUNTIME_REPAIR_EXIT_CODE=%ERRORLEVEL%"
+  if not "%RUNTIME_REPAIR_EXIT_CODE%"=="0" (
+    set "INSTALL_EXIT_CODE=%RUNTIME_REPAIR_EXIT_CODE%"
+    echo [ERROR] JS analysis Runtime preparation failed.
+    type "%RUNTIME_LOG%"
+    goto finish
+  )
 )
 del /q "%RUNTIME_LOG%" >nul 2>nul
 echo [OK] Runtime ready
