@@ -15,7 +15,12 @@ export function classifyReadonlyEntry(entry, currentUrl) {
   if (DANGEROUS.test(label) || DANGEROUS.test(href) || entry.dataMethod || entry.dataAction || entry.onclick || entry.dataConfirm || entry.formaction || /(?:button|submit|dropdown-item)/i.test(entry.className || "")) return { decision: "blocked", reason: "dangerous_action_or_event_semantics" };
   if (entry.disabled) return { decision: "skipped", reason: "disabled_entry" };
   if (entry.kind === "tab") {
-    if (DANGEROUS.test(label) || entry.dataMethod || entry.dataAction || entry.dataConfirm) return { decision: "blocked", reason: "dangerous_tab_semantics" };
+    let tabUrl;
+    try { tabUrl = new URL(href, currentUrl); } catch { return { decision: "skipped", reason: "invalid_url" }; }
+    if (!/^https?:$/.test(tabUrl.protocol)) return { decision: "skipped", reason: "unsupported_protocol" };
+    if (tabUrl.origin !== new URL(currentUrl).origin) return { decision: "skipped", reason: "cross_origin" };
+    if (DANGEROUS.test(label) || entry.dataMethod || entry.dataAction || entry.dataConfirm || entry.onclick || entry.formaction) return { decision: "blocked", reason: "dangerous_tab_semantics" };
+    if (!tabUrl.hash) return { decision: "skipped", reason: "readonly_intent_not_proven" };
     return { decision: "visit", category: "safe_tab" };
   }
   const target = canonicalUrl(href, currentUrl);
@@ -52,7 +57,7 @@ async function settle(page, timeoutMs = 1200) {
   while (Date.now() - started < timeoutMs) {
     const signature = await page.evaluate(() => document.body?.innerText?.length + ":" + document.body?.querySelectorAll("*").length).catch(() => "");
     if (signature !== lastSignature) { lastSignature = signature; stableSince = Date.now(); }
-    if (Date.now() - stableSince >= 120) return;
+    if (Date.now() - started >= 360 && Date.now() - stableSince >= 120) return;
     await page.waitForTimeout(40);
   }
 }

@@ -55,5 +55,9 @@ test("readonly entry classification defaults to deny for dangerous and ambiguous
   assert.equal(classifyReadonlyEntry({ text: "Next", href: "/admin/orders?page=2", inPagination: true }, current).category, "pagination");
   assert.equal(classifyReadonlyEntry({ text: "Edit", href: "/admin/orders/1/edit", inNavigation: true }, current).decision, "blocked");
   assert.equal(classifyReadonlyEntry({ text: "Open", href: "/admin/unknown" }, current).reason, "readonly_intent_not_proven");
+  assert.equal(classifyReadonlyEntry({ kind: "tab", text: "External", href: "https://outside.example/#x" }, current).reason, "cross_origin");
+  assert.equal(classifyReadonlyEntry({ kind: "tab", text: "JS", href: "javascript:alert(1)" }, current).reason, "unsupported_protocol");
+  assert.equal(classifyReadonlyEntry({ kind: "tab", text: "Delete", href: "#delete", dataAction: "delete" }, current).decision, "blocked");
+  assert.equal(classifyReadonlyEntry({ kind: "tab", text: "History", href: "#history" }, current).category, "safe_tab");
   assert.equal(classifyReadonlyEntry({ text: "External", href: "https://outside.example/" }, current).reason, "cross_origin");
 });
