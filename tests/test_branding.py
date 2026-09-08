@@ -1,6 +1,5 @@
 import hashlib
 import json
-import subprocess
 import sys
 import unittest
 from pathlib import Path
@@ -27,17 +26,36 @@ class BrandingTest(unittest.TestCase):
         self.assertGreaterEqual(len(set(aliases)), 3)
 
     def test_branding_is_presentation_only(self):
-        changed = subprocess.run(
-            ["git", "diff", "--name-only", "HEAD", "--"],
-            cwd=ROOT, check=True, capture_output=True, text=True,
-        ).stdout.splitlines()
-        forbidden = [
-            path for path in changed
-            if path.endswith(("SKILL.md", "openai.yaml"))
-            or "schema" in Path(path).name.lower()
-            or path.startswith("runtimes/")
+        brand = load_brand(ROOT)
+        presentation_files = [
+            ROOT / "README.md",
+            ROOT / "NOTICE",
+            ROOT / "installers/install-js-test-mapper.cmd",
+        ] + [
+            ROOT / "skills" / path.name / "ORIGIN.txt"
+            for path in (ROOT / "skills").iterdir()
+            if path.is_dir()
         ]
-        self.assertEqual([], forbidden)
+        for path in presentation_files:
+            self.assertTrue(path.exists(), path)
+        self.assertIn(brand["brand_display_name"], (ROOT / "README.md").read_text(encoding="utf-8"))
+        self.assertIn(brand["brand_display_name"], (ROOT / "NOTICE").read_text(encoding="utf-8"))
+        installer = (ROOT / "installers/install-js-test-mapper.cmd").read_text(encoding="ascii")
+        self.assertIn(brand["installer_brand_display_name"], installer)
+        self.assertIn(brand["installer_product_display_name"], installer)
+
+        logic_roots = [
+            ROOT / "skill-sources/js-test-mapper",
+            ROOT / "skills/js-test-mapper",
+            ROOT / "plugins/js-test-mapper/skills/js-test-mapper",
+        ]
+        for root in logic_roots:
+            for path in root.rglob("*"):
+                if not path.is_file() or path.name == "ORIGIN.txt":
+                    continue
+                text = path.read_text(encoding="utf-8")
+                for field in ("installer_brand_display_name", "installer_product_display_name"):
+                    self.assertNotIn(brand[field], text, path)
 
     def test_expected_branding_files_are_in_sync(self):
         sync(ROOT, check=True)

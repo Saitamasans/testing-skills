@@ -27,7 +27,6 @@ class WindowsCmdLauncherRuntimeTest(unittest.TestCase):
             if path.name not in {
                 "install-all.cmd",
                 "install-js-test-mapper.cmd",
-                "install-js-test-mapper-runtime.cmd",
                 "install-web-api-test-execution-evidence.cmd",
             }
         ]

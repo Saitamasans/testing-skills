@@ -1,4 +1,4 @@
 interface:
   display_name: "Web JS 逆向测试建图"
-  short_description: "从 Web JS 技术资产恢复系统地图和可追溯的测试线索"
-  default_prompt: "请对这个 Web URL 做只读 JS 逆向测试建图，先建立 B01 技术资产地图。"
+  short_description: "通过 Codex 浏览器安全探索系统，关联 JS 证据与测试线索，无独立执行器"
+  default_prompt: "请使用 $js-test-mapper 从这个测试地址自动安全探索，基于可取得的 JS 证据建立测试系统地图并说明缺口。"

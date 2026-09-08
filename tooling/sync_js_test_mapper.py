@@ -14,7 +14,6 @@ ROOT = Path(__file__).resolve().parents[1]
 SOURCE = ROOT / "skill-sources" / "js-test-mapper"
 PUBLIC = ROOT / "skills" / "js-test-mapper"
 PLUGIN = ROOT / "plugins" / "js-test-mapper" / "skills" / "js-test-mapper"
-RUNTIME = ROOT / "runtimes" / "js-test-mapper-runtime"
 BANNER = "<!-- 此文件由根目录中文源文件自动生成，请勿直接编辑。 -->"
 
 
@@ -29,10 +28,7 @@ def files(root: Path) -> dict[Path, bytes]:
 
 
 def desired_source() -> dict[Path, bytes]:
-    source_files = files(SOURCE)
-    for name in ("run-data.schema.json", "cognition.schema.json"):
-        source_files[Path("schemas") / name] = (RUNTIME / "schemas" / name).read_bytes()
-    return source_files
+    return files(SOURCE)
 
 
 def desired_public() -> dict[Path, bytes]:
@@ -81,20 +77,12 @@ def drift(actual: dict[Path, bytes], expected: dict[Path, bytes]) -> list[str]:
     ]
 
 
-def assert_runtime_schema_contract() -> None:
-    for name in ("run-data.schema.json", "cognition.schema.json"):
-        runtime = json.loads((RUNTIME / "schemas" / name).read_text(encoding="utf-8"))
-        source = json.loads((SOURCE / "schemas" / name).read_text(encoding="utf-8"))
-        if runtime != source:
-            raise RuntimeError(f"js-test-mapper runtime/source schema drift: {name}")
-
-
 def sync(check: bool = False) -> None:
     source_expected = desired_source()
     if check:
         source_problems = drift(files(SOURCE), source_expected)
         if source_problems:
-            raise RuntimeError("js-test-mapper source schema drift: " + ", ".join(source_problems))
+            raise RuntimeError("js-test-mapper source drift: " + ", ".join(source_problems))
     expected = desired_public()
     if check:
         problems = [*(f"public:{item}" for item in drift(files(PUBLIC), expected)), *(f"plugin:{item}" for item in drift(files(PLUGIN), expected))]

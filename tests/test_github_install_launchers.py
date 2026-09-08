@@ -33,9 +33,9 @@ REVERSE_TEST_WORKBENCH_RELEASE_BASE = (
     "https://github.com/Saitamasans/testing-skills/releases/download/"
     "reverse-test-workbench-v0.1.0/"
 )
-JS_TEST_MAPPER_RELEASE_BASES = tuple(
-    "https://github.com/Saitamasans/testing-skills/releases/download/" + tag + "/"
-    for tag in ("v0.1.1-rc.1", "v0.1.1-rc.2", "v0.1.1-rc.3", "v0.1.1-rc.4")
+JS_TEST_MAPPER_INSTALLER_URL = (
+    "https://raw.githubusercontent.com/Saitamasans/testing-skills/"
+    "main/installers/install-js-test-mapper.cmd"
 )
 RAW_INSTALLER = (
     "https://raw.githubusercontent.com/Saitamasans/testing-skills/"
@@ -47,7 +47,6 @@ NO_PUBLIC_INSTALLER_SKILLS = {
 SPECIALIZED_INSTALLERS = {
     "js-test-mapper": "install-js-test-mapper.cmd",
 }
-AUXILIARY_INSTALLERS = {"install-js-test-mapper-runtime.cmd"}
 HIDDEN_README_SKILLS = {
     "web-api-test-execution-evidence",
     "test-case-execution-compiler",
@@ -61,7 +60,7 @@ class GitHubInstallLauncherTest(unittest.TestCase):
         cls.installers = ROOT / "installers"
 
     def test_exactly_one_all_and_manifest_launchers_exist(self):
-        expected = {"install-all.cmd"} | AUXILIARY_INSTALLERS | {
+        expected = {"install-all.cmd"} | {
             SPECIALIZED_INSTALLERS.get(slug, f"install-{slug}.cmd")
             for slug in self.slugs
             if slug not in NO_PUBLIC_INSTALLER_SKILLS
@@ -101,16 +100,15 @@ class GitHubInstallLauncherTest(unittest.TestCase):
                 self.assertEqual(1, text.count("-Skill"))
                 self.assertNotRegex(text, r"%(?:\*|[0-9])")
 
-    def test_js_test_mapper_uses_standard_skill_plus_internal_runtime(self):
+    def test_js_test_mapper_uses_standard_skill_without_independent_executor(self):
         launcher = self.installers / SPECIALIZED_INSTALLERS["js-test-mapper"]
         self.assertTrue(launcher.exists(), launcher)
         text = launcher.read_text(encoding="utf-8")
         self.assertIn("skills@1.5.23", text)
-        self.assertIn("Saitamasans/testing-skills@v0.1.1-rc.7", text)
+        self.assertIn("Saitamasans/testing-skills@main", text)
         self.assertIn("--skill js-test-mapper", text)
-        self.assertIn("runtime-bootstrap.mjs", text)
         self.assertIn("TESTING_SKILLS_NO_PAUSE", text)
-        for forbidden in ("powershell", "pwsh", "ExecutionPolicy", "Invoke-WebRequest", "DownloadFile", "Net.WebClient", "curl", "certutil", "bitsadmin", "EncodedCommand"):
+        for forbidden in ("powershell", "pwsh", "ExecutionPolicy", "Invoke-WebRequest", "DownloadFile", "Net.WebClient", "curl", "certutil", "bitsadmin", "EncodedCommand", "runtime-bootstrap", "runtime-launcher", "Runtime TGZ"):
             self.assertNotIn(forbidden.lower(), text.lower())
         self.assertFalse((self.installers / "install-js-test-mapper.ps1").exists())
 
@@ -119,15 +117,8 @@ class GitHubInstallLauncherTest(unittest.TestCase):
         self.assertIn('>"%CLI_LOG%" 2>&1', text)
         self.assertIn('type "%CLI_LOG%"', text)
         self.assertIn('del /q "%CLI_LOG%"', text)
-        self.assertIn('>"%RUNTIME_LOG%" 2>&1', text)
-        self.assertIn('type "%RUNTIME_LOG%"', text)
-        self.assertIn('del /q "%RUNTIME_LOG%"', text)
         self.assertIn('set "CLI_EXIT_CODE=%ERRORLEVEL%"', text)
-        self.assertIn('set "RUNTIME_EXIT_CODE=%ERRORLEVEL%"', text)
-        self.assertIn('runtime-bootstrap.mjs" --repair', text)
-        self.assertIn('RUNTIME_REPAIR_EXIT_CODE', text)
         self.assertIn("[ERROR] Standard Skill installation failed.", text)
-        self.assertIn("[ERROR] JS analysis Runtime preparation failed.", text)
         self.assertNotIn("SKILLS ASCII Logo", text)
         self.assertNotIn("Security Risk Assessments", text)
         self.assertNotIn("Installation Summary", text)
@@ -143,9 +134,10 @@ class GitHubInstallLauncherTest(unittest.TestCase):
         self.assertEqual(0, raw.count(b"\n") - raw.count(b"\r\n"))
         self.assertEqual(0, raw.count(b"\x00"))
         text = raw.decode("ascii")
-        self.assertIn("Saitamasans/testing-skills@v0.1.1-rc.7", text)
+        self.assertIn("Saitamasans/testing-skills@main", text)
         self.assertIn("[OK] Installation successful.", text)
         self.assertIn("Please fully restart CC Switch / Codex before use.", text)
+        self.assertNotIn("runtime-bootstrap", text)
 
     @unittest.skipUnless(os.name == "nt", "requires Windows cmd.exe")
     def test_js_test_mapper_cmd_executes_with_windows_cmd(self):
@@ -161,7 +153,6 @@ class GitHubInstallLauncherTest(unittest.TestCase):
                 "mkdir \"%P%\\scripts\" >nul 2>nul\n"
                 ">\"%P%\\SKILL.md\" echo fixture\n"
                 ">\"%P%\\agents\\openai.yaml\" echo fixture\n"
-                ">\"%P%\\scripts\\runtime-bootstrap.mjs\" echo process.exit(0);\n"
                 "exit /b 0\n",
                 encoding="ascii",
                 newline="\r\n",
@@ -192,10 +183,9 @@ class GitHubInstallLauncherTest(unittest.TestCase):
         self.assertIn("[OK] Installation successful.", text[summary:])
         self.assertIn("========================================================", text[summary:])
         self.assertIn("Saitama AI Testing", text)
-        self.assertIn("[1/3] Installing standard Skill", text)
-        self.assertIn("[2/3] Preparing JS analysis Runtime", text)
-        self.assertIn("[3/3] Verifying installation", text)
-        self.assertLess(summary, text.index(":node_error"))
+        self.assertIn("[1/1] Installing standard Skill", text)
+        self.assertNotIn("Preparing JS analysis Runtime", text)
+        self.assertNotIn("runtime-bootstrap", text)
         self.assertNotRegex(text, r"[^\x00-\x7f]")
 
     def _assert_common_launcher_contract(self, text, *, immutable=False):
@@ -255,10 +245,7 @@ class GitHubInstallReadmeTest(unittest.TestCase):
                     self.assertEqual(1, self.readme.count(asset_url))
                     continue
                 if slug == "js-test-mapper":
-                    candidates = [base + "install-js-test-mapper.cmd" for base in JS_TEST_MAPPER_RELEASE_BASES]
-                    self.assertEqual(1, sum(self.readme.count(url) for url in candidates))
-                    asset_url = next(url for url in candidates if url in self.readme)
-                    self.assertEqual(1, self.readme.count(asset_url))
+                    self.assertEqual(1, self.readme.count(JS_TEST_MAPPER_INSTALLER_URL))
                     continue
                 asset_url = RELEASE_BASE + f"install-{slug}.cmd"
                 self.assertEqual(1, self.readme.count(asset_url))
@@ -436,9 +423,7 @@ class GitHubInstallReadmeTest(unittest.TestCase):
                     release_urls.append(asset_url)
                     continue
                 if slug == "js-test-mapper":
-                    candidates = [base + "install-js-test-mapper.cmd" for base in JS_TEST_MAPPER_RELEASE_BASES]
-                    self.assertEqual(1, sum(self.readme.count(url) for url in candidates))
-                    asset_url = next(url for url in candidates if url in self.readme)
+                    asset_url = JS_TEST_MAPPER_INSTALLER_URL
                     self.assertEqual(1, self.readme.count(asset_url))
                     self.assertEqual(1, cells[2].count(asset_url))
                     self.assertRegex(
