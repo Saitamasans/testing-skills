@@ -15,6 +15,7 @@ MANIFEST_SLUGS = {
     for item in json.loads(
         (ROOT / "tooling" / "skills-manifest.json").read_text(encoding="utf-8")
     )["skills"]
+    if item.get("public", True)
 }
 
 
@@ -65,8 +66,8 @@ class NoNodeInstallerRuntimeTest(unittest.TestCase):
                 self.assertTrue((install_root / slug / "SKILL.md").is_file(), slug)
 
             output = (result.stdout + result.stderr).decode("utf-8", errors="replace")
-            self.assertIn("仅供开发者", output)
-            self.assertNotIn("安装完成，可以执行 Web/API 自动化测试", output)
+            self.assertNotIn("web-api-test-execution-evidence", output)
+            self.assertNotIn("test-case-execution-compiler", output)
 
     def test_installs_only_the_selected_skill(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -100,13 +101,10 @@ class NoNodeInstallerRuntimeTest(unittest.TestCase):
             )
 
             output = (result.stdout + result.stderr).decode("utf-8", errors="replace")
-            self.assertEqual(0, result.returncode, output)
-            self.assertTrue((install_root / "web-api-test-execution-evidence" / "SKILL.md").is_file())
-            self.assertIn("仅供开发者", output)
-            self.assertIn("不能执行 Web/API 自动化测试", output)
-            self.assertNotIn("安装完成，可以执行 Web/API 自动化测试", output)
-            self.assertNotIn("请重启 Codex、Claude Code 或 CC Switch", output)
-            self.assertNotIn("安装完成：新装/替换", output)
+            self.assertNotEqual(0, result.returncode, output)
+            self.assertIn("未知 Skill", output)
+            self.assertIn("web-api-test-execu", output)
+            self.assertFalse(install_root.exists())
 
     def test_direct_eighth_route_verifies_ambient_and_sibling_complete_installer(self):
         with tempfile.TemporaryDirectory() as directory:

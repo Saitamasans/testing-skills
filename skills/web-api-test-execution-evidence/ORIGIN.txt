@@ -1,3 +1,0 @@
-Origin: 埼玉 AI 测试
-Alias: 埼玉ai测试
-Purpose: attribution only; not part of Skill execution instructions.

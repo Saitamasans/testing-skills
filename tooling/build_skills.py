@@ -120,6 +120,8 @@ def build_all(root: Path = ROOT, check: bool = False) -> list[Path]:
             raise ValueError(f"manifest 的 {field} 必须存在且唯一")
     desired: dict[Path, str | bytes] = {}
     for item in entries:
+        if not item.get("public", True):
+            continue
         source = root / item["source"]
         text = source.read_text(encoding="utf-8")
         meta, _ = parse_frontmatter(text)

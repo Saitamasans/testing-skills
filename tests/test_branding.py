@@ -17,6 +17,8 @@ class BrandingTest(unittest.TestCase):
         manifest = json.loads((ROOT / "tooling/skills-manifest.json").read_text(encoding="utf-8"))
         aliases = []
         for item in manifest["skills"]:
+            if not item.get("public", True):
+                continue
             slug = item["slug"]
             digest = hashlib.sha256(f"{slug}:ORIGIN.txt".encode("utf-8")).digest()
             expected = brand["aliases"][int.from_bytes(digest, "big") % 4]
@@ -59,7 +61,7 @@ class BrandingTest(unittest.TestCase):
 
     def test_expected_branding_files_are_in_sync(self):
         sync(ROOT, check=True)
-        self.assertEqual(18, len(expected_files(ROOT)))
+        self.assertEqual(16, len(expected_files(ROOT)))
 
     def test_installer_branding_is_ascii_crlf_bytes(self):
         brand = load_brand(ROOT)

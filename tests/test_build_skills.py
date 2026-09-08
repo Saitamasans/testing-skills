@@ -51,8 +51,15 @@ class BuildSkillsTest(unittest.TestCase):
 
     def test_generated_packages_match_sources(self):
         outputs = build_all(ROOT)
-        self.assertGreaterEqual(len(outputs), 14)
-        for item in load_manifest(ROOT)["skills"]:
+        items = load_manifest(ROOT)["skills"]
+        public_items = [item for item in items if item.get("public", True)]
+        internal_items = [item for item in items if not item.get("public", True)]
+        self.assertEqual(11, len(public_items))
+        self.assertEqual(2, len(internal_items))
+        package_names = {path.name for path in (ROOT / "skills").iterdir() if path.is_dir()}
+        self.assertNotIn("web-api-test-execution-evidence", package_names)
+        self.assertNotIn("test-case-execution-compiler", package_names)
+        for item in public_items:
             generated = ROOT / "skills" / item["slug"] / "SKILL.md"
             source_meta, source_body = parse_frontmatter((ROOT / item["source"]).read_text(encoding="utf-8"))
             generated_meta, generated_body = parse_frontmatter(generated.read_text(encoding="utf-8"))
@@ -122,26 +129,22 @@ class BuildSkillsTest(unittest.TestCase):
         build_all(ROOT, check=True)
 
     def test_execution_skill_bundles_launcher_resources(self):
-        build_all(ROOT)
         source_root = ROOT / "skill-sources/web-api-test-execution-evidence"
         package_root = ROOT / "skills/web-api-test-execution-evidence"
+        self.assertFalse(package_root.exists())
         for relative in [
             "scripts/testing-runner.mjs",
             "scripts/runner-bootstrap-lib.mjs",
             "assets/runner-release.json",
         ]:
-            self.assertEqual(
-                (source_root / relative).read_bytes(),
-                (package_root / relative).read_bytes(),
-                relative,
-            )
+            self.assertTrue((source_root / relative).is_file(), relative)
 
     def test_compiler_skill_bundles_cli_resources(self):
-        build_all(ROOT)
         source_root = ROOT / "skill-sources/test-case-execution-compiler"
         package_root = ROOT / "skills/test-case-execution-compiler"
+        self.assertFalse(package_root.exists())
         for relative in ["scripts/testing-contract-compiler.mjs", "assets/execution-contract.schema.json"]:
-            self.assertEqual((source_root / relative).read_bytes(), (package_root / relative).read_bytes())
+            self.assertTrue((source_root / relative).is_file(), relative)
 
 
 if __name__ == "__main__":

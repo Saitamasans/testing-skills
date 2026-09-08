@@ -36,6 +36,10 @@ class ReadmeAndPackagesTest(unittest.TestCase):
         ]
         for item in load_manifest(ROOT)["skills"]:
             package = ROOT / "skills" / item["slug"]
+            if not item.get("public", True):
+                self.assertFalse(package.exists(), item["slug"])
+                self.assertNotIn(item["slug"], installers[2])
+                continue
             self.assertTrue((package / "SKILL.md").exists())
             self.assertTrue((package / "agents/openai.yaml").exists())
             if item["slug"] in HIDDEN_README_SKILLS:
@@ -89,6 +93,8 @@ class ReadmeAndPackagesTest(unittest.TestCase):
 
     def test_resource_directories_are_copied_recursively(self):
         for item in load_manifest(ROOT)["skills"]:
+            if not item.get("public", True):
+                continue
             source_root = (ROOT / item["source"]).parent
             package_root = ROOT / "skills" / item["slug"]
             for resource_dir in item.get("resource_dirs", []):

@@ -33,6 +33,8 @@ def expected_files(root: Path = ROOT) -> dict[Path, str]:
         )
     }
     for item in manifest["skills"]:
+        if not item.get("public", True):
+            continue
         expected[root / "skills" / item["slug"] / "ORIGIN.txt"] = origin_text(item["slug"], root)
     expected[root / "plugins/js-test-mapper/skills/js-test-mapper/ORIGIN.txt"] = origin_text("js-test-mapper", root)
     expected[root / "plugins/reverse-test-workbench/skills/reverse-test-workbench/ORIGIN.txt"] = origin_text("reverse-test-workbench", root)

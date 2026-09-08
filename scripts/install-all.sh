@@ -9,9 +9,9 @@ for skill in \
   test-case-quality-audit \
   requirement-clarification-test \
   workbench-ui-acceptance-execution \
-  web-api-test-execution-evidence \
-  test-case-execution-compiler \
-  reverse-test-workbench
+  multi-source-test-audit \
+  reverse-test-workbench \
+  js-test-mapper
 do
-  npx skills add "Saitamasans/testing-skills@$skill" -g -y
+  npx skills add "Saitamasans/testing-skills@main" --skill "$skill" -g -y
 done
