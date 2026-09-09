@@ -1,17 +1,17 @@
 {
   "name": "js-test-mapper",
   "version": "0.2.0-codex-native",
-  "description": "Codex adapter for native browser-assisted Web JS reverse test mapping without an independent executor.",
+  "description": "Codex adapter for authorized, read-only Web JS testing system mapping without an independent executor.",
   "author": {"name": "Testing Skills"},
   "keywords": ["testing", "javascript", "playwright", "source-map"],
   "skills": "./skills/",
   "interface": {
-    "displayName": "Web JS 逆向测试建图",
-    "shortDescription": "从 Web JS 技术资产恢复系统地图和测试线索",
-    "longDescription": "使用 Codex 已有浏览器能力安全只读探索 Web 系统，关联可取得的 JS 证据与页面结构，输出测试人员可用的系统地图和分析报告；不安装独立执行器。",
+    "displayName": "Web JS 测试系统建图",
+    "shortDescription": "在已授权测试环境中，只读分析页面与 JS 证据，恢复路由、调用关系和测试线索",
+    "longDescription": "使用 Codex 已有浏览器能力，在用户明确授权的测试环境中进行安全只读探索，整理页面结构、可取得的 JS 证据、路由、调用关系和测试线索；不执行改变业务状态的操作，不主动调用或重放业务 API，不安装独立执行器。",
     "developerName": "Testing Skills",
     "category": "Productivity",
     "capabilities": ["Browser-assisted exploration", "Static JS analysis", "Evidence-backed test mapping"],
-    "defaultPrompt": ["请对这个 URL 做只读 Web JS 逆向测试建图。"]
+    "defaultPrompt": ["请在我已授权的测试环境中，对这个 Web URL 做只读测试系统建图：使用宿主已有浏览器和代码观察能力，整理页面、脚本、路由、调用关系、权限/状态线索、证据和测试重点；不执行改变业务状态的操作，不主动调用或重放业务 API，不保存密码、Cookie 或 Token。"]
   }
 }

@@ -15,6 +15,8 @@ class ExecutionSkillContractsTest(unittest.TestCase):
       cls.source = ROOT / cls.item["source"]
       cls.text = cls.source.read_text(encoding="utf-8")
       cls.meta, cls.body = parse_frontmatter(cls.text)
+      if not cls.item.get("public", True):
+          raise unittest.SkipTest("internal execution Skill is not built into the public skills catalog")
       cls.generated_text = (ROOT / "skills" / cls.item["slug"] / "SKILL.md").read_text(encoding="utf-8")
 
     def test_trigger_boundary_and_independence(self):

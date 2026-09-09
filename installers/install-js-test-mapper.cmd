@@ -10,7 +10,7 @@ echo.
 where node.exe >nul 2>nul || (echo ERROR: Node.js is required to install the standard Skill.& goto finish)
 where npx.cmd >nul 2>nul || (echo ERROR: npx is required to install the standard Skill.& goto finish)
 echo [1/1] Installing standard Skill...
-call npx.cmd -y skills@1.5.23 add Saitamasans/testing-skills@main --skill js-test-mapper --agent codex --global --yes --copy >"%CLI_LOG%" 2>&1
+call npx.cmd -y skills@1.5.23 add Saitamasans/testing-skills@v0.2.0 --skill js-test-mapper --agent codex --global --yes --copy >"%CLI_LOG%" 2>&1
 set "CLI_EXIT_CODE=%ERRORLEVEL%"
 if not "%CLI_EXIT_CODE%"=="0" (
   set "INSTALL_EXIT_CODE=%CLI_EXIT_CODE%"

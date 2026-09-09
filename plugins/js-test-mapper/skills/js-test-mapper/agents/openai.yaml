@@ -1,4 +1,4 @@
 interface:
-  display_name: "Web JS 逆向测试建图"
-  short_description: "从 Web JS 技术资产恢复系统地图和可追溯的测试线索"
-  default_prompt: "请对这个 Web URL 做只读 JS 逆向测试建图，先建立 B01 技术资产地图。"
+  display_name: "Web JS 测试系统建图"
+  short_description: "在已授权测试环境中，只读分析页面与 JS 证据，恢复路由、调用关系和测试线索"
+  default_prompt: "请在我已授权的测试环境中，对这个 Web URL 做只读测试系统建图：使用宿主已有浏览器和代码观察能力，整理页面、脚本、路由、调用关系、权限/状态线索、证据和测试重点；不执行改变业务状态的操作，不主动调用或重放业务 API，不保存密码、Cookie 或 Token。"

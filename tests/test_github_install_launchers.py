@@ -34,8 +34,8 @@ REVERSE_TEST_WORKBENCH_RELEASE_BASE = (
     "reverse-test-workbench-v0.1.0/"
 )
 JS_TEST_MAPPER_INSTALLER_URL = (
-    "https://raw.githubusercontent.com/Saitamasans/testing-skills/"
-    "main/installers/install-js-test-mapper.cmd"
+    "https://github.com/Saitamasans/testing-skills/releases/download/"
+    "v0.2.0/install-js-test-mapper.cmd"
 )
 RAW_INSTALLER = (
     "https://raw.githubusercontent.com/Saitamasans/testing-skills/"
@@ -105,7 +105,7 @@ class GitHubInstallLauncherTest(unittest.TestCase):
         self.assertTrue(launcher.exists(), launcher)
         text = launcher.read_text(encoding="utf-8")
         self.assertIn("skills@1.5.23", text)
-        self.assertIn("Saitamasans/testing-skills@main", text)
+        self.assertIn("Saitamasans/testing-skills@v0.2.0", text)
         self.assertIn("--skill js-test-mapper", text)
         self.assertIn("TESTING_SKILLS_NO_PAUSE", text)
         for forbidden in ("powershell", "pwsh", "ExecutionPolicy", "Invoke-WebRequest", "DownloadFile", "Net.WebClient", "curl", "certutil", "bitsadmin", "EncodedCommand", "runtime-bootstrap", "runtime-launcher", "Runtime TGZ"):
@@ -134,7 +134,7 @@ class GitHubInstallLauncherTest(unittest.TestCase):
         self.assertEqual(0, raw.count(b"\n") - raw.count(b"\r\n"))
         self.assertEqual(0, raw.count(b"\x00"))
         text = raw.decode("ascii")
-        self.assertIn("Saitamasans/testing-skills@main", text)
+        self.assertIn("Saitamasans/testing-skills@v0.2.0", text)
         self.assertIn("[OK] Installation successful.", text)
         self.assertIn("Please fully restart CC Switch / Codex before use.", text)
         self.assertNotIn("runtime-bootstrap", text)
@@ -376,7 +376,7 @@ class GitHubInstallReadmeTest(unittest.TestCase):
             ("需求澄清", "requirement-clarification-test"),
             ("多源测试-审计", "multi-source-test-audit"),
             ("无需求-UI逆向测试工作台", "reverse-test-workbench"),
-            ("无需求-Web JS逆向测试建图", "js-test-mapper"),
+            ("Web JS测试系统建图", "js-test-mapper"),
         ]
         self.assertEqual(len(skill_specs), len(rows))
         release_urls = []

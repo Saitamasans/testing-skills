@@ -92,6 +92,38 @@ class SourceContractsTest(unittest.TestCase):
             for term in required:
                 self.assertIn(term, self.texts[slug], f"{slug}: {term}")
 
+    def test_js_test_mapper_trigger_surface_is_authorized_and_read_only(self):
+        item = next(entry for entry in self.manifest if entry["slug"] == "js-test-mapper")
+        trigger_text = "\n".join(
+            [item["display_name"], item["short_description"], item["default_prompt"]]
+        )
+        for phrase in [
+            "已授权测试环境",
+            "只读",
+            "不执行改变业务状态的操作",
+            "不主动调用或重放业务 API",
+            "不保存密码、Cookie 或 Token",
+        ]:
+            self.assertIn(phrase, trigger_text)
+        for ambiguous in ["JS 逆向测试建图", "Web URL 做只读 JS 逆向测试建图"]:
+            self.assertNotIn(ambiguous, trigger_text)
+
+        plugin = json.loads(
+            (ROOT / "plugins/js-test-mapper/.codex-plugin/plugin.json").read_text(encoding="utf-8")
+        )
+        interface_text = "\n".join(
+            [
+                plugin["description"],
+                plugin["interface"]["displayName"],
+                plugin["interface"]["shortDescription"],
+                plugin["interface"]["longDescription"],
+                *plugin["interface"]["defaultPrompt"],
+            ]
+        )
+        self.assertIn("authorized", interface_text.lower())
+        self.assertIn("read-only", interface_text.lower())
+        self.assertNotIn("reverse test mapping", interface_text.lower())
+
     def test_requirement_clarification_has_false_positive_gates(self):
         text = self.texts["requirement-clarification-test"]
         required = [

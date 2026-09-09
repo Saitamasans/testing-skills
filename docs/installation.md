@@ -54,15 +54,15 @@ codex plugin add reverse-test-workbench@reverse-test-workbench
 `reverse-test-workbench-v0.1.0/install-reverse-test-workbench.cmd`。它不依赖已经冻结的
 `skill-installers-v1`，避免新增 Skill 后主页按钮指向不存在的旧 Release 资产。
 
-## Web JS 逆向测试建图
+## Web JS 测试系统建图
 
 `js-test-mapper` 是面向 Codex 的宿主原生 Skill。普通 Windows 用户点击首页 **Install RC**，只下载
 `install-js-test-mapper.cmd`，然后双击安装标准 Skill。安装器只使用锁定版本的 Skills CLI，不下载或安装独立 Runtime、执行器、浏览器包或 TGZ；要求 Node.js 20 或更高版本。
 
-安装后，Skill 使用 Codex 已有的浏览器和代码观察能力完成安全只读探索、JS 证据关联和测试视角建图。宿主无法提供某项能力时输出受限分析和明确缺口，不偷偷切换到另一个执行器。
+安装后，Skill 仅在用户明确授权的测试环境中，使用 Codex 已有的浏览器和代码观察能力完成安全只读探索、JS 证据关联和测试视角建图。它不执行改变业务状态的操作，不主动调用或重放业务 API，也不保存密码、Cookie 或 Token。宿主无法提供某项能力时输出受限分析和明确缺口，不偷偷切换到另一个执行器。
 
 安装成功后请完全退出并重新打开 CC Switch / Codex，在 Skills 中确认
-`Web JS 逆向测试建图 / js-test-mapper`，随后在新任务里用自然语言直接调用。候选版本直接跟随仓库 `main`，用于真实环境验收。
+`Web JS 测试系统建图 / js-test-mapper`，随后在新任务里用自然语言直接调用。稳定版本固定使用不可变的 `v0.2.0` Release 资产。
 
 ## 多源测试审计
 
