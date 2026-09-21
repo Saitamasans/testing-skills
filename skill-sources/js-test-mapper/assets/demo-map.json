@@ -1,0 +1,588 @@
+{
+  "title": "吉搭钱包 H5（样例）",
+  "one_liner": "手机号登录后的钻石/积分钱包：充值、兑换、提现。样例数据来自已授权测试服只读观察，不是完整源码审计。",
+  "env": "https://web.jj.yzhhlw.top",
+  "status": "partial_js",
+  "modules": [
+    {
+      "id": "login",
+      "label": "登录",
+      "status": "observed",
+      "summary": "验证码 / 密码登录"
+    },
+    {
+      "id": "wallet",
+      "label": "我的钱包",
+      "status": "observed",
+      "summary": "钻石与积分两套余额"
+    },
+    {
+      "id": "recharge",
+      "label": "充值",
+      "status": "inferred",
+      "summary": "档位 + 微信支付（唤起未完成）"
+    },
+    {
+      "id": "exchange",
+      "label": "积分兑换",
+      "status": "static",
+      "summary": "积分兑钻石，1:100"
+    },
+    {
+      "id": "withdraw",
+      "label": "积分提现",
+      "status": "unverified",
+      "summary": "选支付宝或银行卡后提交审核"
+    }
+  ],
+  "module_edges": [
+    {
+      "from": "login",
+      "to": "wallet",
+      "label": "登录成功进入"
+    },
+    {
+      "from": "wallet",
+      "to": "recharge",
+      "label": "点充值"
+    },
+    {
+      "from": "wallet",
+      "to": "exchange",
+      "label": "积分页点兑换"
+    },
+    {
+      "from": "wallet",
+      "to": "withdraw",
+      "label": "积分页点提现"
+    }
+  ],
+  "flows": [
+    {
+      "id": "full-wallet",
+      "title": "钱包全链路",
+      "nodes": [
+        {
+          "id": "open",
+          "label": "打开 H5",
+          "status": "observed",
+          "summary": "HTTPS 打开测试服。",
+          "confirmed": [
+            "能进登录页"
+          ],
+          "unverified": [],
+          "test_focus": "弱网首次加载。"
+        },
+        {
+          "id": "sms",
+          "label": "验证码登录",
+          "status": "observed",
+          "summary": "手机号 + 万能码。",
+          "confirmed": [
+            "测试服固定验证码可登"
+          ],
+          "unverified": [
+            "真实短信是否 6 位"
+          ],
+          "test_focus": "错码 / 过期码。"
+        },
+        {
+          "id": "pwd",
+          "label": "密码登录",
+          "status": "static",
+          "summary": "代码里有密码入口。",
+          "confirmed": [
+            "正则 6–20"
+          ],
+          "unverified": [
+            "文案写 6–12"
+          ],
+          "test_focus": "12 与 20 边界。"
+        },
+        {
+          "id": "home",
+          "label": "钱包首页",
+          "status": "observed",
+          "summary": "钻石 / 积分两套余额。",
+          "confirmed": [
+            "登录后能看到钻石"
+          ],
+          "unverified": [],
+          "test_focus": "两套余额是否同源。"
+        },
+        {
+          "id": "rc",
+          "label": "充值",
+          "status": "inferred",
+          "summary": "档位 + 微信（唤起未完成）。",
+          "confirmed": [
+            "能打开档位"
+          ],
+          "unverified": [
+            "真付是否到账"
+          ],
+          "test_focus": "假成功弹窗是否误导。"
+        },
+        {
+          "id": "ex",
+          "label": "兑换",
+          "status": "static",
+          "summary": "1 积分兑 100 钻石。",
+          "confirmed": [
+            "文案 1:100"
+          ],
+          "unverified": [
+            "1.0 会不会变成 10"
+          ],
+          "test_focus": "小数拼整数。"
+        },
+        {
+          "id": "wd",
+          "label": "提现",
+          "status": "unverified",
+          "summary": "支付宝 / 银行卡。",
+          "confirmed": [
+            "能列出已绑账户"
+          ],
+          "unverified": [
+            "5000 渠道拦截"
+          ],
+          "test_focus": "刚好 100 / 5000。"
+        },
+        {
+          "id": "hist",
+          "label": "提现记录",
+          "status": "observed",
+          "summary": "审核中列表。",
+          "confirmed": [
+            "记录页能打开"
+          ],
+          "unverified": [
+            "通过后余额何时扣"
+          ],
+          "test_focus": "提交后状态。"
+        },
+        {
+          "id": "tier",
+          "label": "选档位",
+          "status": "inferred",
+          "summary": "点档位再确认支付。",
+          "confirmed": [],
+          "unverified": [
+            "非微信是否仍弹成功"
+          ],
+          "test_focus": "未开通微信。"
+        },
+        {
+          "id": "payok",
+          "label": "假成功",
+          "status": "inferred",
+          "summary": "预留弹窗。",
+          "confirmed": [
+            "会显示充值成功"
+          ],
+          "unverified": [
+            "余额是否变"
+          ],
+          "test_focus": "弹窗文案 vs 余额。"
+        },
+        {
+          "id": "exin",
+          "label": "填兑换数",
+          "status": "observed",
+          "summary": "正整数。",
+          "confirmed": [
+            "空提交有提示"
+          ],
+          "unverified": [
+            "科学计数"
+          ],
+          "test_focus": "0、1、1.0。"
+        },
+        {
+          "id": "exout",
+          "label": "预览钻石",
+          "status": "static",
+          "summary": "数量 × 100。",
+          "confirmed": [
+            "积分为 0 提示不足"
+          ],
+          "unverified": [
+            "两套余额是否一起变"
+          ],
+          "test_focus": "只变钻石。"
+        },
+        {
+          "id": "acc",
+          "label": "选账户",
+          "status": "observed",
+          "summary": "支付宝或卡。",
+          "confirmed": [
+            "能切换选中"
+          ],
+          "unverified": [
+            "超 5000 是否禁支付宝"
+          ],
+          "test_focus": "渠道切换。"
+        },
+        {
+          "id": "amt",
+          "label": "填金额",
+          "status": "observed",
+          "summary": "手续费 2%。",
+          "confirmed": [
+            "空/0 有提示"
+          ],
+          "unverified": [
+            "最小 100 是否仅服务端"
+          ],
+          "test_focus": "99 / 100 / 5000。"
+        },
+        {
+          "id": "sub",
+          "label": "提交审核",
+          "status": "unverified",
+          "summary": "生成审核中单据。",
+          "confirmed": [],
+          "unverified": [
+            "重复提交"
+          ],
+          "test_focus": "连点。"
+        }
+      ],
+      "edges": [
+        {
+          "from": "open",
+          "to": "sms",
+          "label": "验证码"
+        },
+        {
+          "from": "open",
+          "to": "pwd",
+          "label": "密码"
+        },
+        {
+          "from": "sms",
+          "to": "home",
+          "label": "登录成功进入"
+        },
+        {
+          "from": "pwd",
+          "to": "home",
+          "label": "登录成功进入"
+        },
+        {
+          "from": "home",
+          "to": "rc",
+          "label": "点充值"
+        },
+        {
+          "from": "home",
+          "to": "ex",
+          "label": "积分页点兑换"
+        },
+        {
+          "from": "home",
+          "to": "wd",
+          "label": "积分页点提现"
+        },
+        {
+          "from": "rc",
+          "to": "tier",
+          "label": "选档位"
+        },
+        {
+          "from": "tier",
+          "to": "payok",
+          "label": "确认支付",
+          "status": "inferred",
+          "dashed": true
+        },
+        {
+          "from": "ex",
+          "to": "exin",
+          "label": "去填写"
+        },
+        {
+          "from": "exin",
+          "to": "exout",
+          "label": "数量×100"
+        },
+        {
+          "from": "wd",
+          "to": "acc",
+          "label": "选账户"
+        },
+        {
+          "from": "acc",
+          "to": "amt",
+          "label": "开弹层"
+        },
+        {
+          "from": "amt",
+          "to": "sub",
+          "label": "提交申请",
+          "status": "inferred",
+          "dashed": true
+        },
+        {
+          "from": "sub",
+          "to": "hist",
+          "label": "生成单据",
+          "status": "unverified",
+          "dashed": true
+        }
+      ]
+    },
+    {
+      "id": "sms-login",
+      "title": "验证码登录",
+      "nodes": [
+        {
+          "id": "phone",
+          "label": "填手机号",
+          "status": "observed",
+          "summary": "11 位、号段 13–19。",
+          "confirmed": [
+            "空提交提示请填写手机号和验证码",
+            "格式错时发码提示请输入正确的手机号"
+          ],
+          "unverified": [
+            "10 位号点登录仍提示「请填写」是否产品文案"
+          ],
+          "test_focus": "非法号段与位数不足时，提示是否说「格式不对」而不是「没填」。",
+          "evidence_ids": [
+            "e-login-empty"
+          ]
+        },
+        {
+          "id": "code",
+          "label": "填验证码",
+          "status": "observed",
+          "summary": "前端允许 4–6 位数字。",
+          "confirmed": [
+            "3 位不能点登录",
+            "4 位可点，错码回「验证码不正确」"
+          ],
+          "unverified": [
+            "真实短信是否永远 6 位"
+          ],
+          "test_focus": "测试服固定验证码与错误码两条路径。",
+          "evidence_ids": [
+            "e-code-len"
+          ]
+        },
+        {
+          "id": "ok",
+          "label": "进入钱包",
+          "status": "observed",
+          "summary": "登录成功后跳到钱包页。",
+          "confirmed": [
+            "能看到钻石余额"
+          ],
+          "unverified": [],
+          "test_focus": "同一秒连登是否发成同一张票。",
+          "evidence_ids": [
+            "e-login-ok"
+          ]
+        }
+      ],
+      "edges": [
+        {
+          "from": "phone",
+          "to": "code",
+          "label": "号合法才可发码/登录"
+        },
+        {
+          "from": "code",
+          "to": "ok",
+          "label": "验证通过"
+        }
+      ]
+    },
+    {
+      "id": "withdraw-cash",
+      "title": "积分提现",
+      "nodes": [
+        {
+          "id": "points",
+          "label": "积分页",
+          "status": "observed",
+          "summary": "展示积分余额，入口去提现。",
+          "confirmed": [
+            "积分 Tab 能切",
+            "有提现按钮"
+          ],
+          "unverified": [
+            "积分为 0 时按钮是否禁用"
+          ],
+          "test_focus": "余额为 0 / 有余额两条入口。",
+          "evidence_ids": [
+            "e-points-tab"
+          ]
+        },
+        {
+          "id": "pick",
+          "label": "选提现账户",
+          "status": "observed",
+          "summary": "支付宝或银行卡。页面提示超过 5000 用银行卡。",
+          "confirmed": [
+            "能列出已绑账户",
+            "能切换选中项"
+          ],
+          "unverified": [
+            "前端是否按 5000 拦截渠道"
+          ],
+          "test_focus": "选支付宝提交 >5000、选银行卡提交 ≤5000。",
+          "evidence_ids": [
+            "e-acc-list"
+          ]
+        },
+        {
+          "id": "amount",
+          "label": "填金额",
+          "status": "observed",
+          "summary": "弹层输入金额，文案有手续费 2%。",
+          "confirmed": [
+            "空/0 提示请输入提现金额"
+          ],
+          "unverified": [
+            "最小 100、须为 10 的倍数是否只在服务端"
+          ],
+          "test_focus": "0、99、100、5000、5000.01 对照所选渠道。",
+          "evidence_ids": [
+            "e-amt"
+          ]
+        },
+        {
+          "id": "audit",
+          "label": "审核中",
+          "status": "observed",
+          "summary": "记录页出现审核中单据。",
+          "confirmed": [
+            "提现记录页能打开"
+          ],
+          "unverified": [
+            "审核通过后余额何时扣"
+          ],
+          "test_focus": "提交后记录状态与积分是否立即变。",
+          "evidence_ids": [
+            "e-rec"
+          ]
+        }
+      ],
+      "edges": [
+        {
+          "from": "points",
+          "to": "pick",
+          "label": "点提现"
+        },
+        {
+          "from": "pick",
+          "to": "amount",
+          "label": "选中账户后开弹层"
+        },
+        {
+          "from": "amount",
+          "to": "audit",
+          "label": "提交申请",
+          "status": "inferred",
+          "dashed": true
+        }
+      ]
+    },
+    {
+      "id": "exchange",
+      "title": "积分兑钻石",
+      "nodes": [
+        {
+          "id": "ex-in",
+          "label": "输入积分",
+          "status": "observed",
+          "summary": "正整数；空数量会提示。",
+          "confirmed": [
+            "空提交：请输入兑换数量",
+            "文案 1 积分兑 100 钻石"
+          ],
+          "unverified": [
+            "输入 1.0 会不会被收成 10"
+          ],
+          "test_focus": "小数点和科学计数是否被拼成更大整数。",
+          "evidence_ids": [
+            "e-ex-empty"
+          ]
+        },
+        {
+          "id": "ex-out",
+          "label": "预览钻石",
+          "status": "observed",
+          "summary": "按 1:100 预览。",
+          "confirmed": [
+            "积分为 0 时提示积分不足"
+          ],
+          "unverified": [
+            "兑换成功后两套余额是否一起变"
+          ],
+          "test_focus": "只变钻石、积分扣错账户。",
+          "evidence_ids": [
+            "e-ex-rate"
+          ]
+        }
+      ],
+      "edges": [
+        {
+          "from": "ex-in",
+          "to": "ex-out",
+          "label": "数量×100"
+        }
+      ]
+    }
+  ],
+  "evidence": [
+    {
+      "id": "e-login-empty",
+      "kind": "dom",
+      "summary": "登录页空提交 toast"
+    },
+    {
+      "id": "e-code-len",
+      "kind": "dom",
+      "summary": "验证码 3 位 disabled / 4 位可点"
+    },
+    {
+      "id": "e-login-ok",
+      "kind": "dom",
+      "summary": "登录后进入钱包并显示钻石"
+    },
+    {
+      "id": "e-points-tab",
+      "kind": "dom",
+      "summary": "钱包积分 Tab"
+    },
+    {
+      "id": "e-acc-list",
+      "kind": "dom",
+      "summary": "提现页账户列表"
+    },
+    {
+      "id": "e-amt",
+      "kind": "dom",
+      "summary": "提现弹层金额校验"
+    },
+    {
+      "id": "e-rec",
+      "kind": "dom",
+      "summary": "提现记录审核中"
+    },
+    {
+      "id": "e-ex-empty",
+      "kind": "dom",
+      "summary": "兑换空数量 toast"
+    },
+    {
+      "id": "e-ex-rate",
+      "kind": "dom",
+      "summary": "1积分可兑100钻石文案"
+    }
+  ]
+}

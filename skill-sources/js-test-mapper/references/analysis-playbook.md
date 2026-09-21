@@ -61,3 +61,13 @@ evidence_insufficient：缺源码、动态目标不明或内容被截断。
 每个测试重点写：技术依据→可能影响→待验证问题→建议验证方式（不执行）。如权限提前返回，可建议比较不同权限账号，但不能标记越权已验证。UI 字段名来自运行观察；接口方法/路径来自静态声明；二者关联没有桥接证据时标 inferred。
 
 身份稳定：实体 identity 为来源+符号/路由+类型；revision 为实际内容变化。不能仅因行号移动就认定新业务。保留同 run_id 的证据引用；presentation 不能改方法、路径、分支或状态。
+
+## 8. 落到可视化地图
+
+分析结束必须写出 `evidence/map.json`，不要停在符号账本或 Word。
+
+- 每个 HIGH 业务链 → `flows[]` 里一张小图；节点是页面/步骤，边是动词。
+- 模块关系单独放 `modules` + `module_edges`。
+- `status`：看见了=observed，只在代码里=static，有依据猜的=inferred，材料不够=unverified。缺省不要填 observed。
+- 汇合/回头边不要放进 `edges`，写进目标节点的 `unverified`。
+- 然后渲染 `map.html`。没有图，本轮分析不算完成。

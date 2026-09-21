@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<!-- VISUAL LOCK: tree TB + status tints + ColorOS side chrome. Fill map.json only; do not restyle. Sample: assets/demo-map.html -->
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>测试地图</title>
+<style>
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; height: 100%; background: #fff; color: #111;
+    font: 14px/1.45 -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  header {
+    height: 48px; display: flex; align-items: center; gap: 14px;
+    padding: 0 18px; border-bottom: 1px solid rgba(0,0,0,.06);
+    background: rgba(255,255,255,.82);
+    backdrop-filter: blur(20px);
+  }
+  header h1 { font-size: 15px; font-weight: 650; margin: 0; white-space: nowrap; }
+  header .one { flex: 1; min-width: 0; font-size: 12px; color: #6b7280; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .legend { display: flex; gap: 8px; font-size: 11px; color: #6b7280; font-weight: 500; white-space: nowrap; flex-shrink: 0; }
+  .legend span { display: inline-flex; align-items: center; gap: 5px; padding: 3px 8px; border-radius: 999px; background: #f3f4f6; }
+  .legend i { width: 8px; height: 8px; border-radius: 3px; display: inline-block; }
+  .app { display: grid; grid-template-columns: 168px minmax(0,1fr) 280px; height: calc(100% - 48px); }
+  nav {
+    padding: 14px 10px 20px;
+    background: #eef0f3;
+    border-right: 0;
+  }
+  nav .sec {
+    font-size: 11px; font-weight: 600; color: #9aa0a6;
+    padding: 14px 12px 6px; letter-spacing: .06em;
+  }
+  nav .sec:first-child { padding-top: 2px; }
+  nav button {
+    display: block; width: 100%; text-align: left; border: 0; background: transparent;
+    padding: 8px 12px; border-radius: 12px; font: inherit; font-size: 13px; font-weight: 500;
+    color: #3c4043; cursor: pointer;
+  }
+  nav button:hover { background: rgba(255,255,255,.45); }
+  nav button.on {
+    background: #fff; color: #111; font-weight: 600;
+    box-shadow: 0 1px 2px rgba(0,0,0,.05), 0 0 0 1px rgba(0,0,0,.04);
+  }
+  #stage { overflow: auto; padding: 28px 24px 48px; background: #f5f6f7; scrollbar-width: thin; }
+  svg { overflow: visible; }
+  .edge { fill: none; stroke: #8b95a3; stroke-width: 1.7; stroke-linecap: round; }
+  .edge.dashed { stroke-dasharray: 4 4; }
+  .chip rect { fill: #f5f6f7; }
+  .chip text { font-size: 10px; font-weight: 500; fill: #3d5a99; }
+  .node { cursor: pointer; }
+  .node .box { stroke-width: 1; filter: url(#lift); }
+  .node.on .box { stroke: #4d6bfe; stroke-width: 1.8; }
+  .node .title { font-size: 13px; font-weight: 700; }
+  aside {
+    background: #eef0f3; padding: 14px 12px 20px; overflow: auto; border-left: 0;
+  }
+  aside .sheet {
+    background: #fff; border-radius: 16px; padding: 14px 16px; margin-bottom: 10px;
+    box-shadow: 0 1px 2px rgba(0,0,0,.04), 0 0 0 1px rgba(0,0,0,.04);
+  }
+  aside h2 { font-size: 16px; font-weight: 650; margin: 0 0 6px; }
+  aside .meta { font-size: 12px; font-weight: 600; margin: 0; }
+  aside .sum { margin: 0; color: #3c4043; font-size: 13px; }
+  aside h3 { font-size: 11px; font-weight: 650; color: #9aa0a6; margin: 0 0 8px; letter-spacing: .04em; }
+  aside ul { margin: 0; padding: 0; list-style: none; }
+  aside li { padding: 7px 0; border-bottom: 1px solid #f2f3f5; color: #3c4043; font-size: 13px; }
+  aside li:last-child { border-bottom: 0; }
+  .empty { color: #9aa0a6; font-size: 13px; padding: 24px 8px; }
+</style>
+</head>
+<body>
+<header>
+  <h1 id="title">测试地图</h1>
+  <div class="one" id="one"></div>
+  <div class="legend">
+    <span><i style="background:#e9f6ed;outline:1px solid #96d0aa"></i>看见了</span>
+    <span><i style="background:#e8f0fe;outline:1px solid #9bb4f0"></i>代码里有</span>
+    <span><i style="background:#fff4e4;outline:1px solid #e8c48a"></i>推测</span>
+    <span><i style="background:#eef0f3;outline:1px solid #c5cad3"></i>待验证</span>
+  </div>
+</header>
+<div class="app">
+  <nav id="nav"></nav>
+  <div id="stage"></div>
+  <aside id="card"><div class="empty">点节点</div></aside>
+</div>
+<script>
+const MAP = __MAP_DATA_JSON__;
+const STATUS_CN = { observed: "页面上看到", static: "代码里写着", inferred: "目前推测", unverified: "还没验证" };
+const STATUS = {
+  observed:   { fill: "#e9f6ed", stroke: "#6db887", ink: "#0b4d26" },
+  static:     { fill: "#e8f0fe", stroke: "#7a9ae8", ink: "#142f9c" },
+  inferred:   { fill: "#fff4e4", stroke: "#d9a85c", ink: "#6b3f06" },
+  unverified: { fill: "#eef0f3", stroke: "#b4bac4", ink: "#2c323a" }
+};
+function token(status) {
+  return STATUS[status] || STATUS.unverified;
+}
+
+function tw(s, size) {
+  let w = 0;
+  for (const ch of String(s || "")) w += ch.charCodeAt(0) > 127 ? size : size * 0.58;
+  return w;
+}
+
+function graphFromModules() {
+  return {
+    id: "modules",
+    title: "模块怎么连",
+    nodes: (MAP.modules || []).map(m => ({
+      id: m.id, label: m.label, status: m.status || "unverified",
+      summary: m.summary || "", confirmed: m.confirmed || [], unverified: m.unverified || [],
+      test_focus: m.test_focus || "", evidence_ids: m.evidence_ids || []
+    })),
+    edges: MAP.module_edges || []
+  };
+}
+
+function layout(flow) {
+  const nodes = flow.nodes || [];
+  const edges = flow.edges || [];
+  if (!nodes.length) return { pos: {}, width: 200, height: 120 };
+  const byId = Object.fromEntries(nodes.map(n => [n.id, n]));
+  const kids = {};
+  nodes.forEach(n => { kids[n.id] = []; });
+  const seen = new Set();
+  const roots = [];
+  const indeg = {};
+  nodes.forEach(n => indeg[n.id] = 0);
+  edges.forEach(e => { if (byId[e.to] && byId[e.from]) indeg[e.to]++; });
+  nodes.forEach(n => { if (!indeg[n.id]) roots.push(n.id); });
+  if (!roots.length) roots.push(nodes[0].id);
+
+  const q = roots.slice();
+  roots.forEach(id => seen.add(id));
+  while (q.length) {
+    const u = q.shift();
+    edges.forEach(e => {
+      if (e.from !== u || !byId[e.to] || seen.has(e.to)) return;
+      seen.add(e.to);
+      kids[u].push(e.to);
+      q.push(e.to);
+    });
+  }
+  nodes.forEach(n => { if (!seen.has(n.id)) roots.push(n.id); });
+  const tree = new Set();
+  function markTree(id) {
+    (kids[id] || []).forEach(c => { tree.add(id + "\t" + c); markTree(c); });
+  }
+  roots.forEach(markTree);
+  const dropped = edges.filter(e => byId[e.from] && byId[e.to] && !tree.has(e.from + "\t" + e.to));
+
+  const H = 40, GY = 118, GAP = 40;
+  const widthOf = n => Math.max(96, tw(n.label, 13) + 28);
+  const subW = {};
+  function measure(id) {
+    const w = widthOf(byId[id]);
+    const ch = kids[id] || [];
+    if (!ch.length) { subW[id] = w; return w; }
+    const sw = ch.reduce((s, c) => s + measure(c), 0) + GAP * (ch.length - 1);
+    subW[id] = Math.max(w, sw);
+    return subW[id];
+  }
+  roots.forEach(measure);
+
+  const pos = {};
+  function place(id, left, depth) {
+    const n = byId[id];
+    const w = widthOf(n);
+    const ch = kids[id] || [];
+    const nx = left + (subW[id] - w) / 2;
+    pos[id] = { x: nx, y: 16 + depth * GY, w, h: H };
+    let x = left;
+    if (ch.length) {
+      const childSpan = ch.reduce((s, c) => s + subW[c], 0) + GAP * (ch.length - 1);
+      x = left + (subW[id] - childSpan) / 2;
+      ch.forEach(c => {
+        place(c, x, depth + 1);
+        x += subW[c] + GAP;
+      });
+    }
+  }
+  let left = 16;
+  roots.forEach(id => {
+    place(id, left, 0);
+    left += subW[id] + GAP;
+  });
+
+  const xs = Object.values(pos);
+  return {
+    pos,
+    width: Math.max(...xs.map(p => p.x + p.w)) + 16,
+    height: Math.max(...xs.map(p => p.y + p.h)) + 24,
+    dropped
+  };
+}
+
+function bez(p0, p1, p2, p3, t) {
+  const u = 1 - t;
+  return u*u*u*p0 + 3*u*u*t*p1 + 3*u*t*t*p2 + t*t*t*p3;
+}
+
+function path(a, b, fan) {
+  const x1 = a.x + a.w / 2, y1 = a.y + a.h;
+  const x2 = b.x + b.w / 2, y2 = b.y;
+  const my = y1 + (y2 - y1) * 0.5;
+  const bow = Math.abs(x2 - x1) < 10 ? 22 : (fan || 0) * 12;
+  const c1x = x1 + bow, c1y = my;
+  const c2x = x2 + bow, c2y = my;
+  return {
+    d: `M${x1},${y1} C${c1x},${c1y} ${c2x},${c2y} ${x2},${y2}`,
+    lx: bez(x1, c1x, c2x, x2, 0.55),
+    ly: bez(y1, c1y, c2y, y2, 0.55) - 8
+  };
+}
+
+function wrapLabel(s) {
+  s = String(s || "");
+  if ([...s].length <= 4) return [s];
+  for (const mark of ["点", "填", "选", "去", "进"]) {
+    const i = s.indexOf(mark);
+    if (i > 0 && i < s.length - 1) return [s.slice(0, i), s.slice(i)];
+  }
+  for (const mark of ["/", "、", "，", " "]) {
+    const i = s.indexOf(mark);
+    if (i > 0 && i < s.length - 1) {
+      const a = s.slice(0, i).trim(), b = s.slice(i + 1).trim();
+      if (a && b) return [a, b];
+    }
+  }
+  const chars = [...s];
+  const mid = Math.ceil(chars.length / 2);
+  return [chars.slice(0, mid).join(""), chars.slice(mid).join("")];
+}
+
+function renderFlow(flow) {
+  const { pos, width, height, dropped } = layout(flow);
+  flow._dropped = dropped || [];
+  const dropKey = new Set(flow._dropped.map(e => e.from + "\t" + e.to));
+  const byId = Object.fromEntries(flow.nodes.map(n => [n.id, n]));
+  const outIndex = {};
+  (flow.edges || []).forEach(e => {
+    if (pos[e.from] && pos[e.to] && !dropKey.has(e.from + "\t" + e.to)) {
+      outIndex[e.from] = (outIndex[e.from] || 0) + 1;
+    }
+  });
+  const seenOut = {};
+  let svg = `<svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
+    <defs>
+      <filter id="lift" x="-8%" y="-12%" width="120%" height="140%">
+        <feDropShadow dx="0" dy="1" stdDeviation="1.4" flood-color="#000" flood-opacity=".06"/>
+      </filter>
+      <marker id="arr" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto">
+        <path d="M0,0 L7,3.5 L0,7 Z" fill="#c8c8c8"/>
+      </marker>
+    </defs>`;
+
+  (flow.edges || []).forEach(e => {
+    if (!pos[e.from] || !pos[e.to] || dropKey.has(e.from + "\t" + e.to)) return;
+    const i = seenOut[e.from] || 0;
+    seenOut[e.from] = i + 1;
+    const n = outIndex[e.from] || 1;
+    const fan = n > 1 ? (i - (n - 1) / 2) : 0;
+    const p = path(pos[e.from], pos[e.to], fan);
+    const dash = e.dashed || e.status === "unverified" || e.status === "inferred" ? "dashed" : "";
+    svg += `<path class="edge ${dash}" marker-end="url(#arr)" d="${p.d}"/>`;
+    if (e.label) {
+      const lines = wrapLabel(e.label);
+      const w = Math.min(90, Math.max(...lines.map(l => tw(l, 10))) + 10);
+      const h = 4 + lines.length * 12;
+      const y = p.ly - h + 4;
+      svg += `<g class="chip">
+        <rect x="${p.lx - w/2}" y="${y}" rx="3" width="${w}" height="${h}"/>
+        <text text-anchor="middle" font-weight="500">${lines.map((ln,i) =>
+          `<tspan x="${p.lx}" y="${y + 11 + i*12}">${esc(ln)}</tspan>`).join("")}</text>
+      </g>`;
+    }
+  });
+
+  flow.nodes.forEach(n => {
+    const p = pos[n.id];
+    const t = token(n.status);
+    svg += `<g class="node" data-id="${esc(n.id)}" transform="translate(${p.x},${p.y})">
+      <rect class="box" width="${p.w}" height="${p.h}" rx="8" fill="${t.fill}" stroke="${t.stroke}"/>
+      <text class="title" x="${p.w/2}" y="25" text-anchor="middle" fill="${t.ink}" font-weight="700">${esc(n.label)}</text>
+    </g>`;
+  });
+  if (flow._dropped.length) {
+    svg += flow._dropped.map(e => `<!-- dropped ${esc(e.from)}->${esc(e.to)} -->`).join("");
+  }
+  svg += "</svg>";
+  document.getElementById("stage").innerHTML = svg;
+  document.querySelectorAll(".node").forEach(g => {
+    g.addEventListener("click", () => {
+      document.querySelectorAll(".node").forEach(x => x.classList.remove("on"));
+      g.classList.add("on");
+      showCard(byId[g.dataset.id], flow);
+    });
+  });
+  const first = document.querySelector(".node");
+  if (first) first.dispatchEvent(new Event("click"));
+}
+
+function block(title, arr) {
+  if (!arr || !arr.length) return "";
+  return `<div class="sheet"><h3>${title}</h3><ul>${arr.map(x => `<li>${esc(x)}</li>`).join("")}</ul></div>`;
+}
+
+function showCard(n, flow) {
+  if (!n) return;
+  const ev = (MAP.evidence || []).filter(e => (n.evidence_ids || []).includes(e.id));
+  const t = token(n.status);
+  document.getElementById("card").innerHTML = `
+    <div class="sheet">
+      <h2>${esc(n.label)}</h2>
+      <div class="meta" style="color:${t.ink}">${esc(STATUS_CN[n.status] || "")}</div>
+      ${n.summary ? `<p class="sum" style="margin-top:10px">${esc(n.summary)}</p>` : ""}
+    </div>
+    ${block("已确认", n.confirmed)}
+    ${block("还没验证", n.unverified)}
+    ${block("未画出（汇合/回头）", (flow._dropped || []).filter(e => e.from === n.id || e.to === n.id).map(e => (e.label || "") + " " + e.from + "→" + e.to))}
+    ${n.test_focus ? `<div class="sheet"><h3>建议先验</h3><p class="sum">${esc(n.test_focus)}</p></div>` : ""}
+    ${block("证据", ev.map(e => e.summary))}
+  `;
+}
+
+function esc(s) {
+  return String(s || "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c]));
+}
+
+const flows = [graphFromModules(), ...(MAP.flows || [])];
+document.getElementById("title").textContent = MAP.title || "测试地图";
+document.title = MAP.title || "测试地图";
+document.getElementById("one").textContent = MAP.one_liner || "";
+const nav = document.getElementById("nav");
+nav.innerHTML =
+  `<div class="sec">总览</div>` +
+  `<button type="button" data-i="0">${esc(flows[0].title)}</button>` +
+  (flows.length > 1 ? `<div class="sec">流程</div>` + flows.slice(1).map((f,i) =>
+    `<button type="button" data-i="${i+1}">${esc(f.title)}</button>`).join("") : "");
+nav.addEventListener("click", e => {
+  const b = e.target.closest("button");
+  if (!b) return;
+  nav.querySelectorAll("button").forEach(x => x.classList.toggle("on", x === b));
+  renderFlow(flows[Number(b.dataset.i)]);
+});
+let start = 0;
+if (flows.length > 1) {
+  let best = 1, n = -1;
+  for (let i = 1; i < flows.length; i++) {
+    const c = (flows[i].nodes || []).length;
+    if (c > n) { n = c; best = i; }
+  }
+  start = best;
+}
+nav.querySelectorAll("button")[start]?.click();
+</script>
+</body>
+</html>

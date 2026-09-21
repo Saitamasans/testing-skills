@@ -1,0 +1,111 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "js-test-mapper-map-v1",
+  "title": "Visual test map",
+  "type": "object",
+  "required": ["title", "one_liner", "modules", "flows"],
+  "additionalProperties": false,
+  "properties": {
+    "title": { "type": "string", "minLength": 1 },
+    "one_liner": { "type": "string" },
+    "env": { "type": "string" },
+    "status": {
+      "type": "string",
+      "enum": ["structure_only", "partial_js", "js_evidence"]
+    },
+    "modules": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "label"],
+        "additionalProperties": false,
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "label": { "type": "string", "minLength": 1 },
+          "summary": { "type": "string" },
+          "status": { "type": "string", "enum": ["observed", "static", "inferred", "unverified"] },
+          "confirmed": { "type": "array", "items": { "type": "string" } },
+          "unverified": { "type": "array", "items": { "type": "string" } },
+          "test_focus": { "type": "string" },
+          "evidence_ids": { "type": "array", "items": { "type": "string" } }
+        }
+      }
+    },
+    "module_edges": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["from", "to", "label"],
+        "additionalProperties": false,
+        "properties": {
+          "from": { "type": "string" },
+          "to": { "type": "string" },
+          "label": { "type": "string", "minLength": 1 },
+          "status": { "type": "string", "enum": ["observed", "static", "inferred", "unverified"] },
+          "dashed": { "type": "boolean" }
+        }
+      }
+    },
+    "flows": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["id", "title", "nodes", "edges"],
+        "additionalProperties": false,
+        "properties": {
+          "id": { "type": "string" },
+          "title": { "type": "string" },
+          "nodes": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "required": ["id", "label"],
+              "additionalProperties": false,
+              "properties": {
+                "id": { "type": "string" },
+                "label": { "type": "string" },
+                "kind": { "type": "string" },
+                "status": { "type": "string", "enum": ["observed", "static", "inferred", "unverified"] },
+                "summary": { "type": "string" },
+                "confirmed": { "type": "array", "items": { "type": "string" } },
+                "unverified": { "type": "array", "items": { "type": "string" } },
+                "test_focus": { "type": "string" },
+                "evidence_ids": { "type": "array", "items": { "type": "string" } }
+              }
+            }
+          },
+          "edges": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["from", "to", "label"],
+              "additionalProperties": false,
+              "properties": {
+                "from": { "type": "string" },
+                "to": { "type": "string" },
+                "label": { "type": "string", "minLength": 1 },
+                "status": { "type": "string", "enum": ["observed", "static", "inferred", "unverified"] },
+                "dashed": { "type": "boolean" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "evidence": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "summary"],
+        "additionalProperties": false,
+        "properties": {
+          "id": { "type": "string" },
+          "kind": { "type": "string" },
+          "summary": { "type": "string" }
+        }
+      }
+    }
+  }
+}

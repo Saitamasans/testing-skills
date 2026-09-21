@@ -27,6 +27,6 @@
 
 ## 测试认知
 
-交付系统/模块地图、代表性功能路径、接口引用候选、权限/状态线索、风险和测试重点、未覆盖清单。建议不是测试执行结果。默认 HTML 和 Word 使用同一 run_id 与 evidence IDs，Excel 仅按需生成。
+交付系统/模块地图、代表性功能路径、接口引用候选、权限/状态线索、风险和测试重点、未覆盖清单。建议不是测试执行结果。默认先交 `map.html`；Word 仅归档。不要写 `run-data.json` / `cognition.json`。
 
 本轮 Stable ID 按稳定位置/入口身份分配；跨轮只有 canonical identity 与内容指纹可核对时才复用并记 revision；无证据不声称旧 Runtime 增量 lineage parity。

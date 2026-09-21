@@ -81,6 +81,8 @@ class SourceContractsTest(unittest.TestCase):
                     "active_business_api_calls",
                     "Word",
                     "Excel",
+                    "map.html",
+                    "不要填写",
                 ]:
                     self.assertIn(phrase, text, f"{slug}: {phrase}")
             else:

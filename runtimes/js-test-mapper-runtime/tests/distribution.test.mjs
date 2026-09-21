@@ -11,29 +11,34 @@ import { checkRuntime, installBundle, installedPackageRoot } from "../src/runtim
 const packageRoot = fileURLToPath(new URL("..", import.meta.url));
 const repoRoot = fileURLToPath(new URL("../../..", import.meta.url));
 
-test("Runtime and Skill release schemas are one semantic contract", async () => {
+test("host-native Skill does not ship runtime run-data/cognition schemas", async () => {
+  const { existsSync } = await import("node:fs");
   for (const name of ["run-data.schema.json", "cognition.schema.json"]) {
-    const runtime = JSON.parse(await readFile(path.join(packageRoot, "schemas", name), "utf8"));
-    const source = JSON.parse(await readFile(path.join(repoRoot, "skill-sources", "js-test-mapper", "schemas", name), "utf8"));
-    const generated = JSON.parse(await readFile(path.join(repoRoot, "skills", "js-test-mapper", "schemas", name), "utf8"));
-    const plugin = JSON.parse(await readFile(path.join(repoRoot, "plugins", "js-test-mapper", "skills", "js-test-mapper", "schemas", name), "utf8"));
-    assert.deepEqual(source, runtime, `${name}: source drift`);
-    assert.deepEqual(generated, runtime, `${name}: generated Skill drift`);
-    assert.deepEqual(plugin, runtime, `${name}: Plugin drift`);
+    assert.equal(existsSync(path.join(repoRoot, "skill-sources", "js-test-mapper", "schemas", name)), false, name);
+    assert.equal(existsSync(path.join(repoRoot, "skills", "js-test-mapper", "schemas", name)), false, "public " + name);
+    assert.ok(existsSync(path.join(packageRoot, "schemas", name)), "runtime still has " + name);
   }
 });
 
 test("Public installer uses an immutable standard Skill install without a script downloader", async () => {
   const installer = await readFile(path.join(repoRoot, "installers", "install-js-test-mapper.cmd"), "utf8");
-  assert.match(installer, /skills@1\.5\.23/); assert.match(installer, /testing-skills@v0\.1\.1-rc\.6/); assert.match(installer, /--skill js-test-mapper/); assert.match(installer, /runtime-bootstrap\.mjs/);
+  assert.match(installer, /skills@1\.5\.23/);
+  assert.match(installer, /testing-skills@v0\.2\.0/);
+  assert.match(installer, /--skill js-test-mapper/);
+  assert.doesNotMatch(installer, /runtime-bootstrap\.mjs/);
   assert.doesNotMatch(installer, /powershell|pwsh|ExecutionPolicy|Invoke-WebRequest|DownloadFile|Net\.WebClient|curl|certutil|bitsadmin|EncodedCommand/i);
 });
 
-test("Tracked Skill contains bootstrap, lock, and launcher self-bootstrap wiring", async () => {
+test("Tracked Skill ships visual map renderer, not runtime bootstrap", async () => {
+  const { existsSync } = await import("node:fs");
   const skill = path.join(repoRoot, "skills", "js-test-mapper");
-  const source = (await Promise.all([readFile(path.join(skill, "scripts", "runtime-bootstrap.mjs"), "utf8"), readFile(path.join(skill, "runtime", "runtime-lock.json"), "utf8"), readFile(path.join(skill, "scripts", "runtime-launcher.mjs"), "utf8")])).join("\n");
-  assert.match(source, /--offline/); assert.match(source, /--ignore-scripts/); assert.match(source, /runtime_bundle_sha256_mismatch/); assert.match(source, /v0\.1\.1-rc\.6/);
-  assert.doesNotMatch(source, /testing-skills-src|review[\\/]|[A-Z]:\\Users\\/i);
+  assert.equal(existsSync(path.join(skill, "scripts", "runtime-bootstrap.mjs")), false);
+  assert.equal(existsSync(path.join(skill, "scripts", "runtime-launcher.mjs")), false);
+  assert.equal(existsSync(path.join(skill, "runtime", "runtime-lock.json")), false);
+  assert.ok(existsSync(path.join(skill, "scripts", "render-map.mjs")));
+  assert.ok(existsSync(path.join(skill, "templates", "map.html")));
+  const skillMd = await readFile(path.join(skill, "SKILL.md"), "utf8");
+  assert.match(skillMd, /map\.html/);
 });
 
 function run(executable, args, cwd) {
