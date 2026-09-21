@@ -3,15 +3,15 @@
   "version": "0.2.0-codex-native",
   "description": "Codex adapter for authorized, read-only Web JS testing system mapping without an independent executor.",
   "author": {"name": "Testing Skills"},
-  "keywords": ["testing", "javascript", "playwright", "source-map"],
+  "keywords": ["testing", "javascript", "visual-map", "readonly"],
   "skills": "./skills/",
   "interface": {
     "displayName": "Web JS 测试系统建图",
-    "shortDescription": "在已授权测试环境中，只读分析页面与 JS 证据，恢复路由、调用关系和测试线索",
-    "longDescription": "使用 Codex 已有浏览器能力，在用户明确授权的测试环境中进行安全只读探索，整理页面结构、可取得的 JS 证据、路由、调用关系和测试线索；不执行改变业务状态的操作，不主动调用或重放业务 API，不安装独立执行器。",
+    "shortDescription": "只读建图，主交付是可点击的流程 HTML",
+    "longDescription": "使用 Codex 已有浏览器能力，在用户明确授权的测试环境中进行安全只读探索，输出可点击的流程图（模块关系、业务流程、测试盯点）；不执行改变业务状态的操作，不主动调用或重放业务 API，不安装独立执行器。Word/表格只作附录。",
     "developerName": "Testing Skills",
     "category": "Productivity",
     "capabilities": ["Browser-assisted exploration", "Static JS analysis", "Evidence-backed test mapping"],
-    "defaultPrompt": ["请在我已授权的测试环境中，对这个 Web URL 做只读测试系统建图：使用宿主已有浏览器和代码观察能力，整理页面、脚本、路由、调用关系、权限/状态线索、证据和测试重点；不执行改变业务状态的操作，不主动调用或重放业务 API，不保存密码、Cookie 或 Token。"]
+    "defaultPrompt": ["请在我已授权的测试环境中，对这个 Web URL 做只读测试系统建图。主交付必须是可点击的 HTML 流程图（哪块连哪块、线上写关系、点节点看出已确认/未验证/建议测什么），不要用 Word/Markdown/表格代替图。不执行改变业务状态的操作，不主动调用或重放业务 API，不保存密码、Cookie 或 Token。"]
   }
 }
