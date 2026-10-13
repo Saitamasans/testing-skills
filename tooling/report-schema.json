@@ -6,7 +6,9 @@
   "properties": {
     "title": {"type": "string", "minLength": 1},
     "project": {"type": "string"},
+    "report_key": {"type": "string", "minLength": 1},
     "generated_at": {"type": "string"},
+    "formal_case_eligible": {"type": "boolean"},
     "skill_invocation": {
       "oneOf": [
         {"type": "string"},

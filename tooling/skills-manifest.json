@@ -21,7 +21,7 @@
       "slug": "multi-api-flow-test",
       "display_name": "多接口链路测试用例生成",
       "short_description": "多接口依赖、业务链路与回归范围测试设计",
-      "default_prompt": "请分析这些接口的调用链路并生成测试用例。",
+      "default_prompt": "请先识别输入模式并判断正式用例准入；资料不足时先输出接口资产、证据化候选链路和缺口，不直接生成正式用例。满足准入后，再生成多接口测试用例。",
       "case_output": true
     },
     {

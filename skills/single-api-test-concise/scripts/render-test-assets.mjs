@@ -36,12 +36,21 @@ export function validateReport(data) {
   for (const key of ["title", "generated_at", "skill_invocation", "sheets"]) {
     if (!data[key]) throw new Error(`缺少字段：${key}`);
   }
+  if ("report_key" in data && (typeof data.report_key !== "string" || !data.report_key.trim())) {
+    throw new Error("report_key 必须是非空字符串");
+  }
+  if ("formal_case_eligible" in data && typeof data.formal_case_eligible !== "boolean") {
+    throw new Error("formal_case_eligible 必须是布尔值");
+  }
   if (!Array.isArray(data.sheets) || data.sheets.length === 0) throw new Error("sheets 不能为空");
+  if (data.formal_case_eligible === false && data.sheets.some((sheet) => sheet.kind === "test_cases")) {
+    throw new Error("formal_case_eligible=false 时不得包含正式用例 Sheet");
+  }
   const ids = new Set();
   for (const sheet of data.sheets) {
     if (!sheet.name || !Array.isArray(sheet.columns) || !Array.isArray(sheet.rows)) throw new Error("sheet 结构无效");
     if (sheet.kind !== "test_cases") continue;
-    if (!isSupportedCaseColumns(sheet.columns)) throw new Error(`${sheet.name} 必须使用统一十列，需求工作台也可使用含实际结果的十一列`);
+    if (!isSupportedCaseColumns(sheet.columns)) throw new Error(`${sheet.name} 必须使用默认 8 列，或兼容的旧 10/11 列`);
     const { priority: priorityIndex, status: statusIndex } = caseColumnIndexes(sheet);
     for (const row of sheet.rows) {
       if (!Array.isArray(row.values) || row.values.length !== sheet.columns.length) throw new Error(`${sheet.name} 存在与表头不一致的数据`);
@@ -56,12 +65,23 @@ export function validateReport(data) {
 }
 
 export function buildReportId(data) {
-  const stable = JSON.stringify({
-    skill: data.skill_invocation,
-    project: data.project || data.title,
-    generated_at: data.generated_at,
-    sheets: data.sheets,
-  });
+  const identity = data.report_key || data.project || data.title;
+  // An explicit report_key is the durable identity; it survives regenerated rows and timestamps.
+  const stable = data.report_key
+    ? JSON.stringify({ report_key: data.report_key })
+    : JSON.stringify({
+        identity,
+        skill: data.skill_invocation,
+        // Case status and generated_at are intentionally excluded so localStorage survives regeneration.
+        sheets: data.sheets.map((sheet) => ({
+          name: sheet.name,
+          kind: sheet.kind,
+          columns: sheet.columns,
+          case_ids: sheet.kind === "test_cases"
+            ? sheet.rows.filter((row) => !row.divider).map((row) => row.values?.[0])
+            : undefined,
+        })),
+      });
   return `testing-skills:${crypto.createHash("sha256").update(stable).digest("hex").slice(0, 24)}`;
 }
 
@@ -257,7 +277,7 @@ export async function renderHtml(data, outputPath) {
   const payload = escapeInlineJson({ ...data, report_id: reportId });
   const html = `<!doctype html>
 <html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>${String(data.title).replaceAll("<", "&lt;")}</title><style>
+<title>${xml(data.title)}</title><style>
 :root{--navy:#163a5a;--blue:#1f4e78;--line:#dbe5ef;--bg:#f4f7fb;--text:#1f2937}*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:14px/1.55 "Microsoft YaHei",system-ui,sans-serif}.page{max-width:1600px;margin:auto;padding:24px}header{background:linear-gradient(135deg,var(--navy),var(--blue));color:#fff;border-radius:14px;padding:24px;box-shadow:0 10px 30px #163a5a20}h1{margin:0 0 6px;font-size:24px}.meta{opacity:.85}.toolbar,.stats{display:flex;gap:10px;flex-wrap:wrap;margin:16px 0}.toolbar input,.toolbar select,.status-select{border:1px solid #c8d5e3;border-radius:8px;background:#fff;padding:8px 10px}.toolbar input{min-width:280px}.stat{background:#fff;border:1px solid var(--line);border-radius:10px;padding:10px 16px;min-width:120px}.stat b{font-size:20px;color:var(--blue)}.warning{display:none;background:#fff3cd;border:1px solid #ffe69c;padding:10px;border-radius:8px}.sheet{background:#fff;margin:18px 0;border-radius:12px;overflow:auto;box-shadow:0 4px 18px #163a5a12}.sheet h2{position:sticky;left:0;margin:0;padding:14px 16px;color:var(--navy)}table{width:100%;border-collapse:separate;border-spacing:0;min-width:1200px}th{position:sticky;top:0;z-index:2;background:var(--blue);color:#fff;text-align:center;padding:11px;border-right:1px solid #ffffff24}td{padding:10px;border-right:1px solid var(--line);border-bottom:1px solid var(--line);vertical-align:top;white-space:pre-wrap}.divider td{background:#d9eaf7!important;color:var(--blue);font-weight:700}.status-failed td{background:#fce8e6!important;color:#7f1d1d}.status-pending td{background:#e5e7eb!important;color:#374151}.priority-P0{background:#fce4d6}.priority-P1{background:#fff2cc}.priority-P2{background:#e2f0d9}.hidden{display:none!important}@media(max-width:720px){.page{padding:10px}.toolbar>*{width:100%}.toolbar input{min-width:0}}
 </style></head><body><main class="page"><header><h1 id="title"></h1><div class="meta" id="invocation"></div></header><p id="storage-warning" class="warning">浏览器未允许本地保存，本次状态仅在当前页面有效。</p><section class="toolbar"><input id="search" placeholder="搜索用例 ID、标题、步骤、预期……"><select id="module-filter"><option value="">全部模块</option></select><select id="priority-filter"><option value="">全部优先级</option><option>P0</option><option>P1</option><option>P2</option></select><select id="status-filter"><option value="">全部状态</option>${STATUSES.map(s=>`<option>${s}</option>`).join("")}</select></section><section id="stats" class="stats"></section><div id="content"></div></main>
 <script>const report=${payload};const statuses=${JSON.stringify(STATUSES)};let storageOK=true;try{localStorage.setItem('__ts_probe','1');localStorage.removeItem('__ts_probe')}catch(e){storageOK=false;document.querySelector('#storage-warning').style.display='block'}let saved={};if(storageOK){try{saved=JSON.parse(localStorage.getItem(report.report_id)||'{}')}catch(e){saved={}}}const esc=v=>String(v??'').replace(/[&<>\"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;'}[c]));document.querySelector('#title').textContent=report.title;const invoke=report.skill_invocation||{};document.querySelector('#invocation').textContent='主 Skill：'+(invoke.primary||invoke)+' ｜ 辅助 Skill：'+(invoke.secondary||'无')+' ｜ 分工：'+(invoke.roles||'由主 Skill 完成');const content=document.querySelector('#content');const modules=new Set();for(const sheet of report.sheets){const priorityCol=sheet.columns.indexOf('优先级'),statusCol=sheet.columns.indexOf('执行结果');const box=document.createElement('section');box.className='sheet';box.innerHTML='<h2>'+esc(sheet.name)+'</h2>';const table=document.createElement('table');table.innerHTML='<thead><tr>'+sheet.columns.map(c=>'<th>'+esc(c)+'</th>').join('')+'</tr></thead>';const body=document.createElement('tbody');sheet.rows.forEach((row,idx)=>{const tr=document.createElement('tr');tr.dataset.search=row.values.join(' ').toLowerCase();if(row.divider){tr.className='divider'}else if(sheet.kind==='test_cases'){const id=row.values[0],module=row.values[1],priority=row.values[priorityCol];modules.add(module);row.values[statusCol]=saved[id]||row.values[statusCol]||'未执行';tr.dataset.module=module;tr.dataset.priority=priority;tr.dataset.status=row.values[statusCol];}row.values.forEach((value,col)=>{const td=document.createElement('td');if(sheet.kind==='test_cases'&&!row.divider&&col===statusCol){const select=document.createElement('select');select.className='status-select';select.setAttribute('aria-label','执行结果 '+row.values[0]);statuses.forEach(s=>{const o=document.createElement('option');o.value=s;o.textContent=s;o.selected=s===value;select.appendChild(o)});select.addEventListener('change',()=>{tr.dataset.status=select.value;saved[row.values[0]]=select.value;if(storageOK)localStorage.setItem(report.report_id,JSON.stringify(saved));paint(tr);update()});td.appendChild(select)}else{td.innerHTML=esc(value).replace(/\\n/g,'<br>')}if(col===priorityCol&&!row.divider)td.classList.add('priority-'+value);tr.appendChild(td)});paint(tr);body.appendChild(tr)});table.appendChild(body);box.appendChild(table);content.appendChild(box)}const moduleSelect=document.querySelector('#module-filter');[...modules].sort().forEach(m=>{const o=document.createElement('option');o.value=m;o.textContent=m;moduleSelect.appendChild(o)});function paint(tr){tr.classList.toggle('status-failed',tr.dataset.status==='不通过');tr.classList.toggle('status-pending',tr.dataset.status==='待定')}function update(){const q=document.querySelector('#search').value.trim().toLowerCase(),m=moduleSelect.value,p=document.querySelector('#priority-filter').value,s=document.querySelector('#status-filter').value;const counts=Object.fromEntries(statuses.map(x=>[x,0]));document.querySelectorAll('tbody tr:not(.divider)').forEach(tr=>{const show=(!q||tr.dataset.search.includes(q))&&(!m||tr.dataset.module===m)&&(!p||tr.dataset.priority===p)&&(!s||tr.dataset.status===s);tr.classList.toggle('hidden',!show);if(show&&tr.dataset.status)counts[tr.dataset.status]++});document.querySelector('#stats').innerHTML=statuses.map(x=>'<div class="stat">'+x+'<br><b>'+counts[x]+'</b></div>').join('')}['search','module-filter','priority-filter','status-filter'].forEach(id=>document.querySelector('#'+id).addEventListener(id==='search'?'input':'change',update));update();</script></body></html>`;
